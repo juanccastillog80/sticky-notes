@@ -1,0 +1,12 @@
+# Planning artifacts (wayfinder map, tickets, research) stay local
+.wayfinder/
+
+# Private prep material, not part of the submission
+sticky_notes_task_description.md
+tips_gu_a_t_cnica_canvas_sticky_notes_challenge.md
+
+# Build / deps
+node_modules/
+dist/
+*.log
+.DS_Store
