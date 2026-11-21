@@ -32,6 +32,14 @@ _Avoid_: Ghost, draft, live state
 The small distance the pointer must travel after a press before it becomes a gesture. A press released inside it is a click and saves nothing.
 _Avoid_: Drag threshold, slop, tolerance
 
+**Editing**:
+The state of the one note whose text is being typed into. A click on a note enters it; Escape or pressing anywhere else ends it. While editing, the note's body works as text and only its grip strip moves it.
+_Avoid_: Edit mode, focus, active note
+
+**Grip strip**:
+The band along the top of every note. It always moves the note, including while the note is being edited.
+_Avoid_: Header, handle, title bar
+
 **Raise**:
 Bring a note to the front of the stacking order.
 _Avoid_: Bring to front, focus, activate
