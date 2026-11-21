@@ -40,6 +40,10 @@ _Avoid_: Edit mode, focus, active note
 The band along the top of every note. It always moves the note, including while the note is being edited.
 _Avoid_: Header, handle, title bar
 
+**Current colour**:
+The colour the next new note gets. Picking a colour in the toolbar sets it, whether or not that pick also recolours the note being edited.
+_Avoid_: Default colour, selected colour, active colour
+
 **Raise**:
 Bring a note to the front of the stacking order.
 _Avoid_: Bring to front, focus, activate
