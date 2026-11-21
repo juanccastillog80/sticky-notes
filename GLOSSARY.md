@@ -17,11 +17,11 @@ A fixed region of the screen, always visible however far the board is scrolled; 
 _Avoid_: Bin, delete area, papelera
 
 **Gesture**:
-One complete press → move → release interaction by the user, such as moving, resizing or creating a note.
+One complete press → move → release interaction by the user, such as moving or resizing a note.
 _Avoid_: Drag (when meaning the whole interaction), action
 
 **Gesture kind**:
-What a gesture does: move, resize, or (later) create. Every kind shares the same press → move → release behaviour and differs only in what it shows while the gesture runs and what it saves at release.
+What a gesture does: move or resize. Every kind shares the same press → move → release behaviour and differs only in what it shows while the gesture runs and what it saves at release.
 _Avoid_: Gesture type, drag mode, handler
 
 **Preview**:
