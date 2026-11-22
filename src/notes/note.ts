@@ -6,6 +6,7 @@ export type NoteId = string & { readonly [noteIdBrand]: true };
 export function newNoteId(): NoteId {
   return crypto.randomUUID() as NoteId;
 }
+
 /** The way in for an id from outside the app, such as storage or the server. */
 export function parseNoteId(raw: unknown): NoteId | null {
   return typeof raw === 'string' && raw !== '' ? (raw as NoteId) : null;
