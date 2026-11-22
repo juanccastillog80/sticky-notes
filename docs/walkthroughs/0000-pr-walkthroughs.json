@@ -1,0 +1,378 @@
+{
+  "title": "PR walkthroughs",
+  "lede": "Every PR now explains itself with a page like this one. An agent writes the explanation, a script takes the code from git and refuses gaps it can detect, and you read the result before merging. The PR also corrects one false comment, found while writing the first walkthrough.",
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "question": "When is a walkthrough needed?",
+      "summary": "The standing rule every agent session loads.",
+      "owns": "The requirement.",
+      "never": "Explains how to write one.",
+      "tested": "Not enforced: it is an instruction."
+    },
+    {
+      "path": "docs/agents/pr-walkthrough.md",
+      "question": "What makes a good one?",
+      "summary": "The procedure, the spec fields and the quality bar.",
+      "owns": "How to write, check and link a walkthrough.",
+      "never": "Runs anything.",
+      "tested": "Followed to make this page."
+    },
+    {
+      "path": "docs/walkthroughs/build.js",
+      "question": "Is the page complete and current?",
+      "summary": "Turns a spec plus git into HTML, or says why it will not.",
+      "owns": "Reading git, resolving highlights, the refusals, the staleness check.",
+      "never": "Judges whether an explanation is true.",
+      "tested": "build.test.js, on real temporary git repos."
+    },
+    {
+      "path": "docs/walkthroughs/template.html",
+      "question": "What does the reader see?",
+      "summary": "The layout of your prototype, driven by data.",
+      "owns": "Rendering, navigation, highlighting.",
+      "never": "Reads git or loads anything from the network.",
+      "tested": "No automated test. Clicked through by script in Chromium and Firefox."
+    },
+    {
+      "path": "docs/walkthroughs/build.test.js",
+      "question": "Do the refusals work?",
+      "summary": "Runs the real builder in throwaway repos.",
+      "owns": "The behaviour of the builder.",
+      "never": "Tests the look of the page.",
+      "tested": "Each main check was broken on purpose to see a test fail."
+    },
+    {
+      "path": "vite.config.ts",
+      "question": "Where do those tests run?",
+      "summary": "One more glob in the unit project.",
+      "owns": "Test discovery.",
+      "never": "Makes CI require a walkthrough.",
+      "tested": "Exercised by `npm test`."
+    },
+    {
+      "path": "src/persistence/apiBaseUrl.ts",
+      "question": "Why is the API under the base path?",
+      "summary": "Corrected comment, same code.",
+      "owns": "The URL rule and its reason.",
+      "never": "Changed behaviour in this PR.",
+      "tested": "The same unit tests."
+    },
+    {
+      "path": "src/persistence/apiBaseUrl.test.ts",
+      "question": "What does the URL test claim?",
+      "summary": "A test name without the false reason.",
+      "owns": "The two expected URLs.",
+      "never": "Changed assertions in this PR.",
+      "tested": "It is a test."
+    }
+  ],
+  "flow": [
+    [
+      "CLAUDE.md",
+      "docs/agents/pr-walkthrough.md",
+      "docs/walkthroughs/build.js",
+      "docs/walkthroughs/template.html"
+    ],
+    ["vite.config.ts", "docs/walkthroughs/build.test.js", "docs/walkthroughs/build.js"]
+  ],
+  "scenarios": [
+    {
+      "name": "An agent opens a PR",
+      "steps": [
+        {
+          "title": "The session starts",
+          "explain": "`CLAUDE.md` is loaded in every session, so the rule does not depend on anyone remembering this conversation.",
+          "run": [
+            {
+              "file": "CLAUDE.md",
+              "from": "### PR walkthroughs",
+              "to": "Every PR must"
+            }
+          ]
+        },
+        {
+          "title": "The agent commits, then writes the spec",
+          "explain": "Code is committed first because the page describes commits. The spec holds only words and pointers to code, never a copy of the code.",
+          "run": [
+            {
+              "file": "docs/agents/pr-walkthrough.md",
+              "from": "1. Commit the code.",
+              "to": "2. Write"
+            }
+          ]
+        },
+        {
+          "title": "The builder finds what changed",
+          "explain": "It compares HEAD with the merge base on `origin/main`. Numbered walkthroughs are left out, so committing the page does not make that page outdated.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "const head = spec.head",
+              "to": ".filter(Boolean);"
+            },
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "const EXCLUDE ="
+            }
+          ]
+        },
+        {
+          "title": "It reads the real code",
+          "explain": "Each file comes from `git show`, and the zero-context diff gives the line numbers to mark green.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "for (const file of spec.files)",
+              "to": "files.set("
+            },
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "function addedLines",
+              "to": "return [...diff.matchAll"
+            }
+          ]
+        },
+        {
+          "title": "It resolves every highlight",
+          "explain": "A step quotes text instead of line numbers, which would drift. The text must match exactly one line, otherwise the highlight could land on the wrong code.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "function locate",
+              "to": "return { file, start, end };"
+            }
+          ]
+        },
+        {
+          "title": "It writes one HTML file",
+          "explain": "The data goes inside the template, so the page works offline. `<` is escaped, because code containing a closing script tag would otherwise end the script.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "const data = JSON.stringify",
+              "to": "() => data,"
+            },
+            {
+              "file": "docs/walkthroughs/template.html",
+              "from": "const DATA ="
+            }
+          ]
+        },
+        {
+          "title": "The PR body links it",
+          "explain": "GitHub shows HTML as source, so the body carries a command that opens the page from the branch without a checkout.",
+          "run": [
+            {
+              "file": "docs/agents/pr-walkthrough.md",
+              "from": "git fetch origin <branch>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The builder refuses",
+      "steps": [
+        {
+          "title": "Code is not committed",
+          "explain": "The page would show HEAD while you look at newer code, so nothing is built.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "if (!spec.head && git(",
+              "to": "commit or stash changes first"
+            },
+            {
+              "file": "docs/walkthroughs/build.test.js",
+              "from": "it('refuses uncommitted code'",
+              "to": "toContain('commit or stash"
+            }
+          ]
+        },
+        {
+          "title": "A changed file is not mentioned",
+          "explain": "Every changed file is either explained or listed with a reason. This stops a page from showing only the easy part of a diff.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "for (const path of changed)",
+              "to": "changed: add it to"
+            },
+            {
+              "file": "docs/walkthroughs/build.test.js",
+              "from": "it('refuses a changed file",
+              "to": "toContain('b.ts changed')"
+            }
+          ]
+        },
+        {
+          "title": "A shown file has no step",
+          "explain": "A tab full of code with no explanation is not a walkthrough.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "for (const path of files.keys())",
+              "to": "no step explains it`"
+            },
+            {
+              "file": "docs/walkthroughs/build.test.js",
+              "from": "it('refuses a file that no step",
+              "to": "toContain('no step explains it')"
+            }
+          ]
+        },
+        {
+          "title": "The explanation is simply wrong",
+          "explain": "**Nothing catches this.** The script proves that lines exist, not that the words are true. The guide asks for claims to be run, and your reading is the last check.",
+          "run": [
+            {
+              "file": "docs/agents/pr-walkthrough.md",
+              "from": "4. Open the HTML"
+            },
+            {
+              "file": "docs/agents/pr-walkthrough.md",
+              "from": "- Check runtime claims"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Code changes after review",
+      "steps": [
+        {
+          "title": "A fix is pushed",
+          "explain": "The guide requires re-reading the steps and rebuilding, because correct lines under an old explanation still mislead.",
+          "run": [
+            {
+              "file": "docs/agents/pr-walkthrough.md",
+              "from": "After any later push"
+            }
+          ]
+        },
+        {
+          "title": "--check compares",
+          "explain": "It rebuilds in memory and compares with the committed file. A commit of only the page passes, and a code change fails.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/build.js",
+              "from": "if (args.includes('--check'))",
+              "to": "is out of date: build it again"
+            },
+            {
+              "file": "docs/walkthroughs/build.test.js",
+              "from": "it('stays up to date",
+              "to": "toContain('out of date')"
+            }
+          ]
+        },
+        {
+          "title": "CI does not run that check",
+          "explain": "CI runs the tests of the builder, but nothing fails a PR with a missing or outdated walkthrough. Today that depends on the agent following the rule.",
+          "run": [
+            {
+              "file": "vite.config.ts",
+              "from": "include: ['src/**/*.test.ts'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "You read the page",
+      "steps": [
+        {
+          "title": "You choose a scenario and a step",
+          "explain": "The step opens the file of its first highlight. Dots on the other tabs show where else code runs.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/template.html",
+              "from": "function renderScenario()",
+              "to": "renderCode();"
+            }
+          ]
+        },
+        {
+          "title": "The code is painted",
+          "explain": "Highlighted lines are the ones in this step. Green numbers are the lines that this PR changed.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/template.html",
+              "from": "function renderCode()",
+              "to": "else box.scrollTop = 0;"
+            }
+          ]
+        },
+        {
+          "title": "You press an arrow key",
+          "explain": "The arrows move within the scenario and stop at either end.",
+          "run": [
+            {
+              "file": "docs/walkthroughs/template.html",
+              "from": "document.addEventListener('keydown'",
+              "to": "renderScenario();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The corrected comment",
+      "steps": [
+        {
+          "title": "The old claim is tested",
+          "explain": "The comment said the API had to be under the base path to be inside the worker scope. In a scratch build with the API at `/api`, MSW still answered 200 in Chromium and Firefox. Scope limits the controlled pages, not their fetches.",
+          "run": [
+            {
+              "file": "src/persistence/apiBaseUrl.ts",
+              "from": "* in `/`).",
+              "to": "doesn't need this"
+            }
+          ]
+        },
+        {
+          "title": "The code stays the same",
+          "explain": "The base path is still right: on GitHub Pages the rest of the origin belongs to other sites of the same account. Only the stated reason and the test name changed.",
+          "run": [
+            {
+              "file": "src/persistence/apiBaseUrl.ts",
+              "from": "return `"
+            },
+            {
+              "file": "src/persistence/apiBaseUrl.test.ts",
+              "from": "it('puts the API under the GitHub",
+              "to": "toBe('/sticky-notes/api')"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Generated HTML is committed.",
+      "detail": "It opens with no build and stays as a record of each PR. The cost is one generated file per PR, which `.gitattributes` collapses in the diff."
+    },
+    {
+      "title": "A script, not hand-written HTML.",
+      "detail": "Your prototype could afford a sketch. An explanation of real code cannot. The cost is a small tool to maintain and test."
+    },
+    {
+      "title": "No CI enforcement.",
+      "detail": "That changes the merge gate, so it is left as a separate decision."
+    },
+    {
+      "title": "Two concerns in one PR.",
+      "detail": "The comment fix is its own commit, so it can be split out or reverted alone."
+    },
+    {
+      "title": "The spec repeats the false claim.",
+      "detail": "The API contract in issue #1 also says the base path keeps the API inside the worker scope. This PR does not edit the issue."
+    }
+  ],
+  "omitted": {
+    ".prettierignore": "Skips formatting of walkthrough HTML, including the template.",
+    "docs/walkthroughs/.gitattributes": "Collapses generated pages in GitHub diffs, but not the template."
+  }
+}
