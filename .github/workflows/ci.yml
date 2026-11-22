@@ -15,6 +15,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The walkthrough check needs the branch tip and its merge base with main.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -48,6 +51,14 @@ jobs:
           retention-days: 7
 
       - run: npm run build
+
+      # Part of `check`, the status the ruleset requires. It also runs on a manual
+      # dispatch of a branch, whose `check` would otherwise pass without it.
+      - name: Walkthrough
+        if: github.ref != 'refs/heads/main'
+        env:
+          TIP: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node docs/walkthroughs/check.js "$TIP"
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

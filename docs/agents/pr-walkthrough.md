@@ -11,9 +11,12 @@ Every PR includes an interactive walkthrough, so that the owner understands what
 3. Build it with `node docs/walkthroughs/build.js <spec>`. Fix what it reports.
 4. Open the HTML in a browser and click through every step. The builder proves that highlighted lines exist, not that the explanation is true.
 5. Commit the spec and the HTML, in the same PR.
-6. Add the section below to the PR body, whichever body format is in use.
+6. Run `node docs/walkthroughs/check.js`, the same check CI runs.
+7. Add the section below to the PR body, whichever body format is in use.
 
-After any later push to the PR, including review fixes and rebases, re-read the steps, rebuild, and confirm with `--check`. Once merged, a walkthrough is frozen: don't rebuild it.
+After any later push to the PR, including review fixes and rebases, re-read the steps, rebuild, commit and run the check again. Once merged, a walkthrough is frozen: don't rebuild it.
+
+CI's `check` job fails unless the branch adds exactly one walkthrough that is current, and fails if it changes a merged one. Branches are compared with `origin/main`, so don't stack PRs. CI doesn't read the PR body or judge whether an explanation is true.
 
 ## PR body section
 
@@ -44,7 +47,7 @@ git fetch origin <branch> && git show FETCH_HEAD:docs/walkthroughs/<name>.html >
   - The first entry's file is the one that opens.
 - `notes`: `{ "title", "detail" }` for decisions and their strongest counter-argument, departures from the spec, and surprises.
 - `omitted`: `{ "path": "reason" }` for every other changed file.
-- `base`, `head`: only for documenting commits that are already merged.
+- `base`, `head`: never set them. CI rejects them. They exist only in the walking skeleton example, which predates PRs.
 
 Text fields support `` `code` `` and `**bold**`.
 
