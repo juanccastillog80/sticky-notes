@@ -472,17 +472,35 @@
             },
             {
               "file": "src/geometry.ts",
-              "from": "    spot = next;"
+              "from": "if (!samePoint(next, spot)) {",
+              "to": "spot = next;"
             }
           ]
         },
         {
-          "title": "The cascade runs out of Board",
-          "explain": "In the bottom-right corner a step clamps back to the same spot. Without the `break` this would loop forever and freeze the tab. The cost is that further Notes stack exactly there.",
+          "title": "The cascade wraps from the corner",
+          "explain": "In the bottom-right corner a step clamps back to the same spot, so the cascade restarts at the top-left of the **visible** Board. The Board's own top-left could be off-screen. Each wrap starts 24 px further right, or every wrap would repeat one diagonal. In the production build at 1024×768, scrolled to the end, 100 presses of each size gave 100 distinct Notes, all in view, in both browsers.",
           "run": [
             {
               "file": "src/geometry.ts",
-              "from": "if (samePoint(next, spot)) break;"
+              "from": "} else if (wrapX <=",
+              "to": "wrapX += CASCADE_STEP;"
+            }
+          ]
+        },
+        {
+          "title": "Every spot is taken",
+          "explain": "When a wrap would start past the last x that fits, it stops, and only then do Notes stack. Without the `break` this would loop forever and freeze the tab. Scrolled to the end at 1024×768, a script found 545 distinct Medium spots before that happens.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "// Every spot is taken",
+              "to": "break;"
+            },
+            {
+              "file": "src/geometry.test.ts",
+              "from": "it('stacks in the corner only",
+              "to": "expect(placeInVisibleBoard(nearCorner"
             }
           ]
         }
@@ -493,7 +511,7 @@
       "steps": [
         {
           "title": "Coordinates, by example and by property",
-          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once.",
+          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once. The cascade test presses 100 times: it got 51 distinct spots before each wrap moved right.",
           "run": [
             {
               "file": "src/geometry.test.ts",
@@ -502,8 +520,8 @@
             },
             {
               "file": "src/geometry.test.ts",
-              "from": "it('stops in the corner",
-              "to": "toEqual(rect(1700, 910));"
+              "from": "it('never stacks 100 Notes",
+              "to": "expect(Math.min(...taken.map(({ y })"
             }
           ]
         },
@@ -570,8 +588,12 @@
       "detail": "Explaining `rememberPress` exposed the bug: the Board heard only its own presses, so an old one could pair with a double-click that started outside it. The counter-argument is that a component now has a page-wide listener, where a React prop was simpler. It does one comparison per press and is removed on unmount. A press outside the page itself is still invisible to it."
     },
     {
-      "title": "The cascade stacks in the corner.",
-      "detail": "The spec doesn't say what happens there. At 1024×768 scrolled to the end, review measured 25 presses of M giving 18 spots and 8 Notes exactly stacked. Stopping is simple and predictable. The counter-argument is user story 11, \"don't hide exactly on top\": wrapping would honour it, at the cost of a rule nobody has chosen yet."
+      "title": "The cascade wraps from the corner.",
+      "detail": "The spec doesn't say what happens there, so the owner chose wrapping, for user story 11: \"don't hide exactly on top\". Stopping was one line and more predictable. The cost of wrapping is a jump back across the screen and a search that grows with the Notes: the slowest placement measured was 20 ms, with about 2,300 Notes."
+    },
+    {
+      "title": "The cascade can leave the visible area before it wraps.",
+      "detail": "It follows the spec's (24, 24) steps to the Board's corner, not the window's. At 1024×768 scrolled to the top-left, 6 of 25 presses of M made Notes wholly out of view. This is open for the owner: wrapping at the visible edge would fix it."
     },
     {
       "title": "`user-select: none` is always on the Board.",
@@ -582,8 +604,8 @@
       "detail": "It belongs with Gestures. Added now, it would remove touch scrolling of the Board and give nothing back."
     },
     {
-      "title": "The toolbar can't read a Board-owned Context.",
-      "detail": "#6 plans a `BoardDomContext` owned by the Board, holding the scroll container ref. The top bar is outside the Board, so App owns that ref today. #6 should either keep it so and pass it in, or move the provider up to App."
+      "title": "App, not the Board, owns the scroll container ref.",
+      "detail": "The top bar is outside the Board and needs it. The owner agreed that #6's `BoardDomContext` is provided by App, and #6 now says so. The spec in #1 still says the Board."
     },
     {
       "title": "The scroll container has a 24 px gutter at the right and bottom.",
