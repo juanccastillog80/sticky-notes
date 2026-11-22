@@ -1,0 +1,32 @@
+.note {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--note-bg);
+  box-shadow: var(--shadow-note);
+  color: var(--color-note-text);
+}
+
+.note[data-colour='yellow'] {
+  --note-bg: var(--color-note-yellow);
+  --note-strip: var(--color-note-yellow-strip);
+}
+
+.gripStrip {
+  flex: none;
+  height: 22px;
+  background: var(--note-strip);
+}
+
+.text {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px 12px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}

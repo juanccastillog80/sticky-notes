@@ -2,15 +2,19 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { createNotesStore } from './notes/notesReducer';
 import { apiBaseUrl } from './persistence/apiBaseUrl';
+import { createUiStore } from './ui/uiReducer';
 import './tokens.css';
+
+const stores = { notes: createNotesStore(), ui: createUiStore() };
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Missing #root element');
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <App stores={stores} />
   </StrictMode>,
 );
 
