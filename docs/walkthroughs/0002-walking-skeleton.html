@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"issue":2,"title":"Walking skeleton","base":"5474e8b^","head":"5474e8b","lede":"An almost empty app that proves three things before any feature exists: the page renders without waiting for the network, a mocked REST API answers real fetch calls under the GitHub Pages base path, and CI gates the deploy. Read the diagram, then step through a scenario.","files":[{"path":"src/main.tsx","question":"In what order does the app start?","summary":"The composition root: renders, then starts the mock, then makes the first request.","owns":"Startup order, and wiring the mock to the app.","never":"Holds UI or knows how a request gets answered.","tested":"No automated test.","lines":["// Composition root: the only module that wires the mocks (and, later, persistence).","import { StrictMode } from 'react';","import { createRoot } from 'react-dom/client';","import { App } from './App';","import { apiBaseUrl } from './persistence/apiBaseUrl';","import './tokens.css';","","const rootElement = document.getElementById('root');","if (!rootElement) throw new Error('Missing #root element');","","createRoot(rootElement).render(","  \u003cStrictMode>","    \u003cApp />","  \u003c/StrictMode>,",");","","// Rendering never waits on the network. The worker must be running before","// the first request, so the GET is issued only once it has started. MSW is","// loaded as its own chunk so it never delays the first paint.","const { startMockWorker } = await import('./mocks/browser');","const viteBase = import.meta.env.BASE_URL;","const apiBase = apiBaseUrl(viteBase);","await startMockWorker({ viteBase, apiBase });","const response = await fetch(`${apiBase}/notes`);","console.info('GET /notes →', response.status, await response.json());"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]},{"path":"src/App.tsx","question":"What does the user see?","summary":"A static placeholder until the Board exists.","owns":"The placeholder markup.","never":"Fetches, or imports the mocks.","tested":"Browser test in Chromium and Firefox.","lines":["import styles from './App.module.css';","","export function App() {","  return (","    \u003cmain className={styles.placeholder}>","      \u003ch1 className={styles.title}>Sticky Notes\u003c/h1>","      \u003cp className={styles.subtitle}>The Board is on its way.\u003c/p>","    \u003c/main>","  );","}"],"added":[0,1,2,3,4,5,6,7,8,9]},{"path":"src/persistence/apiBaseUrl.ts","question":"Where is the API?","summary":"Pure: turns the Vite base path into the API base URL.","owns":"The URL rule, in one place.","never":"Reads the environment or makes requests.","tested":"Unit tests and a type test.","lines":["/**"," * The REST API's base URL, derived from Vite's `BASE_URL` (which always ends"," * in `/`). Keeping the API under the base path keeps it inside the mock"," * service worker's scope on GitHub Pages."," */","export function apiBaseUrl(viteBase: string): string {","  return `${viteBase}api`;","}"],"added":[0,1,2,3,4,5,6,7]},{"path":"src/mocks/browser.ts","question":"How does the mock get installed?","summary":"Registers the MSW service worker under the base path.","owns":"The worker URL, its scope, and what happens to unhandled requests.","never":"Decides when to start, or what to answer.","tested":"No automated test.","lines":["import { setupWorker } from 'msw/browser';","import { createHandlers } from './handlers';","","/**"," * Registers the mock service worker from the Vite base path, scoped to it, so"," * it works the same in dev and on GitHub Pages."," */","export async function startMockWorker({","  viteBase,","  apiBase,","}: {","  viteBase: string;","  apiBase: string;","}): Promise\u003cvoid> {","  const worker = setupWorker(...createHandlers(apiBase));","  await worker.start({","    serviceWorker: {","      url: `${viteBase}mockServiceWorker.js`,","      options: { scope: viteBase },","    },","    // MSW 3's name for v2's `onUnhandledRequest`.","    onUnhandledFrame: 'bypass',","  });","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]},{"path":"src/mocks/handlers.ts","question":"What does the fake server answer?","summary":"One route: GET notes returns an empty list.","owns":"The responses of the mocked API.","never":"Registers the worker.","tested":"No automated test.","lines":["import { http, HttpResponse } from 'msw';","","/** MSW handlers for the mocked REST API rooted at `apiBase`. */","export function createHandlers(apiBase: string) {","  return [http.get(`${apiBase}/notes`, () => HttpResponse.json([]))];","}"],"added":[0,1,2,3,4,5]},{"path":"src/persistence/apiBaseUrl.test.ts","question":"Is the URL rule right?","summary":"Checks the rule for the Pages path and for the root.","owns":"The two expected URLs.","never":"Starts a browser or a worker.","tested":"It is a test.","lines":["import { describe, expect, it } from 'vitest';","import { apiBaseUrl } from './apiBaseUrl';","","describe('apiBaseUrl', () => {","  it('puts the API under the GitHub Pages base path, inside the service worker scope', () => {","    expect(apiBaseUrl('/sticky-notes/')).toBe('/sticky-notes/api');","  });","","  it('puts the API at /api when the app is served from the root', () => {","    expect(apiBaseUrl('/')).toBe('/api');","  });","});"],"added":[0,1,2,3,4,5,6,7,8,9,10,11]},{"path":"src/App.browser.test.tsx","question":"Does the page render?","summary":"Renders App alone in real browsers.","owns":"The smoke test for the placeholder.","never":"Runs main.tsx, so it never starts MSW.","tested":"It is a test.","lines":["import { expect, it } from 'vitest';","import { render } from 'vitest-browser-react';","import { App } from './App';","","it('shows the Sticky Notes placeholder page', async () => {","  const screen = await render(\u003cApp />);","","  await expect.element(screen.getByRole('heading', { name: 'Sticky Notes' })).toBeVisible();","});"],"added":[0,1,2,3,4,5,6,7,8]},{"path":"vite.config.ts","question":"How is it built and tested?","summary":"The base path, the two test projects and the coverage gate.","owns":"Build and test configuration.","never":"Runs in the app.","tested":"Exercised by every build and test run.","lines":["import react from '@vitejs/plugin-react';","import { playwright } from '@vitest/browser-playwright';","import { defineConfig } from 'vitest/config';","","// Pure-core folders held to the coverage gate (spec: Coverage and gates).","// Components and the composition root are covered by browser tests instead.","const PURE_CORE = [","  'src/store/**',","  'src/notes/**',","  'src/ui/**',","  'src/gesture/**',","  'src/persistence/**',","  'src/geometry.ts',","  'src/commands.ts',","];","","export default defineConfig({","  // The same base for every command, dev included, so the service-worker","  // scope and URLs match the GitHub Pages deployment.","  base: '/sticky-notes/',","  plugins: [react()],","  test: {","    coverage: {","      provider: 'v8',","      include: PURE_CORE,","      exclude: ['**/*.test.ts', '**/*.test-d.ts', '**/*.browser.test.tsx'],","      thresholds: { lines: 90, branches: 90 },","    },","    projects: [","      {","        extends: true,","        test: {","          name: 'unit',","          environment: 'node',","          include: ['src/**/*.test.ts'],","          typecheck: {","            enabled: true,","            include: ['src/**/*.test-d.ts'],","            tsconfig: './tsconfig.app.json',","          },","        },","      },","      {","        extends: true,","        test: {","          name: 'browser',","          include: ['src/**/*.browser.test.tsx'],","          browser: {","            enabled: true,","            headless: true,","            provider: playwright(),","            instances: [{ browser: 'chromium' }, { browser: 'firefox' }],","          },","        },","      },","    ],","  },","});"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57]},{"path":".github/workflows/ci.yml","question":"What must pass before a deploy?","summary":"One workflow: check, then deploy from main.","owns":"The gate and the Pages deploy.","never":"Deploys from a pull request.","tested":"Exercised by running it.","lines":["name: CI","","on:","  pull_request:","  push:","    branches: [main]","  workflow_dispatch:","","permissions:","  contents: read","","jobs:","  check:","    runs-on: ubuntu-latest","    timeout-minutes: 15","    steps:","      - uses: actions/checkout@v7","","      - uses: actions/setup-node@v7","        with:","          node-version-file: .nvmrc","          cache: npm","","      - run: npm ci","","      - name: Install Playwright browsers","        run: npx playwright install --with-deps chromium firefox","","      - run: npm run typecheck","","      - run: npm run lint","","      - name: Tests (unit + browser in Chromium and Firefox)","        run: npm test","","      # The v8 gate runs on the unit project only (the pure core); the unit","      # tests are fast, so running them twice is cheap.","      - name: Coverage gate","        run: npm run coverage","","      - name: Upload failure screenshots","        if: failure()","        uses: actions/upload-artifact@v7","        with:","          name: browser-test-screenshots","          path: .vitest/attachments/failure-screenshots/","          if-no-files-found: ignore","          retention-days: 7","","      - run: npm run build","","      - name: Upload Pages artifact","        if: github.event_name != 'pull_request'","        uses: actions/upload-pages-artifact@v5","        with:","          path: dist","","  deploy:","    needs: check","    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')","    runs-on: ubuntu-latest","    timeout-minutes: 5","    permissions:","      pages: write","      id-token: write","    concurrency:","      group: pages","      cancel-in-progress: false","    environment:","      name: github-pages","      url: ${{ steps.deployment.outputs.page_url }}","    steps:","      - id: deployment","        uses: actions/deploy-pages@v5"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73]}],"flow":[["src/main.tsx","src/App.tsx"],["src/main.tsx","src/persistence/apiBaseUrl.ts"],["src/main.tsx","src/mocks/browser.ts","src/mocks/handlers.ts"]],"scenarios":[{"name":"Open the page","steps":[{"title":"The browser runs the entry module","explain":"`main.tsx` finds `#root` and asks React to render App. This comes first on purpose: nothing above it waits for the network, so a slow mock can never leave a blank page.","run":[{"file":"src/main.tsx","start":7,"end":13},{"file":"src/App.tsx","start":2,"end":7}]},{"title":"The mock code downloads as its own chunk","explain":"The dynamic `import()` makes Vite split MSW into a separate file. The module pauses at this `await`, and React can paint meanwhile.","run":[{"file":"src/main.tsx","start":19,"end":19}]},{"title":"The API address is computed","explain":"`BASE_URL` is `/sticky-notes/`, from the `base` option in the Vite config, so the API base is `/sticky-notes/api`. The function takes the base as an argument instead of reading the environment, which is why a plain Node test can cover it.","run":[{"file":"src/main.tsx","start":20,"end":21},{"file":"src/persistence/apiBaseUrl.ts","start":5,"end":6},{"file":"vite.config.ts","start":19,"end":19}]},{"title":"The service worker registers","explain":"The worker script and its scope both sit under `/sticky-notes/`. The scope decides **which pages** the worker controls. The handlers are built here, from the same API base that the fetch will use.","run":[{"file":"src/main.tsx","start":22,"end":22},{"file":"src/mocks/browser.ts","start":14,"end":22},{"file":"src/mocks/handlers.ts","start":3,"end":4}]},{"title":"The first GET goes out","explain":"It is sent only now, because `main.tsx` awaited the worker. Sent earlier, it could go straight to GitHub Pages, which has no API. It is a real fetch, so it shows in the DevTools Network tab.","run":[{"file":"src/main.tsx","start":23,"end":23}]},{"title":"The handler answers 200 and an empty list","explain":"The worker passes the request to the handler in the page, and the response returns through the worker. The console prints `GET /notes → 200 []`. Nothing stores it yet.","run":[{"file":"src/mocks/handlers.ts","start":4,"end":4},{"file":"src/main.tsx","start":24,"end":24}]}]},{"name":"A request with no handler","steps":[{"title":"The app is running, and something fetches /sticky-notes/api/nope","explain":"The worker sees the request, because it comes from a page it controls. Only GET notes has a handler, so none matches.","run":[{"file":"src/mocks/handlers.ts","start":4,"end":4}]},{"title":"MSW lets it through to the real server","explain":"`bypass` means no warning and no fake error. The local preview server answered **200 with HTML**, its fallback page. So a forgotten handler looks like a success until `response.json()` throws.","run":[{"file":"src/mocks/browser.ts","start":21,"end":21}]}]},{"name":"The worker fails to start","steps":[{"title":"The page renders as usual","explain":"Rendering happened before any mock code ran, so the failure cannot take it back.","run":[{"file":"src/main.tsx","start":10,"end":14}]},{"title":"Registration is blocked, and start() rejects","explain":"Reproduced by blocking service workers in both browsers: MSW throws `Failed to register the Service Worker`.","run":[{"file":"src/mocks/browser.ts","start":15,"end":22},{"file":"src/main.tsx","start":22,"end":22}]},{"title":"Startup stops there","explain":"Nothing catches the rejection, so the GET is never sent and the only sign is an uncaught error in the console. That is harmless for a placeholder. Once Notes are saved through this API, it needs handling.","run":[{"file":"src/main.tsx","start":22,"end":22}]}]},{"name":"From push to live site","steps":[{"title":"A pull request or a push to main starts CI","explain":"Both run the same check job. Typecheck and lint come first because they are the cheapest to fail.","run":[{"file":".github/workflows/ci.yml","start":3,"end":6},{"file":".github/workflows/ci.yml","start":28,"end":30}]},{"title":"Unit tests run in Node","explain":"They cover pure code, such as the URL rule, without a browser.","run":[{"file":"vite.config.ts","start":32,"end":34},{"file":"src/persistence/apiBaseUrl.test.ts","start":3,"end":9}]},{"title":"Browser tests run in Chromium and Firefox","explain":"This one renders App by itself. It does **not** run `main.tsx`, so green tests say nothing about the worker or the GET.","run":[{"file":"src/App.browser.test.tsx","start":4,"end":7},{"file":"vite.config.ts","start":45,"end":51}]},{"title":"Coverage and build","explain":"The 90% gate applies only to the pure-core folders. Components are left to the browser tests.","run":[{"file":".github/workflows/ci.yml","start":37,"end":38},{"file":"vite.config.ts","start":26,"end":26},{"file":".github/workflows/ci.yml","start":49,"end":49}]},{"title":"Deploy, from main only","explain":"A pull request stops after the check job. On main, or a manual run on main, the built folder is published to GitHub Pages. `needs: check` blocks a deploy when the gate is red. Only the push-to-main path has run so far: the pull request and red-gate paths come from reading the workflow.","run":[{"file":".github/workflows/ci.yml","start":51,"end":55},{"file":".github/workflows/ci.yml","start":57,"end":59}]}]}],"notes":[{"title":"A comment at this commit is false.","detail":"`apiBaseUrl.ts` says the API must be under the base path to stay inside the worker scope, and its unit test name repeats that. Scope limits which pages are controlled, not which URLs they can fetch. With the API moved to `/api`, MSW still answered 200 in Chromium and Firefox. The base path is still a tidy choice, but not for that reason. The comment and test name were corrected in the PR that introduced walkthroughs."},{"title":"The mock ships to production.","detail":"That is deliberate (ADR 0002): there is no backend. The counter-argument is that it adds weight and a point of failure to the live site. The separate chunk answers the first half, but not the second."},{"title":"The startup wiring has no automated test.","detail":"The tests cover the URL rule and App. The order in `main.tsx`, the worker and the handler could all break with CI green."},{"title":"MSW 3 renamed an option.","detail":"The issue says `onUnhandledRequest`. The code uses `onUnhandledFrame`, its new name."}],"omitted":{".gitignore":"Ignores build and test output.",".nvmrc":"Pins Node 26.",".prettierignore":"Files that Prettier skips.",".prettierrc.json":"Formatting options.","eslint.config.js":"Lint rules: strict type-checked, hooks, complexity 10.","index.html":"The `#root` element and the entry script.","package.json":"Scripts and dependencies.","package-lock.json":"Generated.","public/mockServiceWorker.js":"Generated by MSW.","src/App.module.css":"Placeholder styles.","src/tokens.css":"Colour and type tokens, plus the reset.","src/persistence/apiBaseUrl.test-d.ts":"Type test: string in, string out.","tsconfig.app.json":"TypeScript settings for the app.","tsconfig.base.json":"The shared strict settings.","tsconfig.json":"Project references.","tsconfig.node.json":"TypeScript settings for the Vite config."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
