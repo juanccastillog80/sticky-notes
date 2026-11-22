@@ -23,7 +23,7 @@
       "path": "src/components/Board.tsx",
       "question": "When does a double-click create a Note?",
       "summary": "Turns a double-click on empty Board into a rect.",
-      "owns": "The press rule, and the list of Notes.",
+      "owns": "The press rule, its document listener, and the list of Notes.",
       "never": "Reads a Note, or does placement maths.",
       "tested": "Browser tests."
     },
@@ -207,6 +207,17 @@
           ]
         },
         {
+          "title": "The Board starts listening for presses",
+          "explain": "After mounting, the Board listens on the **document**, because a double-click can start on the top bar or the backdrop. The cleanup removes that listener. Without it, StrictMode's second run in development would leave two, and each press would fill both slots of the window. Removing it was tried, and double-clicks starting on a Note created again.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "useEffect(() => {",
+              "to": "}, []);"
+            }
+          ]
+        },
+        {
           "title": "The hint shows",
           "explain": "`EmptyHint` selects a boolean, so it renders again only when the Board becomes empty or stops being empty. It sits outside the scrolling content, so it stays centred without a scroll listener. Its CSS has `pointer-events: none`, so double-clicking the hint reaches the Board.",
           "run": [
@@ -233,7 +244,7 @@
       "steps": [
         {
           "title": "Each press records where it landed",
-          "explain": "`dblclick` reports only the second press, so the Board keeps the last two. It listens in the **capture** phase, so it still hears a press if a Note later stops propagation.",
+          "explain": "`dblclick` reports only the second press, so the Board keeps the last two on the page: each press moves `last` into `previousToLast`. The **capture** phase means it still hears a press if a Note stops propagation, which a script checked in both browsers. No test covers it.",
           "run": [
             {
               "file": "src/components/Board.tsx",
@@ -248,7 +259,7 @@
           "run": [
             {
               "file": "src/components/Board.tsx",
-              "from": "const { first, second } = presses.current",
+              "from": "const { previousToLast, last } = presses.current",
               "to": "createNote(placeCentredAt("
             },
             {
@@ -356,7 +367,7 @@
             },
             {
               "file": "src/components/Board.tsx",
-              "from": "if (!first || !second) return;"
+              "from": "if (!previousToLast || !last) return;"
             }
           ]
         },
@@ -370,12 +381,32 @@
             },
             {
               "file": "src/components/Board.tsx",
-              "from": "if (!first || !second) return;"
+              "from": "if (!previousToLast || !last) return;"
             },
             {
               "file": "src/App.browser.test.tsx",
               "from": "it('a double-click that starts on a Note",
               "to": "expect(notes.elements()).toHaveLength(1);"
+            }
+          ]
+        },
+        {
+          "title": "A double-click that starts outside the Board",
+          "explain": "A press on the top bar or backdrop, then one on empty Board, is also a `dblclick` on the Board. The outside press is recorded as `false`, so nothing is created. When only the Board listened, that press went unseen and an older press took its place. The test makes that older press first, and it failed in both browsers before the fix.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const onEmptyBoard =",
+              "to": "presses.current = {"
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "if (!previousToLast || !last) return;"
+            },
+            {
+              "file": "src/App.browser.test.tsx",
+              "from": "it('a double-click that starts outside the Board",
+              "to": "expect(notes.elements()).toHaveLength(0);"
             }
           ]
         },
@@ -534,6 +565,10 @@
     }
   ],
   "notes": [
+    {
+      "title": "Presses are recorded on the document.",
+      "detail": "Explaining `rememberPress` exposed the bug: the Board heard only its own presses, so an old one could pair with a double-click that started outside it. The counter-argument is that a component now has a page-wide listener, where a React prop was simpler. It does one comparison per press and is removed on unmount. A press outside the page itself is still invisible to it."
+    },
     {
       "title": "The cascade stacks in the corner.",
       "detail": "The spec doesn't say what happens there. At 1024×768 scrolled to the end, review measured 25 presses of M giving 18 spots and 8 Notes exactly stacked. Stopping is simple and predictable. The counter-argument is user story 11, \"don't hide exactly on top\": wrapping would honour it, at the cost of a rule nobody has chosen yet."
