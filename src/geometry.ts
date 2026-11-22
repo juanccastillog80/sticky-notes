@@ -54,18 +54,27 @@ const CASCADE_STEP = 24;
 /**
  * Centred in the part of the Board that `view` (the scroll container's offset
  * and client size) shows, stepping down-right past Notes at that exact spot.
+ * From the Board's corner the steps wrap to the top-left of what is visible,
+ * each wrap starting a step further right.
  */
 export function placeInVisibleBoard(view: Rect, size: Size, taken: readonly Point[]): Rect {
   // `view` can reach past the Board, over the backdrop.
   const right = Math.min(view.x + view.width, BOARD_SIZE.width);
   const bottom = Math.min(view.y + view.height, BOARD_SIZE.height);
   let spot = placeCentredAt({ x: (view.x + right) / 2, y: (view.y + bottom) / 2 }, size);
+  let wrapX = view.x;
 
   while (taken.some((point) => samePoint(point, spot))) {
     const next = clampToBoard({ ...spot, x: spot.x + CASCADE_STEP, y: spot.y + CASCADE_STEP });
-    // In the Board's bottom-right corner there is nowhere further to step.
-    if (samePoint(next, spot)) break;
-    spot = next;
+    if (!samePoint(next, spot)) {
+      spot = next;
+    } else if (wrapX <= BOARD_SIZE.width - size.width) {
+      spot = toCommittedRect({ ...size, x: wrapX, y: view.y });
+      wrapX += CASCADE_STEP;
+    } else {
+      // Every spot is taken. Without this the loop would never end.
+      break;
+    }
   }
   return spot;
 }

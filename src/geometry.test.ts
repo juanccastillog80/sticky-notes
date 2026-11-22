@@ -101,6 +101,8 @@ describe('placeCentredAt', () => {
 describe('placeInVisibleBoard', () => {
   const size = { width: 220, height: 170 };
   const view = { x: 0, y: 0, width: 1024, height: 720 };
+  // Centred at (1676, 886), one step from the corner.
+  const nearCorner = { x: 1652, y: 862, width: 268, height: 218 };
 
   it('centres the Note in the visible part of the Board', () => {
     expect(placeInVisibleBoard(view, size, [])).toEqual(rect(402, 275));
@@ -150,7 +152,43 @@ describe('placeInVisibleBoard', () => {
     expect(placeInVisibleBoard(rightView, size, [rect(1700, 275)])).toEqual(rect(1700, 299));
   });
 
-  it('stops in the corner when the cascade has nowhere left to go', () => {
+  it('wraps from the corner to the top-left of the visible Board', () => {
+    const taken = [rect(1676, 886), rect(1700, 910)];
+
+    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1652, 862));
+  });
+
+  it('starts each further wrap a step to the right', () => {
+    const taken = [rect(1676, 886), rect(1700, 910), rect(1652, 862)];
+
+    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1676, 862));
+  });
+
+  it('never stacks 100 Notes when scrolled to the end', () => {
+    const endView = { x: 920, y: 400, width: 1024, height: 704 };
+    const taken: Rect[] = [];
+    for (let press = 0; press < 100; press++) taken.push(placeInVisibleBoard(endView, size, taken));
+
+    expect(new Set(taken.map(({ x, y }) => `${String(x)},${String(y)}`)).size).toBe(100);
+    // Wrapping must not take a Note out of view, either.
+    expect(Math.min(...taken.map(({ x }) => x))).toBeGreaterThanOrEqual(920);
+    expect(Math.min(...taken.map(({ y }) => y))).toBeGreaterThanOrEqual(400);
+  });
+
+  it('stacks in the corner only when every spot of the cascade is taken', () => {
+    const taken = [
+      rect(1676, 886),
+      rect(1700, 910),
+      rect(1652, 862),
+      rect(1676, 862),
+      rect(1700, 886),
+      rect(1700, 862),
+    ];
+
+    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1700, 910));
+  });
+
+  it('stops in the corner when there is no room to wrap', () => {
     const cornerView = { x: 1700, y: 910, width: 220, height: 170 };
 
     expect(placeInVisibleBoard(cornerView, size, [rect(1700, 910)])).toEqual(rect(1700, 910));
