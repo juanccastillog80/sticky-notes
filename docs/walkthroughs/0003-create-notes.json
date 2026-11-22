@@ -1,0 +1,590 @@
+{
+  "issue": 3,
+  "title": "Create Notes on the Board",
+  "lede": "The first feature, and the foundation for the rest: a pointer event becomes a rect in pure geometry, a command turns it into an action, a pure reducer commits it, and only the components that selected what changed render again.",
+  "files": [
+    {
+      "path": "src/main.tsx",
+      "question": "What gets created at startup?",
+      "summary": "The composition root: makes the two stores and hands them to App.",
+      "owns": "Which stores the app runs on.",
+      "never": "Holds UI or rules.",
+      "tested": "Not by a test. The production build was driven in Chromium and Firefox."
+    },
+    {
+      "path": "src/App.tsx",
+      "question": "How do the top bar and the Board meet?",
+      "summary": "Provides the stores, and shares the scroll container ref between the two.",
+      "owns": "Layout and the provider.",
+      "never": "Holds state, effects or rules.",
+      "tested": "Every browser test mounts it."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "When does a double-click create a Note?",
+      "summary": "Turns a double-click on empty Board into a rect.",
+      "owns": "The press rule, and the list of Notes.",
+      "never": "Reads a Note, or does placement maths.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/components/NewNoteButtons.tsx",
+      "question": "Where does a toolbar Note go?",
+      "summary": "Reads what is visible when pressed and asks geometry for a spot.",
+      "owns": "The S/M/L buttons.",
+      "never": "Subscribes to the Notes.",
+      "tested": "Browser tests, with space taken by scrollbars."
+    },
+    {
+      "path": "src/geometry.ts",
+      "question": "Where can a Note be?",
+      "summary": "Pure maths: Board bounds, rounding, the two placements.",
+      "owns": "Every coordinate rule.",
+      "never": "Touches the DOM or a store.",
+      "tested": "Examples and fast-check properties."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "What does creating a Note mean?",
+      "summary": "The rule that needs both stores: a new Note takes the Current colour.",
+      "owns": "Rules that span stores.",
+      "never": "Knows about the pointer or the DOM.",
+      "tested": "Unit tests on real stores."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How may the Notes change?",
+      "summary": "A pure reducer with `create` and `load`.",
+      "owns": "Committed Notes, the Stacking order, and which references survive.",
+      "never": "Knows about the UI store or persistence.",
+      "tested": "Unit tests, including reference stability."
+    },
+    {
+      "path": "src/store/createStore.ts",
+      "question": "Who hears about a change?",
+      "summary": "One generic store, and the hook that subscribes to part of it.",
+      "owns": "Subscriptions.",
+      "never": "Knows what a Note is.",
+      "tested": "Unit tests through the Notes store. The hook runs in browser tests."
+    },
+    {
+      "path": "src/StoresContext.ts",
+      "question": "How do components reach the stores?",
+      "summary": "One Context whose value never changes, plus small hooks.",
+      "owns": "Injection.",
+      "never": "Carries changing values.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What re-renders when a Note changes?",
+      "summary": "A memoised Note that selects itself by id.",
+      "owns": "How one Note is drawn.",
+      "never": "Writes `transform`, which is left for the Gesture Preview.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/components/EmptyHint.tsx",
+      "question": "What does an empty Board say?",
+      "summary": "The hint, laid over the visible part of the Board.",
+      "owns": "The hint and when it shows.",
+      "never": "Takes pointer input.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/ui/uiReducer.ts",
+      "question": "What is UI-only state?",
+      "summary": "Editing, the Current colour and the last deleted Note, with no actions yet.",
+      "owns": "UI state.",
+      "never": "Holds Notes.",
+      "tested": "Through the command tests."
+    },
+    {
+      "path": "src/notes/note.ts",
+      "question": "What is a Note?",
+      "summary": "The type, branded id, colours and size presets.",
+      "owns": "The domain vocabulary in types.",
+      "never": "Has behaviour beyond making ids.",
+      "tested": "Unit and type tests."
+    },
+    {
+      "path": "src/geometry.test.ts",
+      "question": "Are the coordinate rules right?",
+      "summary": "Worked examples plus properties for any rect.",
+      "owns": "Expected numbers from the spec.",
+      "never": "Uses a browser.",
+      "tested": "It is a test."
+    },
+    {
+      "path": "src/notes/notesReducer.test.ts",
+      "question": "Do references survive?",
+      "summary": "Examples for both actions.",
+      "owns": "Reference stability.",
+      "never": "Renders.",
+      "tested": "It is a test."
+    },
+    {
+      "path": "src/commands.test.ts",
+      "question": "Does a new Note take the Current colour?",
+      "summary": "The command on real stores.",
+      "owns": "The cross-store rule.",
+      "never": "Mocks modules.",
+      "tested": "It is a test."
+    },
+    {
+      "path": "src/notes/note.test-d.ts",
+      "question": "What must not compile?",
+      "summary": "Type tests for ids, colours and actions.",
+      "owns": "The three type rules.",
+      "never": "Runs.",
+      "tested": "It is a test."
+    },
+    {
+      "path": "src/App.browser.test.tsx",
+      "question": "Does it work with a real mouse?",
+      "summary": "The whole App in Chromium and Firefox.",
+      "owns": "Behaviour the user sees.",
+      "never": "Starts MSW or persistence.",
+      "tested": "It is a test."
+    }
+  ],
+  "flow": [
+    ["src/main.tsx", "src/App.tsx", "src/components/Board.tsx"],
+    ["src/components/Board.tsx", "src/geometry.ts"],
+    [
+      "src/components/Board.tsx",
+      "src/commands.ts",
+      "src/notes/notesReducer.ts",
+      "src/store/createStore.ts",
+      "src/components/Note.tsx"
+    ],
+    ["src/components/NewNoteButtons.tsx", "src/geometry.ts"],
+    ["src/components/NewNoteButtons.tsx", "src/commands.ts", "src/ui/uiReducer.ts"],
+    ["src/components/Board.tsx", "src/components/EmptyHint.tsx", "src/StoresContext.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Open an empty Board",
+      "steps": [
+        {
+          "title": "The stores are created, then React renders",
+          "explain": "Two stores are made **before** the first render and passed in, not imported. That is why every test can mount the same App on fresh stores. Rendering still comes before the network.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "const stores =",
+              "to": "</StrictMode>,"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "return createStore(notesReducer",
+              "to": "EMPTY_NOTES);"
+            },
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "export const INITIAL_UI"
+            },
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "return createStore((state)"
+            }
+          ]
+        },
+        {
+          "title": "App connects the top bar to the scroll container",
+          "explain": "The toolbar is a sibling of the Board but must know which part of it is visible, so App owns one ref and passes it to both. A ref changing causes no render, and the Context value never changes either.",
+          "run": [
+            {
+              "file": "src/App.tsx",
+              "from": "const scrollerRef =",
+              "to": "</StoresContext>"
+            },
+            {
+              "file": "src/StoresContext.ts",
+              "from": "export function useStores",
+              "to": "return stores;"
+            }
+          ]
+        },
+        {
+          "title": "The hint shows",
+          "explain": "`EmptyHint` selects a boolean, so it renders again only when the Board becomes empty or stops being empty. It sits outside the scrolling content, so it stays centred without a scroll listener. Its CSS has `pointer-events: none`, so double-clicking the hint reaches the Board.",
+          "run": [
+            {
+              "file": "src/components/EmptyHint.tsx",
+              "from": "const isEmpty =",
+              "to": "if (!isEmpty)"
+            },
+            {
+              "file": "src/components/EmptyHint.tsx",
+              "from": "<div",
+              "to": "</div>"
+            },
+            {
+              "file": "src/store/createStore.ts",
+              "from": "return useSyncExternalStore"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Double-click empty Board",
+      "steps": [
+        {
+          "title": "Each press records where it landed",
+          "explain": "`dblclick` reports only the second press, so the Board keeps the last two. It listens in the **capture** phase, so it still hears a press if a Note later stops propagation.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "function rememberPress",
+              "to": "presses.current = {"
+            }
+          ]
+        },
+        {
+          "title": "The double-click becomes a Board point",
+          "explain": "Both presses were on empty Board, so it continues. `getBoundingClientRect()` already includes scrolling, so one subtraction is enough. In a 1024×768 window, a double-click at client (260, 250) is Board (260, 202): the top bar is 48 px.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const { first, second } = presses.current",
+              "to": "createNote(placeCentredAt("
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "return { x: client.x - boardRect.x"
+            }
+          ]
+        },
+        {
+          "title": "The point becomes a rect",
+          "explain": "The default size is Medium, 220×170, so that Note lands at (150, 117). Rounding comes **before** clamping: the bounds are whole pixels, and rounding a width up afterwards could push the right edge to 1921.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "return toCommittedRect({ x: x - width"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "return clampToBoard({",
+              "to": "});"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "const width = clamp(",
+              "to": "height,"
+            },
+            {
+              "file": "src/notes/note.ts",
+              "from": "export const DEFAULT_NOTE_SIZE"
+            }
+          ]
+        },
+        {
+          "title": "The command adds the Current colour",
+          "explain": "The colour lives in the UI store and the Note in the Notes store. Neither reducer knows the other, so this rule lives in a command. The id is also made here, which keeps the reducer pure.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "createNote: (",
+              "to": "});"
+            },
+            {
+              "file": "src/notes/note.ts",
+              "from": "return crypto.randomUUID()"
+            }
+          ]
+        },
+        {
+          "title": "The reducer commits it",
+          "explain": "It clamps again, because it can't trust every caller. The Note gets `z = topZ + 1`. The other Notes keep their references. The store tells subscribers only because the state object changed.",
+          "run": [
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "case 'create':",
+              "to": "return create("
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "if (state.notes[note.id]) return state",
+              "to": "topZ: z,"
+            },
+            {
+              "file": "src/store/createStore.ts",
+              "from": "const next = reducer",
+              "to": "for (const listener"
+            }
+          ]
+        },
+        {
+          "title": "Only the Board and the new Note render",
+          "explain": "The Board selects `ids`, which changed. Each Note selects itself and is memoised, so the others skip. This was measured with temporary render counters in both browsers: a create rendered the Board and the new Note, and a change to one Note rendered only that Note. The automated Profiler test arrives with #4.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const ids = useNotes"
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "{ids.map(",
+              "to": "))}"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const note = useNotes",
+              "to": "if (!note)"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "style={{ left: x"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nothing should happen",
+      "steps": [
+        {
+          "title": "A double-click on a Note",
+          "explain": "Both presses report a target inside a Note, not the Board itself, so the handler returns before any maths.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const onEmptyBoard ="
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "if (!first || !second) return;"
+            }
+          ]
+        },
+        {
+          "title": "A double-click that only starts on a Note",
+          "explain": "A press just inside a Note's edge, then one just outside, is a `dblclick` on the Board. Checking only that event's target created an overlapping Note in both browsers. Review found it, and this test failed before the fix.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "presses.current = {"
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "if (!first || !second) return;"
+            },
+            {
+              "file": "src/App.browser.test.tsx",
+              "from": "it('a double-click that starts on a Note",
+              "to": "expect(notes.elements()).toHaveLength(1);"
+            }
+          ]
+        },
+        {
+          "title": "An action that changes nothing",
+          "explain": "A `load` of equal Notes returns the **same** state, so the store notifies nobody and nothing renders. Equal Notes also keep their references, which the later `diffNotes` needs, or a load would look like a round of edits.",
+          "run": [
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "const current = state.notes[note.id]",
+              "to": "byId.set("
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "if (sameIds && loadedIds"
+            },
+            {
+              "file": "src/store/createStore.ts",
+              "from": "if (next === state) return;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Press S, M or L",
+      "steps": [
+        {
+          "title": "The visible area is read on press",
+          "explain": "`clientWidth` and `clientHeight` leave out scrollbars, where `offsetWidth` would not. The Notes are read with `getSnapshot()`, not subscribed to, so the toolbar doesn't render on every change.",
+          "run": [
+            {
+              "file": "src/components/NewNoteButtons.tsx",
+              "from": "const scroller = scrollerRef.current",
+              "to": "createNote(placeInVisibleBoard("
+            },
+            {
+              "file": "src/notes/note.ts",
+              "from": "export const NOTE_SIZE_PRESETS",
+              "to": "} as const"
+            }
+          ]
+        },
+        {
+          "title": "The centre ignores the backdrop",
+          "explain": "A 2560 px wide window shows only 1920 px of Board, so the centre is 960, not 1280. In the real build at 2560×1400, M landed at (850, 455).",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "const right = Math.min",
+              "to": "let spot ="
+            }
+          ]
+        },
+        {
+          "title": "A second press cascades",
+          "explain": "While a Note has that exact top-left, the spot steps by (24, 24). At one edge it keeps stepping along the other axis.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "while (taken.some(",
+              "to": "const next = clampToBoard"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "    spot = next;"
+            }
+          ]
+        },
+        {
+          "title": "The cascade runs out of Board",
+          "explain": "In the bottom-right corner a step clamps back to the same spot. Without the `break` this would loop forever and freeze the tab. The cost is that further Notes stack exactly there.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "if (samePoint(next, spot)) break;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "How the tests prove it",
+      "steps": [
+        {
+          "title": "Coordinates, by example and by property",
+          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once.",
+          "run": [
+            {
+              "file": "src/geometry.test.ts",
+              "from": "it('ends inside the Board'",
+              "to": "expect(y + height)"
+            },
+            {
+              "file": "src/geometry.test.ts",
+              "from": "it('stops in the corner",
+              "to": "toEqual(rect(1700, 910));"
+            }
+          ]
+        },
+        {
+          "title": "References, not just values",
+          "explain": "`toBe` checks identity. A reducer that copied every Note would pass `toEqual` and fail here.",
+          "run": [
+            {
+              "file": "src/notes/notesReducer.test.ts",
+              "from": "it('keeps the other Notes by reference'",
+              "to": "expect(next.notes[b.id]).toBe(b);"
+            },
+            {
+              "file": "src/notes/notesReducer.test.ts",
+              "from": "it('returns the same state when nothing changes'",
+              "to": ".toBe(state);"
+            }
+          ]
+        },
+        {
+          "title": "The Current colour",
+          "explain": "The store starts at blue, because a hard-coded yellow would pass with the default. Hard-coding it was tried, and this test failed.",
+          "run": [
+            {
+              "file": "src/commands.test.ts",
+              "from": "it('uses the Current colour'",
+              "to": "toBe('blue');"
+            }
+          ]
+        },
+        {
+          "title": "What must not compile",
+          "explain": "A plain string is not a `NoteId`, red is not a `NoteColour`, and an unknown action is not a `NoteAction`. Widening the first two types to `string` was tried, and their tests failed.",
+          "run": [
+            {
+              "file": "src/notes/note.test-d.ts",
+              "from": "it('a plain string is not a NoteId'",
+              "to": "expectTypeOf<{ type: 'load'"
+            }
+          ]
+        },
+        {
+          "title": "A real mouse in two browsers",
+          "explain": "Headless scrollbars take no space, so borders stand in for them. Swapping `clientWidth` for `offsetWidth` was tried, and all three size tests failed in both browsers.",
+          "run": [
+            {
+              "file": "src/App.browser.test.tsx",
+              "from": "it('double-clicking empty Board",
+              "to": "expectWithinAPixel(note.y + 85, 300);"
+            },
+            {
+              "file": "src/App.browser.test.tsx",
+              "from": "// Headless scrollbars",
+              "to": "expectWithinAPixel(note.y + height / 2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The cascade stacks in the corner.",
+      "detail": "The spec doesn't say what happens there. At 1024×768 scrolled to the end, review measured 25 presses of M giving 18 spots and 8 Notes exactly stacked. Stopping is simple and predictable. The counter-argument is user story 11, \"don't hide exactly on top\": wrapping would honour it, at the cost of a rule nobody has chosen yet."
+    },
+    {
+      "title": "`user-select: none` is always on the Board.",
+      "detail": "The spec says \"during a Gesture\". Double-click is a command here, and would otherwise select text. #7 has to set `user-select: text` on the textarea."
+    },
+    {
+      "title": "`touch-action: none` waits for #4.",
+      "detail": "It belongs with Gestures. Added now, it would remove touch scrolling of the Board and give nothing back."
+    },
+    {
+      "title": "The toolbar can't read a Board-owned Context.",
+      "detail": "#6 plans a `BoardDomContext` owned by the Board, holding the scroll container ref. The top bar is outside the Board, so App owns that ref today. #6 should either keep it so and pass it in, or move the provider up to App."
+    },
+    {
+      "title": "The scroll container has a 24 px gutter at the right and bottom.",
+      "detail": "Without it, the Board's edge is off-screen when scrolled to the end. There is none at the top-left, so scroll offsets are still Board coordinates. The left edge line is inset for the same reason."
+    },
+    {
+      "title": "`StoresContext` has no `sync` yet, and the UI store has no actions.",
+      "detail": "`sync` arrives with saving (#10). Each UI action arrives with its feature. Until then `UiAction` is `never`, so dispatching anything fails to compile."
+    },
+    {
+      "title": "Only yellow is styled.",
+      "detail": "It is the only colour a user can create before #8, which adds the other five and the glyphs on the buttons."
+    },
+    {
+      "title": "A reload loses the Notes.",
+      "detail": "Nothing is saved until #9. The startup GET is still only logged."
+    },
+    {
+      "title": "fast-check is pinned to 4.10.2.",
+      "detail": "4.11.0 was published hours before this change. An older release is the more cautious dev dependency."
+    }
+  ],
+  "omitted": {
+    "package.json": "Adds fast-check, pinned.",
+    "package-lock.json": "Generated.",
+    "tsconfig.app.json": "Type-checks `test/` too.",
+    "src/App.module.css": "A full-height column: top bar, then Board.",
+    "src/tokens.css": "The colour and shadow tokens this slice uses.",
+    "src/components/Board.module.css": "Scroll container, gutter, dot grid and edge line.",
+    "src/components/EmptyHint.module.css": "Centres the hint and lets the pointer through.",
+    "src/components/NewNoteButtons.module.css": "Button styles and the focus outline.",
+    "src/components/Note.module.css": "Flat paper, the Grip strip, yellow.",
+    "src/components/TopBar.module.css": "The 48 px bar.",
+    "src/components/TopBar.tsx": "Markup only: the name and the buttons.",
+    "src/notes/note.test.ts": "What `parseNoteId` accepts and rejects.",
+    "test/factories.ts": "`makeNote` and `makeState` for tests.",
+    "test/renderApp.tsx": "Mounts App on fresh stores."
+  }
+}
