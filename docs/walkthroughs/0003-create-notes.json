@@ -462,6 +462,22 @@
           ]
         },
         {
+          "title": "The corner is the last spot in view",
+          "explain": "The cascade runs to the **visible** Board's corner, not the Board's, or Notes would be created off-screen. For Medium at 1024×768 scrolled to the top-left, that is (804, 550). Along a side too short for the Note nothing fits, so there it runs to the Board's edge instead of stacking from the second press.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "const visible = {",
+              "to": "const corner = lastSpotIn("
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "function lastSpotIn(",
+              "to": "y: visible.height < height"
+            }
+          ]
+        },
+        {
           "title": "The first spot is the centre",
           "explain": "`cascadeSpots` is a **generator** (`function*`): a list that is calculated as it is read. `yield` hands back one spot and pauses until the loop asks for another, and `yield*` hands back all of another generator's spots. Here the centre is free, so the loop returns it and no step is ever calculated.",
           "run": [
@@ -472,7 +488,7 @@
             },
             {
               "file": "src/geometry.ts",
-              "from": "yield* stepsToCorner(centred);"
+              "from": "yield* stepsToCorner(centred, corner);"
             },
             {
               "file": "src/geometry.ts",
@@ -483,11 +499,11 @@
         },
         {
           "title": "A second press cascades",
-          "explain": "The centre is taken, so the loop asks again and `stepsToCorner` resumes after its `yield`, one (24, 24) step on. At one edge it keeps stepping along the other axis. At 1024×768 scrolled to the end, M gives (1310, 647), then (1334, 671), and reaches the corner (1700, 910) on press 18.",
+          "explain": "The centre is taken, so the loop asks again and `stepsToCorner` resumes after its `yield`, one (24, 24) step on. At one edge it keeps stepping along the other axis. At 1024×768 scrolled to the top-left, M gives (402, 275), then (426, 299), and reaches the corner (804, 550) on press 18.",
           "run": [
             {
               "file": "src/geometry.ts",
-              "from": "const next = clampToBoard",
+              "from": "const next = {",
               "to": "spot = next;"
             },
             {
@@ -499,11 +515,11 @@
         },
         {
           "title": "Out of room, it jumps back",
-          "explain": "In the corner a step clamps back to the same spot, so that diagonal returns and `cascadeSpots` starts the next: press 19 lands at (920, 384), the top-left of the **visible** Board. The Board's own top-left could be off-screen. Each jump back starts 24 px further right, or every one would repeat the same diagonal. In the production build, 100 presses of each size gave 100 distinct Notes, all in view, in both browsers.",
+          "explain": "In the corner a step ends on the same spot, so that diagonal returns and `cascadeSpots` starts the next: press 19 lands at (0, 0), the top-left of the **visible** Board. When scrolled to the end that is (920, 384), as the Board's own top-left would be off-screen. Each jump back starts 24 px further right, or every one would repeat the same diagonal. In the production build, 100 presses of each size gave 100 distinct Notes, all in view, in both browsers, from the top-left and from the end.",
           "run": [
             {
               "file": "src/geometry.ts",
-              "from": "const lastX =",
+              "from": "for (let x = Math.round(view.x)",
               "to": "yield* stepsToCorner(toCommittedRect("
             },
             {
@@ -514,12 +530,12 @@
         },
         {
           "title": "Every spot is taken",
-          "explain": "The `for` ends at the last x that fits, so the spots run out and the search always ends. Only then do Notes stack in the corner. Scrolled to the end at 1024×768, a script found 545 distinct Medium spots before that happens.",
+          "explain": "The `for` ends at the last x that fits, so the spots run out and the search always ends. Only then do Notes stack in the corner. At 1024×768 a script found 580 distinct Medium spots before that happens, and in a 375 px wide window 57.",
           "run": [
             {
               "file": "src/geometry.ts",
               "from": "// Every spot is taken",
-              "to": "return clampToBoard({ ...centred"
+              "to": "return corner;"
             },
             {
               "file": "src/geometry.test.ts",
@@ -535,7 +551,7 @@
       "steps": [
         {
           "title": "Coordinates, by example and by property",
-          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once. The cascade test presses 100 times. When every jump back repeated one diagonal, it got only 51 distinct spots and failed.",
+          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once. The cascade tests press 100 times, at the top-left and at the end. When every jump back repeated one diagonal, it got only 51 distinct spots and failed.",
           "run": [
             {
               "file": "src/geometry.test.ts",
@@ -612,16 +628,12 @@
       "detail": "Explaining `rememberPress` exposed the bug: the Board heard only its own presses, so an old one could pair with a double-click that started outside it. The counter-argument is that a component now has a page-wide listener, where a React prop was simpler. It does one comparison per press and is removed on unmount. A press outside the page itself is still invisible to it."
     },
     {
-      "title": "The cascade jumps back from the corner.",
-      "detail": "The spec doesn't say what happens there, so the owner chose jumping back over stacking, for user story 11: \"don't hide exactly on top\". Where it lands was the implementer's choice. Stopping was one line and more predictable. The cost is a jump across the screen and a search that grows with the Notes: the slowest placement measured was 20 ms, with about 2,300 Notes."
+      "title": "The cascade jumps back at the edge of the visible Board.",
+      "detail": "A departure from the spec, which only says (24, 24) steps: the owner chose jumping back over stacking, and over creating Notes out of view. Where it lands was the implementer's choice, as was running to the Board's edge along a side too short for the Note. The cost is a jump across the screen and fewer spots before Notes stack: 36 Large ones in a 375×620 view. The #1 and #3 descriptions of the cascade don't mention jumping back."
     },
     {
       "title": "Generators keep the search apart from the sequence.",
-      "detail": "One loop used to choose the next spot, test it and count the jumps back. Now `placeInVisibleBoard` only tests spots, `cascadeSpots` only says where diagonals start, and `stepsToCorner` only steps. The counter-argument is that `function*` is less familiar than a `while`. The two versions gave identical results in about 260,000 placements."
-    },
-    {
-      "title": "The cascade can leave the visible area before it jumps back.",
-      "detail": "It follows the spec's (24, 24) steps to the Board's corner, not the window's. At 1024×768 scrolled to the top-left, 6 of 25 presses of M made Notes wholly out of view. This is open for the owner: jumping back at the edge of the visible area would fix it."
+      "detail": "One loop used to choose the next spot, test it and count the jumps back. Now `placeInVisibleBoard` only tests spots, `cascadeSpots` only says where diagonals start, and `stepsToCorner` only steps. The counter-argument is that `function*` is less familiar than a `while`. When this was split, the two versions gave identical results in about 260,000 placements."
     },
     {
       "title": "`user-select: none` is always on the Board.",
@@ -633,7 +645,7 @@
     },
     {
       "title": "App, not the Board, owns the scroll container ref.",
-      "detail": "The top bar is outside the Board and needs it. The owner agreed that #6's `BoardDomContext` is provided by App, and #6 now says so. The spec in #1 still says the Board."
+      "detail": "The top bar is outside the Board and needs it. The owner agreed that #6's `BoardDomContext` is provided by App, and #1 and #6 now say so."
     },
     {
       "title": "The scroll container has a 24 px gutter at the right and bottom.",
