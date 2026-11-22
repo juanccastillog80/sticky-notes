@@ -278,7 +278,7 @@
             },
             {
               "file": "src/geometry.ts",
-              "from": "return clampToBoard({",
+              "from": "// Round first",
               "to": "});"
             },
             {
@@ -457,45 +457,69 @@
             {
               "file": "src/geometry.ts",
               "from": "const right = Math.min",
-              "to": "let spot ="
+              "to": "const centred ="
+            }
+          ]
+        },
+        {
+          "title": "The first spot is the centre",
+          "explain": "`cascadeSpots` is a **generator** (`function*`): a list that is calculated as it is read. `yield` hands back one spot and pauses until the loop asks for another, and `yield*` hands back all of another generator's spots. Here the centre is free, so the loop returns it and no step is ever calculated.",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "for (const spot of cascadeSpots(",
+              "to": "return spot;"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "yield* stepsToCorner(centred);"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "let spot = start;",
+              "to": "yield spot;"
             }
           ]
         },
         {
           "title": "A second press cascades",
-          "explain": "While a Note has that exact top-left, the spot steps by (24, 24). At one edge it keeps stepping along the other axis.",
+          "explain": "The centre is taken, so the loop asks again and `stepsToCorner` resumes after its `yield`, one (24, 24) step on. At one edge it keeps stepping along the other axis. At 1024×768 scrolled to the end, M gives (1310, 647), then (1334, 671), and reaches the corner (1700, 910) on press 18.",
           "run": [
             {
               "file": "src/geometry.ts",
-              "from": "while (taken.some(",
-              "to": "const next = clampToBoard"
+              "from": "const next = clampToBoard",
+              "to": "spot = next;"
             },
             {
               "file": "src/geometry.ts",
-              "from": "if (!samePoint(next, spot)) {",
-              "to": "spot = next;"
+              "from": "for (const spot of cascadeSpots(",
+              "to": "return spot;"
             }
           ]
         },
         {
-          "title": "The cascade wraps from the corner",
-          "explain": "In the bottom-right corner a step clamps back to the same spot, so the cascade restarts at the top-left of the **visible** Board. The Board's own top-left could be off-screen. Each wrap starts 24 px further right, or every wrap would repeat one diagonal. In the production build at 1024×768, scrolled to the end, 100 presses of each size gave 100 distinct Notes, all in view, in both browsers.",
+          "title": "Out of room, it jumps back",
+          "explain": "In the corner a step clamps back to the same spot, so that diagonal returns and `cascadeSpots` starts the next: press 19 lands at (920, 384), the top-left of the **visible** Board. The Board's own top-left could be off-screen. Each jump back starts 24 px further right, or every one would repeat the same diagonal. In the production build, 100 presses of each size gave 100 distinct Notes, all in view, in both browsers.",
           "run": [
             {
               "file": "src/geometry.ts",
-              "from": "} else if (wrapX <=",
-              "to": "wrapX += CASCADE_STEP;"
+              "from": "const lastX =",
+              "to": "yield* stepsToCorner(toCommittedRect("
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "if (samePoint(next, spot)) return;"
             }
           ]
         },
         {
           "title": "Every spot is taken",
-          "explain": "When a wrap would start past the last x that fits, it stops, and only then do Notes stack. Without the `break` this would loop forever and freeze the tab. Scrolled to the end at 1024×768, a script found 545 distinct Medium spots before that happens.",
+          "explain": "The `for` ends at the last x that fits, so the spots run out and the search always ends. Only then do Notes stack in the corner. Scrolled to the end at 1024×768, a script found 545 distinct Medium spots before that happens.",
           "run": [
             {
               "file": "src/geometry.ts",
               "from": "// Every spot is taken",
-              "to": "break;"
+              "to": "return clampToBoard({ ...centred"
             },
             {
               "file": "src/geometry.test.ts",
@@ -511,7 +535,7 @@
       "steps": [
         {
           "title": "Coordinates, by example and by property",
-          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once. The cascade test presses 100 times: it got 51 distinct spots before each wrap moved right.",
+          "explain": "The examples use literal numbers. The properties try random rects: inside the Board, never under 140×100, and clamping twice equals clamping once. The cascade test presses 100 times. When every jump back repeated one diagonal, it got only 51 distinct spots and failed.",
           "run": [
             {
               "file": "src/geometry.test.ts",
@@ -588,12 +612,16 @@
       "detail": "Explaining `rememberPress` exposed the bug: the Board heard only its own presses, so an old one could pair with a double-click that started outside it. The counter-argument is that a component now has a page-wide listener, where a React prop was simpler. It does one comparison per press and is removed on unmount. A press outside the page itself is still invisible to it."
     },
     {
-      "title": "The cascade wraps from the corner.",
-      "detail": "The spec doesn't say what happens there, so the owner chose wrapping, for user story 11: \"don't hide exactly on top\". Stopping was one line and more predictable. The cost of wrapping is a jump back across the screen and a search that grows with the Notes: the slowest placement measured was 20 ms, with about 2,300 Notes."
+      "title": "The cascade jumps back from the corner.",
+      "detail": "The spec doesn't say what happens there, so the owner chose jumping back over stacking, for user story 11: \"don't hide exactly on top\". Where it lands was the implementer's choice. Stopping was one line and more predictable. The cost is a jump across the screen and a search that grows with the Notes: the slowest placement measured was 20 ms, with about 2,300 Notes."
     },
     {
-      "title": "The cascade can leave the visible area before it wraps.",
-      "detail": "It follows the spec's (24, 24) steps to the Board's corner, not the window's. At 1024×768 scrolled to the top-left, 6 of 25 presses of M made Notes wholly out of view. This is open for the owner: wrapping at the visible edge would fix it."
+      "title": "Generators keep the search apart from the sequence.",
+      "detail": "One loop used to choose the next spot, test it and count the jumps back. Now `placeInVisibleBoard` only tests spots, `cascadeSpots` only says where diagonals start, and `stepsToCorner` only steps. The counter-argument is that `function*` is less familiar than a `while`. The two versions gave identical results in about 260,000 placements."
+    },
+    {
+      "title": "The cascade can leave the visible area before it jumps back.",
+      "detail": "It follows the spec's (24, 24) steps to the Board's corner, not the window's. At 1024×768 scrolled to the top-left, 6 of 25 presses of M made Notes wholly out of view. This is open for the owner: jumping back at the edge of the visible area would fix it."
     },
     {
       "title": "`user-select: none` is always on the Board.",
