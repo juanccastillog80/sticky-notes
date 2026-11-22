@@ -15,14 +15,17 @@
 
 .board {
   position: relative;
-  /* Keeps Note z-indexes inside the Board, below whatever is drawn over it. */
+  /* Keeps the Stacking order inside the Board, below whatever is drawn over it. */
   isolation: isolate;
   background-color: var(--color-board);
   background-image: radial-gradient(var(--color-board-dot) 1.2px, transparent 1.4px);
   background-position: 12px 12px;
   background-size: 24px 24px;
+  /* The edge line. On the left it is inset, where the scroll container would clip it. */
   box-shadow:
+    inset 1px 0 0 var(--color-line),
     0 0 0 1px var(--color-line),
     var(--shadow-board);
+  /* Always, not only during a Gesture: double-click creates here and must not select text. */
   user-select: none;
 }

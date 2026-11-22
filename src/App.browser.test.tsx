@@ -1,5 +1,6 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
+import { makeNote } from '../test/factories';
 import { renderApp } from '../test/renderApp';
 
 beforeEach(async () => {
@@ -9,9 +10,15 @@ beforeEach(async () => {
 async function setup() {
   const { screen, stores } = await renderApp();
   const board = screen.getByRole('region', { name: 'Board' });
-  const scroller = board.element().parentElement;
-  if (!scroller) throw new Error('The Board has no scroll container');
+  const scroller = scrollContainerOf(board.element());
   return { screen, stores, board, scroller, notes: screen.getByRole('article', { name: 'Note' }) };
+}
+
+function scrollContainerOf(element: Element): Element {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (getComputedStyle(parent).overflowX === 'auto') return parent;
+  }
+  throw new Error('The Board has no scroll container');
 }
 
 /** An element's rect in Board coordinates. */
@@ -63,6 +70,26 @@ it('double-clicking a Note creates nothing', async () => {
   expect(notes.elements()).toHaveLength(1);
 });
 
+it('a double-click that starts on a Note creates nothing', async () => {
+  const { board, stores, notes } = await setup();
+  const note = makeNote({ x: 100, y: 100 });
+  stores.notes.dispatch({ type: 'load', notes: [note] });
+  await expect.element(notes).toBeVisible();
+  // Move the Note after the first click, so the second lands on empty Board.
+  notes.element().addEventListener(
+    'click',
+    () => {
+      stores.notes.dispatch({ type: 'load', notes: [{ ...note, x: 600 }] });
+    },
+    { once: true },
+  );
+
+  await userEvent.dblClick(board, { position: { x: 200, y: 200 }, delay: 50 });
+
+  expect(rectOnBoard(notes.first().element(), board).x).toBe(600);
+  expect(notes.elements()).toHaveLength(1);
+});
+
 it('a Note created near the edge is pushed fully inside the Board', async () => {
   const { board, notes } = await setup();
 
@@ -103,6 +130,9 @@ it.each([
   'the $size button creates a Note centred in the visible part of the Board',
   async ({ size, width, height }) => {
     const { screen, board, scroller, notes } = await setup();
+    // Headless scrollbars take no space, so borders stand in for 16 px ones.
+    (scroller as HTMLElement).style.border = 'solid transparent';
+    (scroller as HTMLElement).style.borderWidth = '0 16px 16px 0';
     scroller.scrollTo(500, 200);
 
     await userEvent.click(screen.getByRole('button', { name: `New ${size} note` }));
@@ -110,8 +140,9 @@ it.each([
     await expect.element(notes).toBeVisible();
     const note = rectOnBoard(notes.element(), board);
     expect(note).toMatchObject({ width, height });
-    expectWithinAPixel(note.x + width / 2, 500 + scroller.clientWidth / 2);
-    expectWithinAPixel(note.y + height / 2, 200 + scroller.clientHeight / 2);
+    // 1024×768, less the 48 px top bar and the scrollbars: 1008×704 is visible.
+    expectWithinAPixel(note.x + width / 2, 500 + 504);
+    expectWithinAPixel(note.y + height / 2, 200 + 352);
   },
 );
 
