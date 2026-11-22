@@ -53,30 +53,40 @@ const CASCADE_STEP = 24;
 
 /**
  * Centred in the part of the Board that `view` (the scroll container's offset
- * and client size) shows, stepping down-right past Notes at that exact spot.
- * From the Board's corner the steps wrap to the top-left of what is visible,
- * each wrap starting a step further right.
+ * and client size) shows, or at the first free spot of the cascade from there.
  */
 export function placeInVisibleBoard(view: Rect, size: Size, taken: readonly Point[]): Rect {
   // `view` can reach past the Board, over the backdrop.
   const right = Math.min(view.x + view.width, BOARD_SIZE.width);
   const bottom = Math.min(view.y + view.height, BOARD_SIZE.height);
-  let spot = placeCentredAt({ x: (view.x + right) / 2, y: (view.y + bottom) / 2 }, size);
-  let wrapX = view.x;
+  const centred = placeCentredAt({ x: (view.x + right) / 2, y: (view.y + bottom) / 2 }, size);
 
-  while (taken.some((point) => samePoint(point, spot))) {
-    const next = clampToBoard({ ...spot, x: spot.x + CASCADE_STEP, y: spot.y + CASCADE_STEP });
-    if (!samePoint(next, spot)) {
-      spot = next;
-    } else if (wrapX <= BOARD_SIZE.width - size.width) {
-      spot = toCommittedRect({ ...size, x: wrapX, y: view.y });
-      wrapX += CASCADE_STEP;
-    } else {
-      // Every spot is taken. Without this the loop would never end.
-      break;
-    }
+  for (const spot of cascadeSpots(centred, view)) {
+    if (!taken.some((point) => samePoint(point, spot))) return spot;
   }
-  return spot;
+  // Every spot is taken, so stack in the corner.
+  return clampToBoard({ ...centred, x: BOARD_SIZE.width, y: BOARD_SIZE.height });
+}
+
+/** The spots to try, in order: from the centre, then jumping back to the top of `view`. */
+function* cascadeSpots(centred: Rect, view: Point): Generator<Rect> {
+  yield* stepsToCorner(centred);
+
+  const lastX = BOARD_SIZE.width - centred.width;
+  for (let x = view.x; x <= lastX; x += CASCADE_STEP) {
+    yield* stepsToCorner(toCommittedRect({ ...centred, x, y: view.y }));
+  }
+}
+
+/** `start`, then (24, 24) steps until the Board's bottom-right corner. */
+function* stepsToCorner(start: Rect): Generator<Rect> {
+  let spot = start;
+  for (;;) {
+    yield spot;
+    const next = clampToBoard({ ...spot, x: spot.x + CASCADE_STEP, y: spot.y + CASCADE_STEP });
+    if (samePoint(next, spot)) return;
+    spot = next;
+  }
 }
 
 function samePoint(a: Point, b: Point): boolean {

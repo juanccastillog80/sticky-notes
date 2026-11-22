@@ -152,13 +152,13 @@ describe('placeInVisibleBoard', () => {
     expect(placeInVisibleBoard(rightView, size, [rect(1700, 275)])).toEqual(rect(1700, 299));
   });
 
-  it('wraps from the corner to the top-left of the visible Board', () => {
+  it('jumps back from the corner to the top-left of the visible Board', () => {
     const taken = [rect(1676, 886), rect(1700, 910)];
 
     expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1652, 862));
   });
 
-  it('starts each further wrap a step to the right', () => {
+  it('starts each further jump back a step to the right', () => {
     const taken = [rect(1676, 886), rect(1700, 910), rect(1652, 862)];
 
     expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1676, 862));
@@ -170,7 +170,7 @@ describe('placeInVisibleBoard', () => {
     for (let press = 0; press < 100; press++) taken.push(placeInVisibleBoard(endView, size, taken));
 
     expect(new Set(taken.map(({ x, y }) => `${String(x)},${String(y)}`)).size).toBe(100);
-    // Wrapping must not take a Note out of view, either.
+    // Jumping back must not take a Note out of view, either.
     expect(Math.min(...taken.map(({ x }) => x))).toBeGreaterThanOrEqual(920);
     expect(Math.min(...taken.map(({ y }) => y))).toBeGreaterThanOrEqual(400);
   });
@@ -188,7 +188,7 @@ describe('placeInVisibleBoard', () => {
     expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1700, 910));
   });
 
-  it('stops in the corner when there is no room to wrap', () => {
+  it('stops in the corner when there is no room to jump back', () => {
     const cornerView = { x: 1700, y: 910, width: 220, height: 170 };
 
     expect(placeInVisibleBoard(cornerView, size, [rect(1700, 910)])).toEqual(rect(1700, 910));
