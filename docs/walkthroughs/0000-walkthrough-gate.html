@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"Walkthrough gate","lede":"The walkthrough rule stops being only an instruction: the required `check` job now fails when a change has no walkthrough, an outdated one, or edits a merged one. Start with the passing PR, then look at the ways around it that had to be closed.","files":[{"path":".github/workflows/ci.yml","question":"When does the gate run?","summary":"A step inside the job the ruleset already requires.","owns":"When to check, and which commit is the branch tip.","never":"Decides what a valid walkthrough is.","tested":"Run on GitHub: failed without a walkthrough.","lines":["name: CI","","on:","  pull_request:","  push:","    branches: [main]","  workflow_dispatch:","","permissions:","  contents: read","","jobs:","  check:","    runs-on: ubuntu-latest","    timeout-minutes: 15","    steps:","      - uses: actions/checkout@v7","        with:","          # The walkthrough check needs the branch tip and its merge base with main.","          fetch-depth: 0","","      - uses: actions/setup-node@v7","        with:","          node-version-file: .nvmrc","          cache: npm","","      - run: npm ci","","      - name: Install Playwright browsers","        run: npx playwright install --with-deps chromium firefox","","      - run: npm run typecheck","","      - run: npm run lint","","      - name: Tests (unit + browser in Chromium and Firefox)","        run: npm test","","      # The v8 gate runs on the unit project only (the pure core); the unit","      # tests are fast, so running them twice is cheap.","      - name: Coverage gate","        run: npm run coverage","","      - name: Upload failure screenshots","        if: failure()","        uses: actions/upload-artifact@v7","        with:","          name: browser-test-screenshots","          path: .vitest/attachments/failure-screenshots/","          if-no-files-found: ignore","          retention-days: 7","","      - run: npm run build","","      # Part of `check`, the status the ruleset requires. It also runs on a manual","      # dispatch of a branch, whose `check` would otherwise pass without it.","      - name: Walkthrough","        if: github.ref != 'refs/heads/main'","        env:","          TIP: ${{ github.event.pull_request.head.sha || github.sha }}","        run: node docs/walkthroughs/check.js \"$TIP\"","","      - name: Upload Pages artifact","        if: github.event_name != 'pull_request'","        uses: actions/upload-pages-artifact@v5","        with:","          path: dist","","  deploy:","    needs: check","    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')","    runs-on: ubuntu-latest","    timeout-minutes: 5","    permissions:","      pages: write","      id-token: write","    concurrency:","      group: pages","      cancel-in-progress: false","    environment:","      name: github-pages","      url: ${{ steps.deployment.outputs.page_url }}","    steps:","      - id: deployment","        uses: actions/deploy-pages@v5"],"added":[17,18,19,54,55,56,57,58,59,60,61]},{"path":"docs/walkthroughs/check.js","question":"May this change merge?","summary":"Applies the repository rules, then asks the builder if the page is current.","owns":"One new walkthrough, frozen old ones, no pins, a clean copy of the tip.","never":"Builds pages or reads the PR body.","tested":"check.test.js, plus the failing run on GitHub.","lines":["// The CI gate: a change to main must bring one current walkthrough of itself.","//   node docs/walkthroughs/check.js [commit, default HEAD]","import { execFileSync, spawnSync } from 'node:child_process';","import { mkdtempSync, rmSync } from 'node:fs';","import { tmpdir } from 'node:os';","import { join } from 'node:path';","","const git = (...args) => execFileSync('git', args, { encoding: 'utf8' });","","function fail(message) {","  console.error(`Walkthrough check failed: ${message}\\nSee docs/agents/pr-walkthrough.md.`);","  process.exit(1);","}","","const head = git('rev-parse', '--verify', `${process.argv[2] ?? 'HEAD'}^{commit}`).trim();","const base = git('merge-base', 'origin/main', head).trim();","const diff = (filter) =>","  git('diff', '--no-renames', '--name-only', '-z', `--diff-filter=${filter}`, base, head)","    .split('\\0')","    // build.js leaves numbered paths out of its diff, so all of them are vetted here.","    .filter((path) => /^docs\\/walkthroughs\\/\\d/.test(path));","","const added = diff('A');","const specs = added.filter((path) => /^docs\\/walkthroughs\\/\\d{4}-[\\w-]+\\.json$/.test(path));","if (specs.length !== 1) {","  fail(`expected one new docs/walkthroughs/NNNN-slug.json, found ${specs.length}`);","}","","const [spec] = specs;","const frozen = diff('a'); // lower case: everything except additions","if (frozen.length) fail(`merged walkthroughs are frozen, but this changes ${frozen.join(', ')}`);","","const page = spec.replace(/\\.json$/, '.html');","const strays = added.filter((path) => path !== spec && path !== page);","if (strays.length) fail(`not part of this walkthrough: ${strays.join(', ')}`);","","const { base: pinnedBase, head: pinnedHead } = JSON.parse(git('show', `${head}:${spec}`));","if (pinnedBase || pinnedHead) fail(`${spec} must not pin \"base\" or \"head\"`);","","// CI checks out the PR merged into main, where line numbers can differ. The page","// is built from the branch tip, so it's checked in a clean worktree of that tip.","const temp = mkdtempSync(join(tmpdir(), 'walkthrough-tip-'));","const tree = join(temp, 'tree');","git('worktree', 'add', '--quiet', '--detach', tree, head);","try {","  const result = spawnSync(process.execPath, ['docs/walkthroughs/build.js', spec, '--check'], {","    cwd: tree,","    encoding: 'utf8',","  });","  process.stdout.write(result.stdout);","  process.stderr.write(result.stderr);","  process.exitCode = result.status ?? 1;","} finally {","  git('worktree', 'remove', '--force', tree);","  rmSync(temp, { recursive: true, force: true });","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55]},{"path":"docs/walkthroughs/build.js","question":"Does the page match the code?","summary":"Unchanged: rebuilds in memory and compares.","owns":"Completeness, highlights, staleness.","never":"Knows about PRs or CI.","tested":"build.test.js.","lines":["// Builds a PR walkthrough from a spec plus the real code in git.","//   node docs/walkthroughs/build.js docs/walkthroughs/\u003cname>.json [--check]","// The authoring guide is docs/agents/pr-walkthrough.md.","import { execFileSync } from 'node:child_process';","import { existsSync, readFileSync, writeFileSync } from 'node:fs';","import { basename } from 'node:path';","","// Only the numbered walkthroughs are left out of the diff: a page can't contain","// itself. The builder and the template are reviewed like any other code.","const EXCLUDE = ':(top,exclude,glob)docs/walkthroughs/[0-9]*';","","const git = (...args) =>","  execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });","","function fail(problems) {","  console.error(`Walkthrough not built:\\n- ${problems.join('\\n- ')}`);","  process.exit(1);","}","","/** The 0-based lines that the diff adds or changes in `path`. */","function addedLines(base, head, path) {","  const diff = git(","    'diff',","    '--no-ext-diff',","    '--no-renames',","    '-U0',","    base,","    head,","    '--',","    `:(top)${path}`,","  );","  return [...diff.matchAll(/^@@ -\\S+ \\+(\\d+)(?:,(\\d+))? @@/gm)].flatMap(([, start, count = '1']) =>","    Array.from({ length: Number(count) }, (_, i) => Number(start) - 1 + i),","  );","}","","/** Turns `{ file, from, to? }` into line numbers, so a step can't point at code that isn't there. */","function locate({ file, from, to }, files, where, problems) {","  const lines = files.get(file)?.lines;","  if (!lines) {","    problems.push(`${where}: \"${file}\" is not listed in \"files\"`);","    return null;","  }","  const starts = lines.flatMap((line, i) => (line.includes(from) ? [i] : []));","  if (starts.length !== 1) {","    problems.push(`${where}: \"${from}\" matches ${starts.length} lines in ${file}, expected 1`);","    return null;","  }","  const start = starts[0];","  const end = to ? lines.findIndex((line, i) => i >= start && line.includes(to)) : start;","  if (end \u003c 0) {","    problems.push(`${where}: no \"${to}\" after \"${from}\" in ${file}`);","    return null;","  }","  return { file, start, end };","}","","const args = process.argv.slice(2);","const specPath = args.find((arg) => arg.endsWith('.json'));","if (!specPath) fail(['usage: node docs/walkthroughs/build.js \u003cspec.json> [--check]']);","","if (!/^\\d{4}-[\\w-]+\\.json$/.test(basename(specPath))) {","  fail(['name the spec \u003cissue, 4 digits>-\u003cslug>.json, with 0000 when there is no issue']);","}","const spec = JSON.parse(readFileSync(specPath, 'utf8'));","const problems = [];","","// Without a pinned head, the page describes HEAD, so HEAD must contain all the code.","if (!spec.head && git('status', '--porcelain', '-uall', '--', ':/', EXCLUDE).trim()) {","  fail(['commit or stash changes first: the page is built from HEAD']);","}","","const head = spec.head ?? 'HEAD';","const base = spec.base ?? git('merge-base', 'origin/main', head).trim();","const changed = git('diff', '--no-renames', '--name-only', '-z', base, head, '--', ':/', EXCLUDE)","  .split('\\0')","  .filter(Boolean);","if (!changed.length) fail([`nothing changed between ${base} and ${head}`]);","","const omitted = spec.omitted ?? {};","const atHead = new Set(git('ls-tree', '-r', '-z', '--name-only', '--full-tree', head).split('\\0'));","const files = new Map();","","for (const file of spec.files) {","  if (!atHead.has(file.path)) {","    problems.push(`${file.path} doesn't exist at ${head}`);","    continue;","  }","  const lines = git('show', `${head}:${file.path}`).replace(/\\n$/, '').split('\\n');","  files.set(file.path, { ...file, lines, added: addedLines(base, head, file.path) });","}","","for (const path of changed) {","  if (!files.has(path) && !omitted[path]) {","    problems.push(`${path} changed: add it to \"files\", or to \"omitted\" with a reason`);","  }","}","","const visited = new Set();","const scenarios = spec.scenarios.map((scenario) => ({","  ...scenario,","  steps: scenario.steps.map((step) => ({","    ...step,","    run: step.run.flatMap((range) => {","      visited.add(range.file);","      return locate(range, files, `${scenario.name} / ${step.title}`, problems) ?? [];","    }),","  })),","}));","","for (const path of files.keys()) {","  if (!visited.has(path)) problems.push(`${path} is shown, but no step explains it`);","}","for (const path of spec.flow.flat()) {","  if (!files.has(path)) problems.push(`flow: \"${path}\" is not listed in \"files\"`);","}","if (problems.length) fail(problems);","","const page = { ...spec, files: [...files.values()], omitted, scenarios };","// `\u003c` is escaped so that code containing \u003c/script> can't end the script tag.","const data = JSON.stringify(page).replaceAll('\u003c', '\\\\u003c');","const html = readFileSync(new URL('template.html', import.meta.url), 'utf8').replace(","  '/*DATA*/ null',","  () => data,",");","","const outPath = specPath.replace(/\\.json$/, '.html');","if (args.includes('--check')) {","  if (!existsSync(outPath) || readFileSync(outPath, 'utf8') !== html) {","    fail([`${outPath} is out of date: build it again`]);","  }","  process.stdout.write(`${outPath} is up to date\\n`);","} else {","  writeFileSync(outPath, html);","  process.stdout.write(`${outPath}: ${changed.length} changed files accounted for\\n`);","}"],"added":[]},{"path":"docs/walkthroughs/check.test.js","question":"Can the gate be fooled?","summary":"Runs the real gate on throwaway repos.","owns":"The behaviour of the gate.","never":"Tests the GitHub workflow.","tested":"Twelve deliberate breakages of the gate were all caught.","lines":["import { execFileSync, spawnSync } from 'node:child_process';","import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';","import { tmpdir } from 'node:os';","import { dirname, join } from 'node:path';","import { afterEach, beforeEach, describe, expect, it } from 'vitest';","","const CHECK = join(import.meta.dirname, 'check.js');","const DIR = 'docs/walkthroughs';","const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };","","let repo;","","function git(...args) {","  const identity = ['-c', 'user.name=Test', '-c', 'user.email=test@localhost'];","  return execFileSync('git', [...identity, ...args], { cwd: repo, env, encoding: 'utf8' });","}","","function write(path, text) {","  mkdirSync(dirname(join(repo, path)), { recursive: true });","  writeFileSync(join(repo, path), text);","}","","function commitAll() {","  git('add', '-A');","  git('commit', '-qm', 'change');","}","","function addWalkthrough(name = '0007-example', overrides = {}) {","  const spec = {","    title: 'Example',","    files: [{ path: 'a.ts' }],","    flow: [],","    scenarios: [{ name: 'Main', steps: [{ title: 'Run', run: [{ file: 'a.ts', from: 'two' }] }] }],","    notes: [],","    ...overrides,","  };","  write(`${DIR}/${name}.json`, JSON.stringify(spec));","  execFileSync(process.execPath, [`${DIR}/build.js`, `${DIR}/${name}.json`], { cwd: repo, env });","  commitAll();","}","","const check = (...args) =>","  spawnSync(process.execPath, [CHECK, ...args], { cwd: repo, env, encoding: 'utf8' });","","beforeEach(() => {","  repo = mkdtempSync(join(tmpdir(), 'walkthrough-check-'));","  git('init', '-q', '-b', 'main');","  write('package.json', '{ \"type\": \"module\" }\\n');","  write('a.ts', 'one\\n\\n\\n\\nlast\\n');","  write(`${DIR}/0001-merged.json`, '{}\\n');","  write(`${DIR}/0001-merged.html`, 'merged page\\n');","  for (const file of ['build.js', 'template.html']) {","    copyFileSync(join(import.meta.dirname, file), join(repo, DIR, file));","  }","  commitAll();","  git('update-ref', 'refs/remotes/origin/main', 'HEAD');","  git('switch', '-qc', 'feature');","  write('a.ts', 'one\\ntwo\\n\\n\\nlast\\n');","  commitAll();","});","","afterEach(() => {","  rmSync(repo, { recursive: true, force: true });","});","","describe('walkthrough CI check', { timeout: 20_000 }, () => {","  it('passes a PR with a current walkthrough', () => {","    addWalkthrough();","","    expect(check().status).toBe(0);","  });","","  it('fails a PR without a walkthrough', () => {","    const result = check();","","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('found 0');","  });","","  it('fails when code changed after the walkthrough was built', () => {","    addWalkthrough();","    write('a.ts', 'one\\ntwo\\nthree\\n\\nlast\\n');","    commitAll();","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('out of date');","  });","","  it('fails when a newly changed file is not explained', () => {","    addWalkthrough();","    write('b.ts', 'extra\\n');","    commitAll();","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('b.ts changed');","  });","","  it('fails when the spec is committed without its page', () => {","    addWalkthrough();","    git('rm', '-q', `${DIR}/0007-example.html`);","    commitAll();","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('out of date');","  });","","  it('fails a PR with two walkthroughs', () => {","    addWalkthrough();","    addWalkthrough('0008-second');","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('found 2');","  });","","  it.each(['base', 'head'])('fails a walkthrough that pins its %s', (key) => {","    addWalkthrough('0007-example', { [key]: key === 'base' ? 'main' : 'HEAD' });","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('must not pin');","  });","","  it.each([","    ['edits', () => write(`${DIR}/0001-merged.html`, 'rewritten\\n')],","    ['deletes', () => git('rm', '-q', `${DIR}/0001-merged.html`)],","  ])('fails a PR that %s a merged walkthrough', (_, change) => {","    addWalkthrough();","    change();","    commitAll();","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('0001-merged.html');","  });","","  it('fails a numbered file that would escape the builder', () => {","    addWalkthrough();","    write(`${DIR}/0007-hidden.js`, 'hidden\\n');","    commitAll();","","    const result = check();","    expect(result.status).toBe(1);","    expect(result.stderr).toContain('0007-hidden.js');","  });","","  it('checks the branch tip, not the merge commit that CI checks out', () => {","    addWalkthrough();","    const tip = git('rev-parse', 'HEAD').trim();","    git('switch', '-q', 'main');","    // main moves the PR's lines, and gains another PR's walkthrough","    write('a.ts', 'one\\n\\n\\n\\nlast\\nfrom main\\n');","    write(`${DIR}/0002-other.json`, '{}\\n');","    commitAll();","    git('update-ref', 'refs/remotes/origin/main', 'HEAD');","    git('merge', '-q', '--no-edit', 'feature');","","    expect(check(tip).status).toBe(0);","  });","","  it('leaves no worktree behind', () => {","    addWalkthrough();","","    expect(check().status).toBe(0);","    expect(git('worktree', 'list').trim().split('\\n')).toHaveLength(1);","  });","});"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169]},{"path":"docs/agents/pr-walkthrough.md","question":"What must an agent do now?","summary":"The guide, with the check before pushing.","owns":"The procedure and the limits of CI.","never":"Runs anything.","tested":"Followed to make this page.","lines":["# PR walkthroughs","","Every PR includes an interactive walkthrough, so that the owner understands what the code does before merging it. The model is `docs/prototypes/gesture-engine-code-preview.html`: who does what, then a step-through of which lines run for each event. The difference is that a walkthrough shows the PR's real code.","","[`docs/walkthroughs/0002-walking-skeleton.json`](../walkthroughs/0002-walking-skeleton.json) is a worked example.","","## Before opening a PR","","1. Commit the code. The page is built from `HEAD`, compared with the merge base with `origin/main`.","2. Write `docs/walkthroughs/\u003cissue, 4 digits>-\u003cslug>.json` (fields below). Use `0000` when there is no issue.","3. Build it with `node docs/walkthroughs/build.js \u003cspec>`. Fix what it reports.","4. Open the HTML in a browser and click through every step. The builder proves that highlighted lines exist, not that the explanation is true.","5. Commit the spec and the HTML, in the same PR.","6. Run `node docs/walkthroughs/check.js`, the same check CI runs.","7. Add the section below to the PR body, whichever body format is in use.","","After any later push to the PR, including review fixes and rebases, re-read the steps, rebuild, commit and run the check again. Once merged, a walkthrough is frozen: don't rebuild it.","","CI's `check` job fails unless the branch adds exactly one walkthrough that is current, and fails if it changes a merged one. Branches are compared with `origin/main`, so don't stack PRs. CI doesn't read the PR body or judge whether an explanation is true.","","## PR body section","","GitHub doesn't render HTML files, so give a command that opens the page without switching branches:","","````markdown","## Walkthrough","","`docs/walkthroughs/\u003cname>.html`: \u003cthe scenarios, in one line>","","```sh","git fetch origin \u003cbranch> && git show FETCH_HEAD:docs/walkthroughs/\u003cname>.html > /tmp/\u003cname>.html && open /tmp/\u003cname>.html","```","````","","## Spec fields","","- `issue`, `title`, `lede`: the issue number (leave it out if there is none), the feature, and what to understand from this PR.","- `files`: the files worth reading, including unchanged ones that a scenario passes through. Each has:","  - `path`","  - `question`: the one question it answers (\"When does each thing happen?\").","  - `summary`: one sentence.","  - `owns`, `never`, `tested`: the responsibilities table.","- `flow`: chains of paths, drawn as rows of arrows. An arrow means \"then calls\" at runtime.","- `scenarios`: each has a `name` and `steps`. A step has `title`, `explain` and `run`, a list of `{ \"file\", \"from\", \"to\" }`:","  - `from` is text found on exactly one line.","  - `to` is optional text on that line or a later one, and ends the highlight.","  - The first entry's file is the one that opens.","- `notes`: `{ \"title\", \"detail\" }` for decisions and their strongest counter-argument, departures from the spec, and surprises.","- `omitted`: `{ \"path\": \"reason\" }` for every other changed file.","- `base`, `head`: never set them. CI rejects them. They exist only in the walking skeleton example, which predates PRs.","","Text fields support `` `code` `` and `**bold**`.","","## What makes it useful","","- A step is an event (\"pointerup over the Trash zone\"), not a file or a function.","- Explain why the lines run in that order and what would break otherwise. Don't paraphrase the syntax.","- Cover the main path, the case where nothing should happen, and a failure or cancellation. Show how the tests prove the behaviour.","- Highlight only lines that run in that step.","- Check runtime claims by running the code. If a claim wasn't run, say so in the step.","- If explaining the code exposes a bug or a false comment, put it in `notes` and tell the owner.","- For a PR with no runtime code (docs, config), use one short scenario about what now behaves differently.","- Use the words in `GLOSSARY.md`. The repo is public, so nothing from git-ignored files goes in."],"added":[13,14,16,17,18,49]}],"flow":[[".github/workflows/ci.yml","docs/walkthroughs/check.js","docs/walkthroughs/build.js"],["docs/walkthroughs/check.test.js","docs/walkthroughs/check.js","docs/walkthroughs/build.js"]],"scenarios":[{"name":"A PR with a current walkthrough","steps":[{"title":"CI checks out with full history","explain":"The default checkout has one commit, which is too little to find the merge base with main or to read the branch tip.","run":[{"file":".github/workflows/ci.yml","start":19,"end":19}]},{"title":"The Walkthrough step starts","explain":"It comes last, so a missing page never hides a test failure. It is a step in `check`, not a new job, because `check` is the status the ruleset requires.","run":[{"file":".github/workflows/ci.yml","start":56,"end":60}]},{"title":"The gate finds what the branch added","explain":"It compares the tip with its merge base, so walkthroughs that other PRs merged meanwhile are not counted as yours.","run":[{"file":"docs/walkthroughs/check.js","start":14,"end":23}]},{"title":"It opens a clean copy of the tip","explain":"CI checks out your branch merged into main, where line numbers can differ from the ones on the page. The page is true of the tip, so that is what gets checked.","run":[{"file":"docs/walkthroughs/check.js","start":43,"end":46},{"file":"docs/walkthroughs/check.test.js","start":149,"end":160}]},{"title":"The builder compares","explain":"It rebuilds in memory and compares with the committed HTML. Its exit code becomes the result of the step, and the copy is removed either way.","run":[{"file":"docs/walkthroughs/build.js","start":127,"end":129},{"file":"docs/walkthroughs/check.js","start":51,"end":53}]}]},{"name":"No walkthrough, or an old one","steps":[{"title":"The branch has no walkthrough","explain":"Reproduced on GitHub with this branch before this page existed: the step failed with `found 0`, and so did `check`.","run":[{"file":"docs/walkthroughs/check.js","start":24,"end":25},{"file":"docs/walkthroughs/check.test.js","start":72,"end":76}]},{"title":"Code was pushed after the page was built","explain":"The rebuilt page differs from the committed one, so the step fails. Run in the tests, not on GitHub.","run":[{"file":"docs/walkthroughs/build.js","start":127,"end":129},{"file":"docs/walkthroughs/check.test.js","start":79,"end":86}]},{"title":"A new file appeared after the page was built","explain":"The builder refuses before comparing, and names the file. Run in the tests, not on GitHub.","run":[{"file":"docs/walkthroughs/build.js","start":92,"end":94},{"file":"docs/walkthroughs/check.test.js","start":89,"end":96}]}]},{"name":"Ways around the gate","steps":[{"title":"Run CI by hand on the branch","explain":"A manual run also reports a `check`. If the step ran only for PRs, that run would be green. So the condition is \"not main\", and the tip falls back to the commit of the run.","run":[{"file":".github/workflows/ci.yml","start":57,"end":59}]},{"title":"Pin the page to an old commit","explain":"With `base` and `head` in the spec, a page about old code would always be up to date. CI rejects both.","run":[{"file":"docs/walkthroughs/check.js","start":36,"end":37},{"file":"docs/walkthroughs/check.test.js","start":118,"end":123}]},{"title":"Edit a merged walkthrough","explain":"Numbered files are left out of the diff the builder sees, so this gate has to vet them. Anything other than an addition fails.","run":[{"file":"docs/walkthroughs/check.js","start":29,"end":30}]},{"title":"Hide code under a numbered name","explain":"For the same reason, the only numbered files a branch may add are its spec and its page.","run":[{"file":"docs/walkthroughs/check.js","start":33,"end":34},{"file":"docs/walkthroughs/check.test.js","start":139,"end":146}]}]},{"name":"What still gets through","steps":[{"title":"The explanation is wrong, or the PR body has no link","explain":"CI reads neither for meaning. Both stay with the agent that writes the PR and with you reading it.","run":[{"file":"docs/agents/pr-walkthrough.md","start":18,"end":18}]},{"title":"A PR edits the gate itself","explain":"The workflow and the script come from the PR, so a PR could weaken them. Such an edit must appear in the diff, which is where you would catch it. This was reasoned, not run.","run":[{"file":".github/workflows/ci.yml","start":60,"end":60}]}]}],"notes":[{"title":"Every PR pays, including a typo fix.","detail":"That is what \"each PR\" asks for. The guide allows one short scenario when no runtime code changes. The cost also applies to bot PRs, which could not pass without help."},{"title":"No stacked PRs.","detail":"Comparison is always with main, so a PR on top of another would count two walkthroughs."},{"title":"Full history on checkout.","detail":"Slightly slower as the repo grows. The simpler shallow checkout cannot compute a merge base."},{"title":"The walkthrough of #13 says CI does not check.","detail":"It was true of that PR and is frozen, so it is left as it is."}],"omitted":{}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
