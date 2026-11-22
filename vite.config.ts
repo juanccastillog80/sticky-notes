@@ -32,7 +32,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['src/**/*.test.ts'],
+          include: ['src/**/*.test.ts', 'docs/walkthroughs/*.test.js'],
           typecheck: {
             enabled: true,
             include: ['src/**/*.test-d.ts'],
