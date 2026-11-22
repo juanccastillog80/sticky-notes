@@ -60,30 +60,45 @@ export function placeInVisibleBoard(view: Rect, size: Size, taken: readonly Poin
   const right = Math.min(view.x + view.width, BOARD_SIZE.width);
   const bottom = Math.min(view.y + view.height, BOARD_SIZE.height);
   const centred = placeCentredAt({ x: (view.x + right) / 2, y: (view.y + bottom) / 2 }, size);
+  const visible = { x: view.x, y: view.y, width: right - view.x, height: bottom - view.y };
+  const corner = lastSpotIn(visible, size);
 
-  for (const spot of cascadeSpots(centred, view)) {
+  for (const spot of cascadeSpots(centred, view, corner)) {
     if (!taken.some((point) => samePoint(point, spot))) return spot;
   }
   // Every spot is taken, so stack in the corner.
-  return clampToBoard({ ...centred, x: BOARD_SIZE.width, y: BOARD_SIZE.height });
+  return corner;
+}
+
+/** The furthest spot fully in view. Along a side too short for the Note, the furthest on the Board. */
+function lastSpotIn(visible: Rect, { width, height }: Size): Rect {
+  return toCommittedRect({
+    width,
+    height,
+    x: visible.width < width ? BOARD_SIZE.width : visible.x + visible.width - width,
+    y: visible.height < height ? BOARD_SIZE.height : visible.y + visible.height - height,
+  });
 }
 
 /** The spots to try, in order: from the centre, then jumping back to the top of `view`. */
-function* cascadeSpots(centred: Rect, view: Point): Generator<Rect> {
-  yield* stepsToCorner(centred);
+function* cascadeSpots(centred: Rect, view: Point, corner: Point): Generator<Rect> {
+  yield* stepsToCorner(centred, corner);
 
-  const lastX = BOARD_SIZE.width - centred.width;
-  for (let x = view.x; x <= lastX; x += CASCADE_STEP) {
-    yield* stepsToCorner(toCommittedRect({ ...centred, x, y: view.y }));
+  for (let x = Math.round(view.x); x <= corner.x; x += CASCADE_STEP) {
+    yield* stepsToCorner(toCommittedRect({ ...centred, x, y: view.y }), corner);
   }
 }
 
-/** `start`, then (24, 24) steps until the Board's bottom-right corner. */
-function* stepsToCorner(start: Rect): Generator<Rect> {
+/** `start`, then (24, 24) steps until `corner`, along an edge once it reaches one. */
+function* stepsToCorner(start: Rect, corner: Point): Generator<Rect> {
   let spot = start;
   for (;;) {
     yield spot;
-    const next = clampToBoard({ ...spot, x: spot.x + CASCADE_STEP, y: spot.y + CASCADE_STEP });
+    const next = {
+      ...spot,
+      x: Math.min(spot.x + CASCADE_STEP, corner.x),
+      y: Math.min(spot.y + CASCADE_STEP, corner.y),
+    };
     if (samePoint(next, spot)) return;
     spot = next;
   }

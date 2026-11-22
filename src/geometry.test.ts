@@ -188,6 +188,34 @@ describe('placeInVisibleBoard', () => {
     expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1700, 910));
   });
 
+  it('jumps back at the edge of the visible Board, before the Board ends', () => {
+    const smallView = { x: 100, y: 100, width: 268, height: 218 };
+    const taken = [rect(124, 124), rect(148, 148)];
+
+    expect(placeInVisibleBoard(smallView, size, taken)).toEqual(rect(100, 100));
+  });
+
+  it('keeps 100 Notes in view when scrolled to the top-left', () => {
+    const taken: Rect[] = [];
+    for (let press = 0; press < 100; press++) taken.push(placeInVisibleBoard(view, size, taken));
+
+    expect(new Set(taken.map(({ x, y }) => `${String(x)},${String(y)}`)).size).toBe(100);
+    expect(Math.max(...taken.map(({ x, width }) => x + width))).toBeLessThanOrEqual(1024);
+    expect(Math.max(...taken.map(({ y, height }) => y + height))).toBeLessThanOrEqual(720);
+  });
+
+  it('stacks in the visible corner when every visible spot is taken', () => {
+    const exactView = { x: 100, y: 100, width: 220, height: 170 };
+
+    expect(placeInVisibleBoard(exactView, size, [rect(100, 100)])).toEqual(rect(100, 100));
+  });
+
+  it('still cascades when the window is smaller than the Note', () => {
+    const tinyView = { x: 100, y: 100, width: 200, height: 150 };
+
+    expect(placeInVisibleBoard(tinyView, size, [rect(90, 90)])).toEqual(rect(114, 114));
+  });
+
   it('stops in the corner when there is no room to jump back', () => {
     const cornerView = { x: 1700, y: 910, width: 220, height: 170 };
 
