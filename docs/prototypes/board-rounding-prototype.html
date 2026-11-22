@@ -1,0 +1,498 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 004 (Board coordinate model), the rounding question only.
+  Answers: "Should committed Note geometry be whole CSS pixels (Math.round on commit), with fractions
+  allowed only in the live transform? And if so, where does the rounding go and in which order?"
+  The RoundingModel script block is pure (no DOM) and could be lifted out. Everything else is shell.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Note rounding: four commit policies</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc;
+    --ok: #1f7a4a; --ok-soft: #e4f4ea; --warn: #8a5a00; --warn-soft: #fdf2d8; --bad: #b42318; --bad-soft: #fde7e5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 24px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  h3 { font-size: 14px; margin: 0 0 2px; }
+  p { margin: 0 0 8px; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  .lede { color: var(--muted); max-width: 980px; }
+  .muted { color: var(--muted); }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section + section { margin-top: 18px; }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .tabs button { border-radius: 999px; }
+  .scenario { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+  .watch { margin: 8px 0 0; padding: 0; list-style: none; }
+  .watch li { margin: 4px 0; padding-left: 22px; position: relative; }
+  .watch li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  ol.steps li { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  ol.steps li::before { counter-increment: s; content: counter(s); width: 20px; text-align: right; color: var(--muted); font-size: 12px; }
+  ol.steps li.done::before { content: "✓"; color: var(--ok); }
+  ol.steps button { text-align: left; flex: 1; }
+
+  .controls { display: grid; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .row > .label { width: 130px; color: var(--muted); }
+  .event { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+  .event.warn { background: var(--warn-soft); }
+  .event.bad { background: var(--bad-soft); }
+
+  .env { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 12px; }
+  .env div b { font-weight: 600; }
+  .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .col { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .col.rec { border-color: var(--accent); }
+  .col .sub { font-size: 12px; color: var(--muted); margin-bottom: 8px; min-height: 36px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 2px 0; vertical-align: top; }
+  td:first-child { color: var(--muted); width: 46%; padding-right: 6px; }
+  td.changed { background: var(--warn-soft); }
+  .badges { display: grid; gap: 4px; margin-top: 8px; }
+  .badge { font-size: 12px; border-radius: 5px; padding: 3px 7px; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .divider { border-top: 1px dashed var(--line); margin: 8px 0; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .scenario { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Prototype · throwaway · ticket 004, rounding question</span>
+  <h1>Should a saved Note sit on whole pixels?</h1>
+  <p class="lede">
+    <b>The question:</b> while a Note is being dragged or resized, its on-screen position can be fractional
+    (zoomed browser, high-DPI screen, fractional scroll). When the Gesture ends and the Note is saved, should the saved
+    <code>x, y, width, height</code> be rounded to whole CSS pixels? And if so, where does the rounding happen and in what order
+    relative to keeping the Note inside the 1920×1080 Board?
+    Every action below is applied to <b>four copies of the same Note</b>, one per policy, so you can compare them side by side.
+  </p>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </section>
+
+  <section class="card">
+    <h2>Free play</h2>
+    <div class="controls">
+      <div class="row"><span class="label">Screen</span><span id="screens" class="row"></span></div>
+      <div class="row"><span class="label">Browser zoom</span><span id="zooms" class="row"></span></div>
+      <div class="row"><span class="label">Start a Gesture</span><span id="presses" class="row"></span></div>
+      <div class="row"><span class="label">Move the pointer</span><span id="moves" class="row"></span></div>
+      <div class="row"><span class="label">End the Gesture</span><span id="ends" class="row"></span></div>
+      <div class="row"><span class="label">Other</span><span id="others" class="row"></span></div>
+    </div>
+    <div id="event" class="event"></div>
+  </section>
+
+  <section class="card">
+    <h2>Current state</h2>
+    <div id="state"></div>
+  </section>
+</main>
+
+<!-- ================= Pure model: no DOM in here, liftable ================= -->
+<script>
+const RoundingModel = (() => {
+  const BOARD = { width: 1920, height: 1080 };
+  const MIN_SIZE = 40;
+  const START_NOTE = { x: 100, y: 100, width: 200, height: 150 };
+  // Where the physical pointer is pressed, in device pixels from the window's top-left.
+  const PRESS_DEVICE = { x: 1043, y: 517 };
+  // For "create": the scroll container sits under a 48px toolbar and is scrolled by a fractional amount.
+  const TOOLBAR = 48;
+  const SCROLL = { x: 240.5, y: 0 };
+  // What a "saved" Note might look like after a float-storing build or a hand-edited REST payload.
+  const STORED_FLOATS = { x: 1700.5, y: 99.99999999999999, width: 219.5, height: 150.25 };
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // The decided clamp: the whole rect stays on the Board. Generic: a too-wide rect is narrowed, then shifted in.
+  function clampToBoard(r) {
+    const width = Math.min(r.width, BOARD.width);
+    const height = Math.min(r.height, BOARD.height);
+    return { x: clamp(r.x, 0, BOARD.width - width), y: clamp(r.y, 0, BOARD.height - height), width, height };
+  }
+  const roundFields = (r) => ({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+  // Round where the edges are, then derive the size. Integer Board bounds stay respected.
+  function roundEdges(r) {
+    const left = Math.round(r.x), top = Math.round(r.y);
+    const right = Math.round(r.x + r.width), bottom = Math.round(r.y + r.height);
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  }
+
+  const POLICIES = [
+    { key: 'floats', name: 'Keep floats', sub: 'commit = clampToBoard(preview)', commit: (r) => clampToBoard(r) },
+    { key: 'clampRound', name: 'Clamp, then round each field', sub: 'commit = roundFields(clampToBoard(preview)). The recommendation as first worded.', commit: (r) => roundFields(clampToBoard(r)), rec: true },
+    { key: 'roundClamp', name: 'Round each field, then clamp', sub: 'commit = clampToBoard(roundFields(preview))', commit: (r) => clampToBoard(roundFields(r)) },
+    { key: 'edges', name: 'Clamp, then round the edges', sub: 'commit = roundEdges(clampToBoard(preview)). Width = round(right) − round(left).', commit: (r) => roundEdges(clampToBoard(r)) },
+  ];
+  const byKey = Object.fromEntries(POLICIES.map((p) => [p.key, p]));
+  const eachPolicy = (fn) => Object.fromEntries(POLICIES.map((p) => [p.key, fn(p)]));
+
+  // What the Gesture engine shows while the pointer moves (float, already clamped: preview equals commit, minus rounding).
+  function previewRect(kind, start, dx, dy) {
+    if (kind === 'move') return clampToBoard({ ...start, x: start.x + dx, y: start.y + dy });
+    if (kind === 'resizeCorner') {
+      const width = clamp(start.width + dx, MIN_SIZE, BOARD.width - start.x);
+      const height = clamp(start.height + dy, MIN_SIZE, BOARD.height - start.y);
+      return clampToBoard({ ...start, width, height });
+    }
+    if (kind === 'resizeLeft') {
+      const right = start.x + start.width;
+      const x = clamp(start.x + dx, 0, right - MIN_SIZE);
+      return clampToBoard({ ...start, x, width: right - x });
+    }
+    throw new Error(kind);
+  }
+
+  const dpr = (env) => env.screen * env.zoom;
+  // The browser reports pointer positions in CSS px: device px divided by the device-pixel ratio.
+  const toClient = (env, dev) => ({ x: dev.x / dpr(env), y: dev.y / dpr(env) });
+
+  function liveTransform(kind, start, p) {
+    if (kind === 'move') return `translate(${p.x - start.x}px, ${p.y - start.y}px)`;
+    return `left ${p.x}px · width ${p.width}px · height ${p.height}px`;
+  }
+
+  const init = (env = { screen: 1, zoom: 1 }) => ({
+    env, notes: eachPolicy(() => ({ ...START_NOTE })), gesture: null, lastRelease: null, prev: null,
+    event: { tone: 'info', text: 'Four identical Notes at (100, 100), 200×150.' },
+  });
+
+  function reduce(s, a) {
+    const prev = s.notes;
+    switch (a.type) {
+      case 'reset': return init(a.env ?? s.env);
+      case 'setEnv': {
+        if (s.gesture) return { ...s, event: { tone: 'warn', text: 'Finish the Gesture first.' } };
+        const env = { ...s.env, ...a.env };
+        return { ...s, env, prev, lastRelease: null, event: { tone: 'info', text: `Device-pixel ratio is now ${dpr(env)}: one physical pixel of pointer movement is ${fmt(1 / dpr(env))} CSS px.` } };
+      }
+      case 'press': {
+        if (s.gesture) return s;
+        const label = { move: 'Grabbed the Note body', resizeCorner: 'Grabbed the bottom-right resize corner', resizeLeft: 'Grabbed the left edge' }[a.kind];
+        return {
+          ...s, prev, lastRelease: null,
+          gesture: { kind: a.kind, pressDev: { ...PRESS_DEVICE }, dev: { ...PRESS_DEVICE }, start: eachPolicy((p) => ({ ...s.notes[p.key] })) },
+          event: { tone: 'info', text: `${label}. Nothing is dispatched until release.` },
+        };
+      }
+      case 'pointerMove': {
+        if (!s.gesture) return { ...s, event: { tone: 'warn', text: 'Grab something first.' } };
+        const dev = { x: s.gesture.dev.x + a.dx, y: s.gesture.dev.y + a.dy };
+        const c0 = toClient(s.env, s.gesture.pressDev), c1 = toClient(s.env, dev);
+        return { ...s, prev, gesture: { ...s.gesture, dev },
+          event: { tone: 'info', text: `Pointer at clientX ${fmt(c1.x)}. Delta since press = ${fmt(c1.x)} − ${fmt(c0.x)} = ${fmt(c1.x - c0.x)} CSS px.` } };
+      }
+      case 'release': {
+        if (!s.gesture) return s;
+        const g = s.gesture;
+        const d = delta(s);
+        const lastRelease = eachPolicy((p) => {
+          const preview = previewRect(g.kind, g.start[p.key], d.x, d.y);
+          return { preview, commit: p.commit(preview) };
+        });
+        return { ...s, prev, gesture: null, notes: eachPolicy((p) => lastRelease[p.key].commit), lastRelease,
+          event: { tone: 'info', text: 'Released: the live transform is dropped and each copy dispatches its committed rect.' } };
+      }
+      case 'cancel':
+        return s.gesture ? { ...s, prev, gesture: null, event: { tone: 'info', text: 'pointercancel: nothing dispatched.' } } : s;
+      case 'load':
+        if (s.gesture) return s;
+        return { ...s, prev, lastRelease: null, notes: eachPolicy((p) => p.commit({ ...STORED_FLOATS })),
+          event: { tone: 'warn', text: `Loaded a saved Note with fractional geometry: ${JSON.stringify(STORED_FLOATS)}. Each copy runs it through its own commit path, as the reducer would on load.` } };
+      case 'create': {
+        if (s.gesture) return s;
+        const c = toClient(s.env, PRESS_DEVICE);
+        const boardRect = { left: 0 - SCROLL.x, top: TOOLBAR - SCROLL.y };
+        const raw = { x: c.x - boardRect.left, y: c.y - boardRect.top, width: 200, height: 150 };
+        return { ...s, prev, lastRelease: null, notes: eachPolicy((p) => p.commit(raw)),
+          event: { tone: 'info', text: `Double-clicked at clientX ${fmt(c.x)} on a Board scrolled ${SCROLL.x}px: Board x = ${fmt(c.x)} − (${boardRect.left}) = ${fmt(raw.x)}.` } };
+      }
+    }
+    return s;
+  }
+
+  function delta(s) {
+    const g = s.gesture;
+    const c0 = toClient(s.env, g.pressDev), c1 = toClient(s.env, g.dev);
+    return { x: c1.x - c0.x, y: c1.y - c0.y };
+  }
+  const livePreviews = (s) => s.gesture
+    ? eachPolicy((p) => { const d = delta(s); return previewRect(s.gesture.kind, s.gesture.start[p.key], d.x, d.y); })
+    : null;
+
+  // Facts about a committed rect.
+  const isWhole = (r) => ['x', 'y', 'width', 'height'].every((k) => Number.isInteger(r[k]));
+  function outside(r) {
+    const out = [];
+    if (r.x < 0) out.push(`left edge at ${fmt(r.x)}`);
+    if (r.y < 0) out.push(`top edge at ${fmt(r.y)}`);
+    if (r.x + r.width > BOARD.width) out.push(`right edge at ${fmt(r.x + r.width)}`);
+    if (r.y + r.height > BOARD.height) out.push(`bottom edge at ${fmt(r.y + r.height)}`);
+    return out;
+  }
+  // How far each edge jumps when the live preview is replaced by the committed rect.
+  function snap(preview, commit, env) {
+    const edges = (r) => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height });
+    const a = edges(preview), b = edges(commit);
+    const css = Math.max(...Object.keys(a).map((k) => Math.abs(b[k] - a[k])));
+    return { css, device: css * dpr(env) };
+  }
+  // A hand-written test literal has a few decimals at most. Longer means toEqual needs toBeCloseTo.
+  const noisy = (v) => { const dec = String(v).split('.')[1]; return dec !== undefined && dec.length > 4; };
+
+  const fmt = (v) => (Number.isInteger(v) ? String(v) : String(v));
+
+  return { BOARD, POLICIES, byKey, init, reduce, dpr, toClient, livePreviews, liveTransform, isWhole, outside, snap, noisy, fmt };
+})();
+</script>
+
+<!-- ================= Shell: DOM only ================= -->
+<script>
+const M = RoundingModel;
+let state = M.init();
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+const ACTIONS = {
+  screen1: { label: 'Standard (1×)', act: { type: 'setEnv', env: { screen: 1 } } },
+  screen15: { label: 'Windows laptop (1.5×)', act: { type: 'setEnv', env: { screen: 1.5 } } },
+  screen2: { label: 'Retina (2×)', act: { type: 'setEnv', env: { screen: 2 } } },
+  zoom90: { label: '90%', act: { type: 'setEnv', env: { zoom: 0.9 } } },
+  zoom100: { label: '100%', act: { type: 'setEnv', env: { zoom: 1 } } },
+  zoom110: { label: '110%', act: { type: 'setEnv', env: { zoom: 1.1 } } },
+  zoom125: { label: '125%', act: { type: 'setEnv', env: { zoom: 1.25 } } },
+  zoom150: { label: '150%', act: { type: 'setEnv', env: { zoom: 1.5 } } },
+  grab: { label: 'Grab the Note', act: { type: 'press', kind: 'move' } },
+  grabCorner: { label: 'Grab the resize corner', act: { type: 'press', kind: 'resizeCorner' } },
+  grabLeft: { label: 'Grab the left edge (hypothetical handle)', act: { type: 'press', kind: 'resizeLeft' } },
+  right1: { label: '→ 1 physical px', act: { type: 'pointerMove', dx: 1, dy: 0 } },
+  right3: { label: '→ 3 physical px', act: { type: 'pointerMove', dx: 3, dy: 0 } },
+  left1: { label: '← 1 physical px', act: { type: 'pointerMove', dx: -1, dy: 0 } },
+  diag: { label: '↘ (37, 11) physical px', act: { type: 'pointerMove', dx: 37, dy: 11 } },
+  farRight: { label: '→ 5000 physical px (past the Board edge)', act: { type: 'pointerMove', dx: 5000, dy: 0 } },
+  release: { label: 'Release', act: { type: 'release' } },
+  cancel: { label: 'Cancel (pointercancel)', act: { type: 'cancel' } },
+  create: { label: 'Double-click to create a Note', act: { type: 'create' } },
+  load: { label: 'Load a saved Note with fractions', act: { type: 'load' } },
+  reset: { label: 'Start over', act: { type: 'reset' } },
+};
+
+const GROUPS = {
+  screens: ['screen1', 'screen15', 'screen2'], zooms: ['zoom90', 'zoom100', 'zoom110', 'zoom125', 'zoom150'],
+  presses: ['grab', 'grabCorner', 'grabLeft'], moves: ['right1', 'right3', 'left1', 'diag', 'farRight'],
+  ends: ['release', 'cancel'], others: ['create', 'load', 'reset'],
+};
+
+const SCENARIOS = [
+  {
+    title: '1. Drag on a zoomed browser',
+    env: { screen: 1, zoom: 1.25 },
+    text: 'The browser is at 125%, so one physical pixel of mouse movement is 0.8 CSS px. Drag the Note 3 physical pixels to the right and let go.',
+    watch: [
+      'While dragging, every copy shows a fractional live transform. That is fine and nobody proposes rounding it.',
+      'On release, "Keep floats" stores x = 102.39999999999998, not 102.4. A test written as toEqual({ x: 102.4, … }) fails. This is the float noise argument.',
+      'The three rounding policies store 102. On release the Note jumps 0.4 CSS px, which is half a physical pixel here.',
+    ],
+    steps: ['grab', 'right3', 'release'],
+  },
+  {
+    title: '2. Retina: the snap on release',
+    env: { screen: 2, zoom: 1 },
+    text: 'On a 2× screen, pointer positions come in half-CSS-pixel steps. Drag 3 physical pixels, which is 1.5 CSS px, and release.',
+    watch: [
+      'The live preview sits at x = 101.5. Math.round sends .5 up, so every rounding policy commits 102.',
+      'Snap on release = 0.5 CSS px = 1 physical pixel. For a move that is the worst case at any zoom: an edge never jumps more than half a CSS pixel.',
+      'Can you see 1 physical pixel? Barely. Text may sharpen slightly as it leaves a fractional transform. That is the "imperceptible" claim to defend.',
+    ],
+    steps: ['grab', 'right3', 'release'],
+  },
+  {
+    title: '3. Loading fractional data',
+    env: { screen: 1, zoom: 1 },
+    text: 'Storage or a REST payload hands back a Note with x = 1700.5 and width = 219.5. Its right edge is exactly 1920, the Board edge. The reducer runs it through the commit path on load.',
+    watch: [
+      '"Clamp, then round each field": 1700.5 → 1701 and 219.5 → 220. The right edge lands at 1921, OUTSIDE the Board, even though the clamp ran first. The safety argument only holds when one of x or width is fractional, not both.',
+      '"Round, then clamp" stays inside, but it does so by moving the whole Note 1 px left.',
+      '"Clamp, then round the edges" rounds left (1701) and right (1920) and derives width = 219. Always inside, because the Board bounds are integers.',
+      'Also look at y = 99.99999999999999: every rounding policy stores 100. Keep floats stores the noise.',
+    ],
+    steps: ['load'],
+  },
+  {
+    title: '4. Resizing from the left edge',
+    env: { screen: 2, zoom: 1 },
+    text: 'If a Note could be resized from its left edge, x and width change together. On Retina, nudge the left edge 1 physical pixel outwards and release. The right edge should stay at 300.',
+    watch: [
+      'The preview is x = 99.5, width = 200.5. The right edge is still 300.',
+      'Rounding each field gives 100 + 201: the right edge moves to 301 although you never touched it. That is a 1 CSS px (2 physical px) jump on release. Same with round-then-clamp.',
+      'Rounding edges keeps the right edge at 300. With only a bottom-right corner handle, x stays an integer during a resize and per-field rounding is safe. It is safe by accident of the UI, not by design.',
+    ],
+    steps: ['grabLeft', 'left1', 'release'],
+  },
+  {
+    title: '5. Pushing past the Board edge',
+    env: { screen: 1, zoom: 1.1 },
+    text: 'At 110%, grab the Note and push the pointer far past the right edge of the Board, then release. Then grab the corner and resize past the edge.',
+    watch: [
+      'The move clamp pins x to 1720 = 1920 − 200 (integers), so every policy agrees. Clamp-then-round is safe whenever the size is a whole number.',
+      'The corner resize is capped at 1920 − x. Again integers, again all agree.',
+      'Compare with walkthrough 3: trouble needs a fractional position and a fractional size at the same time.',
+    ],
+    steps: ['grab', 'farRight', 'release', 'grabCorner', 'farRight', 'release'],
+  },
+  {
+    title: '6. Creating on a scrolled, zoomed Board',
+    env: { screen: 1, zoom: 1.1 },
+    text: 'At 110% zoom, with the Board scrolled 240.5 px, double-click to create a Note at the pointer. Screen → Board conversion produces fractions with no drag at all.',
+    watch: [
+      'The raw position is 1043 / 1.1 + 240.5 = 1188.681818181818, and y comes out as 421.99999999999994. That is noise from a single subtraction, with no drag involved.',
+      'Rounding has to cover create too, not only Gesture release. That is an argument for putting it in the reducer next to the clamp, not only in the Gesture engine.',
+    ],
+    steps: ['create'],
+  },
+];
+
+let tab = 0, stepIdx = 0;
+
+function dispatch(act) {
+  state = M.reduce(state, act);
+  render();
+}
+
+function btn(key, onClick, cls = '') {
+  const b = document.createElement('button');
+  b.textContent = ACTIONS[key].label;
+  if (cls) b.className = cls;
+  b.onclick = onClick || (() => { dispatch(ACTIONS[key].act); });
+  return b;
+}
+
+function renderControls() {
+  for (const [group, keys] of Object.entries(GROUPS)) {
+    const el = $(group); el.innerHTML = '';
+    for (const k of keys) {
+      const a = ACTIONS[k].act;
+      let on = false;
+      if (a.type === 'setEnv') on = Object.entries(a.env).every(([f, v]) => state.env[f] === v);
+      const b = btn(k, null, on ? 'on' : '');
+      const g = !!state.gesture;
+      if ((a.type === 'setEnv' || a.type === 'press' || a.type === 'load' || a.type === 'create') && g) b.disabled = true;
+      if ((a.type === 'pointerMove' || a.type === 'release' || a.type === 'cancel') && !g) b.disabled = true;
+      el.appendChild(b);
+    }
+  }
+}
+
+function renderTabs() {
+  const el = $('tabs'); el.innerHTML = '';
+  SCENARIOS.forEach((sc, i) => {
+    const b = document.createElement('button');
+    b.textContent = sc.title; if (i === tab) b.className = 'on';
+    b.onclick = () => startScenario(i);
+    el.appendChild(b);
+  });
+  const sc = SCENARIOS[tab];
+  const box = $('scenario');
+  box.innerHTML = `<div class="scenario"><div><p>${esc(sc.text)}</p><b>What to watch for</b><ul class="watch">${sc.watch.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div><div><b>Buttons to press</b><p class="muted">Starting this tab resets the four Notes and sets the screen and zoom.</p><ol class="steps" id="steps"></ol></div></div>`;
+  const ol = $('steps');
+  sc.steps.forEach((k, i) => {
+    const li = document.createElement('li');
+    if (i < stepIdx) li.className = 'done';
+    const b = btn(k, () => { dispatch(ACTIONS[k].act); stepIdx = i + 1; render(); });
+    b.disabled = i !== stepIdx;
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+
+function startScenario(i) {
+  tab = i; stepIdx = 0;
+  state = M.init({ screen: SCENARIOS[i].env.screen, zoom: SCENARIOS[i].env.zoom });
+  render();
+}
+
+function rectRows(r, prev) {
+  const rows = ['x', 'y', 'width', 'height'].map((k) => {
+    const changed = prev && prev[k] !== r[k];
+    return `<tr><td>${k}</td><td class="mono ${changed ? 'changed' : ''}">${esc(M.fmt(r[k]))}</td></tr>`;
+  });
+  rows.push(`<tr><td>right edge</td><td class="mono">${esc(M.fmt(r.x + r.width))}</td></tr>`);
+  return `<table>${rows.join('')}</table>`;
+}
+
+function renderState() {
+  const s = state, live = M.livePreviews(s);
+  const d = M.dpr(s.env);
+  let html = `<div class="env">
+    <div>Device-pixel ratio <b>${d}</b> <span class="muted">(screen ${s.env.screen}× · zoom ${Math.round(s.env.zoom * 100)}%)</span></div>
+    <div>1 physical px = <b class="mono">${esc(M.fmt(1 / d))}</b> CSS px</div>
+    <div>Board <b>${M.BOARD.width}×${M.BOARD.height}</b></div>
+    <div>Gesture <b>${s.gesture ? { move: 'moving', resizeCorner: 'resizing (corner)', resizeLeft: 'resizing (left edge)' }[s.gesture.kind] : 'none'}</b></div>
+  </div><div class="cols">`;
+
+  for (const p of M.POLICIES) {
+    const note = s.notes[p.key];
+    html += `<div class="col ${p.rec ? 'rec' : ''}"><h3>${esc(p.name)}</h3><div class="sub mono">${esc(p.sub)}</div>`;
+
+    if (live) {
+      const pr = live[p.key];
+      html += `<b>Live preview</b> <span class="muted">(not in the store)</span>${rectRows(pr)}
+        <div class="mono muted" style="margin-top:4px">${esc(M.liveTransform(s.gesture.kind, s.gesture.start[p.key], pr))}</div>
+        <div class="badges"><span class="badge ok">Fractions are fine here</span></div><div class="divider"></div>`;
+    }
+
+    html += `<b>Committed in the store</b>${rectRows(note, s.prev && s.prev[p.key])}<div class="badges">`;
+    const out = M.outside(note);
+    html += out.length
+      ? `<span class="badge bad">Outside the Board: ${esc(out.join(', '))}</span>`
+      : `<span class="badge ok">Inside the Board</span>`;
+    html += M.isWhole(note)
+      ? `<span class="badge ok">Whole pixels</span>`
+      : `<span class="badge warn">Fractional geometry</span>`;
+    const noisy = ['x', 'y', 'width', 'height'].filter((k) => M.noisy(note[k]));
+    if (noisy.length) html += `<span class="badge warn">toEqual against a hand-written value needs toBeCloseTo (${esc(noisy.join(', '))})</span>`;
+    if (s.lastRelease) {
+      const { preview, commit } = s.lastRelease[p.key];
+      const sn = M.snap(preview, commit, s.env);
+      html += sn.css === 0
+        ? `<span class="badge ok">No jump on release</span>`
+        : `<span class="badge ${sn.device > 1.0001 ? 'bad' : 'warn'}">Jump on release: ${esc(+sn.css.toFixed(4))} CSS px = ${esc(+sn.device.toFixed(3))} physical px</span>`;
+    }
+    html += `</div><div class="divider"></div><div class="muted" style="font-size:12px">Saved as</div><div class="mono" style="font-size:11.5px;word-break:break-all">${esc(JSON.stringify(note))}</div></div>`;
+  }
+  $('state').innerHTML = html + '</div>';
+}
+
+function render() {
+  renderTabs();
+  renderControls();
+  const ev = $('event');
+  ev.className = 'event ' + (state.event.tone === 'info' ? '' : state.event.tone);
+  ev.textContent = state.event.text;
+  renderState();
+}
+
+startScenario(0);
+</script>
+</body>
+</html>

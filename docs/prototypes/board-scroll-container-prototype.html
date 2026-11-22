@@ -1,0 +1,761 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 004 (Board coordinate model), round 2 Q2. EXPLANATION ONLY: the decision is made.
+  Explains: "A dedicated overflow:auto scroll container holds the 1920x1080 Board, the toolbar is a strip above it,
+  and the Trash zone is pinned over the container's visible corner. Why, and what does that do to coordinates?"
+  The layout runs for real inside an iframe (the iframe is the browser window), so every number shown comes from
+  real getBoundingClientRect / scrollLeft calls. CoordModel is pure (no DOM) and could be lifted out.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board scroll container</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc;
+    --ok: #1f7a4a; --ok-soft: #e4f4ea; --warn: #8a5a00; --warn-soft: #fdf2d8; --bad: #b42318; --bad-soft: #fde7e5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1560px; margin: 0 auto; padding: 28px 24px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 980px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section + section { margin-top: 18px; }
+  .muted { color: var(--muted); }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: #f1efea; padding: 1px 4px; border-radius: 4px; }
+
+  /* Regions legend */
+  .key { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 13px; }
+  .key i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+  /* Walkthroughs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .tabs button { border-radius: 999px; }
+  .scenario { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+  @media (max-width: 900px) { .scenario { grid-template-columns: 1fr; } }
+  .predict { background: var(--warn-soft); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+  details { margin-top: 6px; }
+  details summary { cursor: pointer; color: var(--accent); }
+  details div { padding: 6px 0 0; }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  ol.steps li { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  ol.steps li::before { counter-increment: s; content: counter(s); width: 20px; text-align: right; color: var(--muted); font-size: 12px; }
+  ol.steps li.done::before { content: "✓"; color: var(--ok); }
+  ol.steps button { text-align: left; flex: 1; }
+
+  /* Stage + state */
+  .work { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 18px; }
+  @media (min-width: 1200px) { .work { grid-template-columns: minmax(0, 1.65fr) minmax(360px, 1fr); } }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
+  .controls .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .winbar { background: #d9d6cf; border-radius: 8px 8px 0 0; padding: 4px 10px; font-size: 12px; color: #4a4e55; display: flex; gap: 8px; align-items: center; }
+  .winbar i { width: 9px; height: 9px; border-radius: 50%; background: #f26b5b; display: inline-block; }
+  .winbar i + i { background: #f5bf4f; } .winbar i + i + i { background: #5fc454; }
+  #stageWrap { position: relative; overflow: hidden; border: 1px solid #d9d6cf; border-top: 0; background: #fff; }
+  #frame { border: 0; transform-origin: 0 0; display: block; background: #fff; }
+  .event { border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; min-height: 40px; font-size: 13px; }
+  .event.info { background: var(--accent-soft); }
+  .event.ok { background: var(--ok-soft); color: var(--ok); }
+  .event.warn { background: var(--warn-soft); color: var(--warn); }
+  .event.bad { background: var(--bad-soft); color: var(--bad); font-weight: 600; }
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 6px; font-size: 13px; }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  dl.facts .sep { grid-column: 1 / -1; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .changed { background: var(--warn-soft); border-radius: 3px; box-shadow: 0 0 0 3px var(--warn-soft); }
+  .good { color: var(--ok); font-weight: 600; } .badv { color: var(--bad); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+  th, td { text-align: left; padding: 4px 6px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .pill { font-size: 11px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .pill.visible { background: var(--ok-soft); color: var(--ok); }
+  .pill.partly, .pill.offscreen { background: var(--warn-soft); color: var(--warn); }
+  .pill.covered { background: var(--bad-soft); color: var(--bad); }
+  ul.log { margin: 0; padding: 0 0 0 16px; font-size: 12.5px; color: var(--muted); max-height: 150px; overflow: auto; }
+
+  /* Defence */
+  .defence blockquote { margin: 8px 0 14px; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
+  .qa { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 1000px) { .qa { grid-template-columns: 1fr 1fr; } }
+  .qa > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .qa b.q { display: block; margin-bottom: 4px; }
+  .qa p.concede { color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Prototype · throwaway · ticket 004, round 2 Q2 · explanation only, the decision is already made</span>
+  <h1>Why the Board lives in its own scroll container</h1>
+  <p class="lede">
+    <b>Decided:</b> a dedicated <code>overflow: auto</code> scroll container holds the 1920×1080 Board. The toolbar is a strip
+    above it, and the Trash zone is pinned over the container's visible corner, outside the scrolling content.
+    <b>This page shows why</b>, using a real layout: the picture on the left is a real browser window (an iframe) and every
+    number on the right comes from real <code>getBoundingClientRect()</code> and <code>scrollLeft</code> reads.
+    Each walkthrough asks you to <b>predict first</b>, then press the buttons to check.
+  </p>
+  <p style="margin-top:10px">
+    <span class="key"><i style="background:#8b5cf6"></i>Toolbar strip</span>
+    <span class="key"><i style="background:#0ea5e9"></i>Scroll container (what you can see of the Board)</span>
+    <span class="key"><i style="background:#16a34a"></i>Board 1920×1080</span>
+    <span class="key"><i style="background:#f97316"></i>Trash zone</span>
+    <span class="key"><i style="background:#2f5bd3;border-radius:50%"></i>Pointer</span>
+    <span class="key"><i style="border:2px dashed #b42318"></i>Trash rect cached at press</span>
+  </p>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </section>
+
+  <div class="work">
+    <section class="card">
+      <div class="controls">
+        <div class="group"><span class="muted">Window:</span><span id="presets" class="group"></span></div>
+        <div class="group"><span class="muted">Layout:</span><span id="layouts" class="group"></span></div>
+        <div class="group"><button id="regions" class="on">Region outlines</button><button id="reset">Start over</button></div>
+      </div>
+      <div class="winbar"><i></i><i></i><i></i><span id="winlabel"></span></div>
+      <div id="stageWrap"><iframe id="frame" title="Simulated browser window"></iframe></div>
+      <p class="hint">Free play inside the window: drag a Note (drop it on the Trash zone to delete it), double-click empty Board
+        to add one, use the wheel or the scrollbars to scroll, including in the middle of a drag. Click anywhere on the Board
+        background to drop a probe and see its screen→Board conversion. Pressing the scrollbar logs a <code>pointerdown</code>
+        that the page cancels with <code>preventDefault()</code>, and the scrollbar still works.</p>
+    </section>
+
+    <section class="card">
+      <h2 style="margin-bottom:10px">What the browser reports</h2>
+      <div id="event" class="event info"></div>
+      <dl class="facts" id="facts"></dl>
+      <table id="notes"></table>
+      <h3>Log</h3>
+      <ul class="log" id="log"></ul>
+    </section>
+  </div>
+
+  <section class="card defence" style="margin-top:18px">
+    <h2>Defending it live</h2>
+    <blockquote>
+      “The Board is a fixed 1920×1080 surface inside its own scroll container, so the toolbar and the Trash zone sit
+      <i>outside</i> the thing that scrolls: they never cover the Board, never move, and a Gesture can measure both once,
+      at press time, with <code>getBoundingClientRect()</code>.”
+    </blockquote>
+    <div class="qa">
+      <div>
+        <b class="q">“Why not just let the page scroll?”</b>
+        <p>The coordinate maths is identical, since <code>getBoundingClientRect()</code> includes scroll in both layouts (walkthrough 7).
+          The difference is who owns the scrolling. With page scroll the toolbar must be a <code>position: fixed</code> overlay, so
+          the Board slides under it: either the top strip of the Board is hidden, or you pad it and content still passes beneath.
+          The scrollbars run the whole window height next to the toolbar. With a container, the scrollable area is exactly the
+          Board's visible part, and nothing overlaps it except the Trash zone, which is deliberate.</p>
+        <p class="concede"><b>Honest concession:</b> page scroll gets some things for free. Reload restores the scroll position
+          (a container starts at 0,0 unless I save it), keyboard scrolling works without focus management, and there's one
+          less element in the tree. None of these is a requirement in the brief.</p>
+      </div>
+      <div>
+        <b class="q">“Isn't a nested scroller bad for accessibility or trackpads?”</b>
+        <p>It isn't nested: the body is <code>height: 100vh; overflow: hidden</code>, so the container is the <i>only</i> scroller.
+          There's no scroll chaining and no scroll-inside-scroll trap, and wheel or trackpad input goes straight to it.
+          I'd add <code>overscroll-behavior: contain</code> so a horizontal trackpad swipe at <code>scrollLeft = 0</code> doesn't
+          trigger the browser's back-swipe.</p>
+        <p class="concede"><b>Honest concession:</b> a scroll container needs a little care for keyboard users. Give it
+          <code>tabindex="0"</code> and an accessible name (<code>role="region" aria-label="Board"</code>) so arrow keys and
+          Page Down scroll it and screen readers announce it. Page scroll gets that for free.</p>
+      </div>
+      <div>
+        <b class="q">“Why is the Trash zone a sibling of the Board and not inside it?”</b>
+        <p>Anything inside the scrolling content moves when it scrolls. A Gesture caches the Trash rect at press time
+          (pointer capture stops hover events, so it has to use rectangle maths), and a cached rect for something that moves
+          goes stale. Walkthrough 4 shows both failures: dropping on the visible Trash misses, and dropping on empty space deletes.
+          As a sibling, the Trash's screen rect is constant for the whole Gesture.</p>
+      </div>
+      <div>
+        <b class="q">“What happens if the Board scrolls during a drag?”</b>
+        <p>Say it straight: that's the open edge, scheduled for the next grilling round. Today the Note keeps its Board position
+          because <code>clientX</code> deltas don't change when the content scrolls, so the Note slides away from the pointer by exactly
+          the scroll distance (walkthrough 5). The fix options (re-read the rect on <code>scroll</code>, or add the scroll delta)
+          are next round's question.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= Pure model: no DOM in here, liftable ================= -->
+<script>
+function CoordModelFactory() {
+  const BOARD_SIZE = { w: 1920, h: 1080 };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // A Note's whole rect stays inside the Board.
+  function clampToBoard(r) {
+    const w = clamp(r.w, 1, BOARD_SIZE.w), h = clamp(r.h, 1, BOARD_SIZE.h);
+    return { ...r, w, h, x: clamp(r.x, 0, BOARD_SIZE.w - w), y: clamp(r.y, 0, BOARD_SIZE.h - h) };
+  }
+
+  // The decided formula: the Board's rect, read now, already includes the scroll offset.
+  const screenToBoard = (client, boardRect) => ({ x: client.x - boardRect.left, y: client.y - boardRect.top });
+
+  // The same thing seen from the other side (the Q1 prototype's "screen + scroll"):
+  // where the scroller's visible area starts on screen, plus how far it's scrolled, minus where the Board sits in the content.
+  const screenToBoardViaScroll = (client, origin, scroll, boardOffset) => ({
+    x: client.x - origin.x + scroll.x - boardOffset.x,
+    y: client.y - origin.y + scroll.y - boardOffset.y,
+  });
+
+  const pointInRect = (p, r) => !!r && p.x >= r.left && p.x < r.left + r.width && p.y >= r.top && p.y < r.top + r.height;
+  const sameRect = (a, b) => !!a && !!b && ['left', 'top', 'width', 'height'].every(k => Math.round(a[k]) === Math.round(b[k]));
+
+  // Gesture: everything it needs is measured once, at press time.
+  function pressGesture({ note, client, boardRect, trashRect }) {
+    const grab = screenToBoard(client, boardRect);
+    const origin = { x: note.x, y: note.y, w: note.w, h: note.h };
+    return {
+      noteId: note.id, origin, startClient: client, client,
+      cachedBoardRect: boardRect, cachedTrashRect: trashRect,
+      grabOffset: { x: grab.x - note.x, y: grab.y - note.y },
+      preview: { ...origin },
+    };
+  }
+  function moveGesture(g, client) {
+    return { ...g, client, preview: clampToBoard({ ...g.origin, x: g.origin.x + client.x - g.startClient.x, y: g.origin.y + client.y - g.startClient.y }) };
+  }
+  function releaseGesture(g) {
+    return pointInRect(g.client, g.cachedTrashRect) ? { kind: 'delete', noteId: g.noteId } : { kind: 'commit', noteId: g.noteId, rect: g.preview };
+  }
+  // How far the pointer has slid off the spot it grabbed (non-zero only if the Board moved under it, or the clamp kicked in).
+  function pointerDrift(g, liveBoardRect) {
+    const p = screenToBoard(g.client, liveBoardRect);
+    return { x: Math.round(p.x - (g.preview.x + g.grabOffset.x)), y: Math.round(p.y - (g.preview.y + g.grabOffset.y)) };
+  }
+
+  return { BOARD_SIZE, clampToBoard, screenToBoard, screenToBoardViaScroll, pointInRect, sameRect, pressGesture, moveGesture, releaseGesture, pointerDrift };
+}
+const CoordModel = CoordModelFactory();
+</script>
+
+<!-- ================= The simulated window (iframe document). Shell, not liftable. ================= -->
+<template id="frame-src">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: #e9e7e2; color: #1d1f23; }
+  #toolbar { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #fff; border-bottom: 1px solid #d6d3cc; white-space: nowrap; overflow: hidden; flex: none; position: relative; z-index: 5; }
+  #toolbar b { margin-right: 14px; font-size: 14px; }
+  #toolbar .btn { border: 1px solid #cfcbc2; border-radius: 6px; padding: 4px 14px; background: #fafaf8; flex: none; }
+  #toolbar .status { margin-left: 12px; color: #646a73; flex: none; }
+  body.L-decided, body.L-inside { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  #viewport { position: relative; flex: 1; min-height: 0; }
+  #scroller { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
+  #board { position: relative; width: 1920px; height: 1080px; background-color: #fbfaf7;
+           background-image: linear-gradient(#ece9e2 1px, transparent 1px), linear-gradient(90deg, #ece9e2 1px, transparent 1px);
+           background-size: 100px 100px; }
+  .tick { position: absolute; font-size: 10px; color: #a29d92; pointer-events: none; transform: translate(3px, 1px); }
+  body.L-page #toolbar { position: fixed; top: 0; left: 0; right: 0; }
+  body.L-page.reserve #board { margin-top: 48px; }
+  #trash { position: absolute; width: 140px; height: 96px; background: #3b3f46; color: #fff; display: flex; align-items: center; justify-content: center; border-radius: 8px; z-index: 4; user-select: none; }
+  body.L-page #trash { position: fixed; right: 16px; bottom: 16px; }
+  .note { position: absolute; background: #fde68a; border: 1px solid #d9b84a; border-radius: 3px; padding: 6px 8px; cursor: grab; user-select: none; touch-action: none; box-shadow: 0 1px 2px rgba(0,0,0,.12); font-size: 13px; }
+  .note small { display: block; color: #8a6d12; font-variant-numeric: tabular-nums; }
+  .note.drag { cursor: grabbing; box-shadow: 0 6px 16px rgba(0,0,0,.25); z-index: 3; }
+  #ptr { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #2f5bd3; border: 3px solid #fff; box-shadow: 0 0 0 1px #2f5bd3; pointer-events: none; z-index: 20; display: none; }
+  #ghost { position: fixed; border: 3px dashed #b42318; border-radius: 8px; pointer-events: none; z-index: 19; display: none; color: #b42318; font-size: 11px; font-weight: 600; padding: 2px 4px; background: rgba(253,231,229,.5); }
+  .rlabel { display: none; position: absolute; font-size: 11px; font-weight: 600; color: #fff; padding: 1px 6px; border-radius: 0 0 4px 0; pointer-events: none; z-index: 6; }
+  body.regions .rlabel { display: block; }
+  body.regions #toolbar { box-shadow: inset 0 0 0 3px #8b5cf6; }
+  body.regions #viewport::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 4px #0ea5e9; pointer-events: none; z-index: 6; }
+  body.regions #board { outline: 3px dashed #16a34a; outline-offset: -3px; }
+  body.regions #trash { box-shadow: 0 0 0 4px #f97316; }
+</style>
+<script>
+document.head.appendChild(document.querySelector('style')); // body gets rebuilt; keep the styles
+const M = CoordModel;
+const NOTES = () => [
+  { id: 'n1', label: 'Groceries',    x: 120,  y: 120, w: 200, h: 140 },
+  { id: 'n2', label: 'Call dentist', x: 520,  y: 300, w: 200, h: 140 },
+  { id: 'n3', label: 'Q4 plan',      x: 1150, y: 620, w: 200, h: 140 },
+  { id: 'n4', label: 'Top edge',     x: 700,  y: 8,   w: 200, h: 110 },
+  { id: 'n5', label: 'Far corner',   x: 1690, y: 900, w: 200, h: 140 },
+];
+let layout = 'decided', reserve = false, regions = true;
+let notes = NOTES(), gesture = null, probe = null, nextId = 6, event = { tone: 'info', text: '' };
+const $ = s => document.querySelector(s);
+const R = el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+const post = (m) => parent.postMessage(m, '*');
+const logLine = (text) => post({ type: 'log', text });
+const setEvent = (tone, text) => { event = { tone, text }; logLine(text); };
+
+function build() {
+  document.body.className = 'L-' + layout + (reserve ? ' reserve' : '') + (regions ? ' regions' : '');
+  const toolbar = `<header id="toolbar"><b>Sticky Notes</b><span class="btn">+ New note</span><span class="btn">Undo</span><span class="btn">Redo</span><span class="btn">Clear board</span><span class="btn">Export</span><span class="status">All changes saved</span><span class="rlabel" style="right:0;top:0;left:auto;background:#8b5cf6;border-radius:0 0 0 4px">toolbar strip</span></header>`;
+  const ticks = [];
+  for (let x = 0; x < 1920; x += 400) for (let y = 0; y < 1080; y += 300) ticks.push(`<span class="tick" style="left:${x}px;top:${y}px">${x},${y}</span>`);
+  const board = `<div id="board">${ticks.join('')}<span class="rlabel" style="left:0;top:14px;background:#16a34a">Board (0,0), 1920×1080</span></div>`;
+  const trash = `<div id="trash">Trash</div>`;
+  if (layout === 'page') {
+    document.body.innerHTML = toolbar + board + trash + `<div id="ptr"></div><div id="ghost">cached at press</div>`;
+  } else {
+    document.body.innerHTML = toolbar +
+      `<div id="viewport"><div id="scroller">${board}</div>${layout === 'decided' ? trash : ''}<span class="rlabel" style="left:0;bottom:0;top:auto;background:#0ea5e9;border-radius:0 4px 0 0">scroll container (the visible part of the Board)</span></div>` +
+      `<div id="ptr"></div><div id="ghost">cached at press</div>`;
+    if (layout === 'inside') {
+      $('#board').insertAdjacentHTML('beforeend', trash);
+      const sc = $('#scroller');
+      $('#trash').style.left = (sc.clientWidth - 16 - 140) + 'px';
+      $('#trash').style.top = (sc.clientHeight - 16 - 96) + 'px';
+    }
+  }
+  wire();
+  placeTrash();
+  renderNotes();
+}
+
+const scroller = () => layout === 'page' ? null : $('#scroller');
+const getScroll = () => layout === 'page' ? { x: scrollX, y: scrollY } : { x: scroller().scrollLeft, y: scroller().scrollTop };
+const scrollToXY = (x, y) => layout === 'page' ? window.scrollTo(x, y) : scroller().scrollTo(x, y);
+function scrollbarSize() {
+  if (layout === 'page') return { w: innerWidth - document.documentElement.clientWidth, h: innerHeight - document.documentElement.clientHeight };
+  const sc = scroller(); return { w: sc.offsetWidth - sc.clientWidth, h: sc.offsetHeight - sc.clientHeight };
+}
+function placeTrash() {
+  if (layout !== 'decided') return;
+  const sb = scrollbarSize(); // keep the Trash clear of the container's own scrollbars
+  $('#trash').style.right = (16 + sb.w) + 'px';
+  $('#trash').style.bottom = (16 + sb.h) + 'px';
+}
+
+function renderNotes() {
+  // Update in place: recreating the dragged element would drop its pointer capture.
+  const board = $('#board');
+  const live = new Set(notes.map(n => n.id));
+  board.querySelectorAll('.note').forEach(el => { if (!live.has(el.dataset.id)) el.remove(); });
+  for (const n of notes) {
+    const r = gesture && gesture.noteId === n.id ? gesture.preview : n;
+    let el = board.querySelector(`.note[data-id="${n.id}"]`);
+    if (!el) { el = document.createElement('div'); el.dataset.id = n.id; board.appendChild(el); }
+    el.className = 'note' + (gesture && gesture.noteId === n.id ? ' drag' : '');
+    Object.assign(el.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    el.innerHTML = `${n.label}<small>Board ${Math.round(r.x)}, ${Math.round(r.y)}</small>`;
+  }
+  drawPointer();
+}
+
+function drawPointer() {
+  const ptr = $('#ptr'), ghost = $('#ghost');
+  const p = gesture ? gesture.client : probe;
+  ptr.style.display = p ? 'block' : 'none';
+  if (p) { ptr.style.left = p.x + 'px'; ptr.style.top = p.y + 'px'; }
+  const stale = gesture && !M.sameRect(gesture.cachedTrashRect, R($('#trash')));
+  ghost.style.display = stale ? 'block' : 'none';
+  if (stale) { const c = gesture.cachedTrashRect; Object.assign(ghost.style, { left: c.left + 'px', top: c.top + 'px', width: c.width + 'px', height: c.height + 'px' }); }
+}
+
+function whatIsAt(p) {
+  const el = document.elementFromPoint(p.x, p.y);
+  if (!el) return 'outside the window';
+  if (el.closest('#trash')) return 'Trash zone';
+  if (el.closest('#toolbar')) return 'toolbar (not the Board!)';
+  const n = el.closest('.note'); if (n) return 'Note “' + notes.find(x => x.id === n.dataset.id).label + '”';
+  if (el.closest('#board')) return 'empty Board';
+  if (el.id === 'scroller') return 'scroll container itself (scrollbar)';
+  return 'backdrop';
+}
+
+// ---- Gestures (real pointer, and scripted from the walkthroughs) ----
+function startGesture(id, client) {
+  const note = notes.find(n => n.id === id);
+  probe = null;
+  gesture = M.pressGesture({ note, client, boardRect: R($('#board')), trashRect: R($('#trash')) });
+  setEvent('info', `Pressed “${note.label}”. Board rect and Trash rect measured once, now.`);
+  renderNotes(); report();
+}
+function moveTo(client) { if (!gesture) return; gesture = M.moveGesture(gesture, client); renderNotes(); report(); }
+function endGesture() {
+  if (!gesture) return;
+  const res = M.releaseGesture(gesture), note = notes.find(n => n.id === res.noteId);
+  const overLive = M.pointInRect(gesture.client, R($('#trash')));
+  if (res.kind === 'delete') {
+    notes = notes.filter(n => n.id !== res.noteId);
+    setEvent(overLive ? 'ok' : 'bad', overLive ? `Released over the Trash zone: “${note.label}” deleted.`
+      : `“${note.label}” DELETED, but the pointer is over empty space: it was inside the stale cached rect.`);
+  } else {
+    Object.assign(note, { x: res.rect.x, y: res.rect.y });
+    setEvent(overLive ? 'bad' : 'ok', overLive ? `Released ON the visible Trash zone, but “${note.label}” was NOT deleted: the cached rect is somewhere else now.`
+      : `Released: “${note.label}” committed at Board ${Math.round(res.rect.x)}, ${Math.round(res.rect.y)}.`);
+  }
+  gesture = null; renderNotes(); report();
+}
+
+function wire() {
+  const board = $('#board');
+  board.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.note');
+    if (el) { e.preventDefault(); el.setPointerCapture(e.pointerId); startGesture(el.dataset.id, { x: e.clientX, y: e.clientY }); return; }
+    if (e.target.closest('#trash')) return;
+    probe = { x: e.clientX, y: e.clientY }; drawPointer(); report();
+  });
+  board.addEventListener('pointermove', e => { if (gesture && e.target.closest('.note')) moveTo({ x: e.clientX, y: e.clientY }); });
+  board.addEventListener('pointerup', e => { if (gesture && e.target.closest('.note')) { moveTo({ x: e.clientX, y: e.clientY }); endGesture(); } });
+  board.addEventListener('pointercancel', () => { if (gesture) { gesture = null; setEvent('warn', 'pointercancel: Gesture abandoned.'); renderNotes(); report(); } });
+  board.addEventListener('dblclick', e => {
+    if (e.target.closest('.note') || e.target.closest('#trash')) return;
+    const p = M.screenToBoard({ x: e.clientX, y: e.clientY }, R(board));
+    const n = M.clampToBoard({ id: 'n' + nextId, label: 'Note ' + nextId++, x: p.x - 100, y: p.y - 70, w: 200, h: 140 });
+    notes.push(n); setEvent('ok', `New Note at Board ${Math.round(n.x)}, ${Math.round(n.y)} (clamped).`); renderNotes(); report();
+  });
+  const sc = scroller();
+  if (sc) {
+    sc.addEventListener('pointerdown', e => {
+      if (e.target !== sc) return;
+      e.preventDefault();
+      logLine('pointerdown on the scroll container itself (its scrollbar). preventDefault() called; the scrollbar still works.');
+    });
+    sc.addEventListener('scroll', schedule);
+  }
+}
+let raf = 0; function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawPointer(); report(); }); }
+addEventListener('scroll', () => { if (layout === 'page') schedule(); });
+addEventListener('resize', () => { placeTrash(); event = { tone: 'info', text: `Window resized to ${innerWidth}×${innerHeight}. Scroll offset kept, clamped to the new range.` }; schedule(); });
+
+// ---- State report ----
+function report() {
+  const board = R($('#board')), trash = R($('#trash')), toolbarEl = $('#toolbar'), toolbar = R(toolbarEl);
+  const scroll = getScroll(), sb = scrollbarSize();
+  const origin = layout === 'page' ? { x: 0, y: 0 } : { x: R(scroller()).left, y: R(scroller()).top };
+  const boardOffset = { x: 0, y: layout === 'page' && reserve ? 48 : 0 };
+  // Visible region on screen where the Board can be seen (not under the toolbar).
+  const view = layout === 'page'
+    ? { left: 0, top: 48, width: innerWidth - sb.w, height: innerHeight - sb.h - 48 }
+    : { left: origin.x, top: origin.y, width: scroller().clientWidth, height: scroller().clientHeight };
+  const vTL = M.screenToBoard({ x: view.left, y: view.top }, board);
+  const visible = { x0: Math.max(0, vTL.x), y0: Math.max(0, vTL.y), x1: Math.min(1920, vTL.x + view.width), y1: Math.min(1080, vTL.y + view.height) };
+  const inter = (a, b) => Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+  const noteRows = notes.map(n => {
+    const r = gesture && gesture.noteId === n.id ? gesture.preview : n;
+    const c = { left: board.left + r.x, top: board.top + r.y, width: r.w, height: r.h };
+    const area = r.w * r.h, seen = inter(c, view);
+    let vis = seen === 0 ? 'offscreen' : seen < area ? 'partly' : 'visible';
+    let cover = '';
+    if (layout === 'page' && inter(c, toolbar) > 0) cover = 'under toolbar';
+    else if (inter(c, trash) > 0 && seen > 0) cover = 'under Trash';
+    return { id: n.id, label: n.label, x: Math.round(r.x), y: Math.round(r.y), vis, cover };
+  });
+  let probeInfo = null;
+  if (probe) probeInfo = { client: probe, viaRect: M.screenToBoard(probe, board), viaScroll: M.screenToBoardViaScroll(probe, origin, scroll, boardOffset), hit: whatIsAt(probe) };
+  let g = null;
+  if (gesture) g = {
+    label: notes.find(n => n.id === gesture.noteId).label,
+    cachedTrash: gesture.cachedTrashRect, liveTrash: trash, trashValid: M.sameRect(gesture.cachedTrashRect, trash),
+    cachedBoard: gesture.cachedBoardRect, liveBoard: board, boardValid: M.sameRect(gesture.cachedBoardRect, board),
+    drift: M.pointerDrift(gesture, board), client: gesture.client, preview: gesture.preview,
+  };
+  post({ type: 'report', state: {
+    layout, reserve, win: { w: innerWidth, h: innerHeight }, scroll, scrollMax: layout === 'page'
+      ? { x: document.documentElement.scrollWidth - document.documentElement.clientWidth, y: document.documentElement.scrollHeight - document.documentElement.clientHeight }
+      : { x: scroller().scrollWidth - scroller().clientWidth, y: scroller().scrollHeight - scroller().clientHeight },
+    sb, board, trash, toolbar, toolbarClip: Math.max(0, toolbarEl.scrollWidth - toolbarEl.clientWidth),
+    visible, probe: probeInfo, gesture: g, notes: noteRows, event,
+  }});
+}
+
+// ---- Commands from the page ----
+function noteCenter(id) { const el = document.querySelector(`.note[data-id="${id}"]`); const r = R(el); return { x: Math.round(r.left + Math.min(60, r.width / 2)), y: Math.round(r.top + Math.min(40, r.height / 2)) }; }
+const center = r => ({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
+addEventListener('message', e => {
+  const c = e.data;
+  switch (c.cmd) {
+    case 'reset':
+      layout = c.layout; reserve = !!c.reserve; notes = NOTES(); gesture = null; probe = null; nextId = 6;
+      build(); scrollToXY(0, 0); event = { tone: 'info', text: c.text || 'Started over.' }; logLine(event.text); break;
+    case 'regions': regions = c.on; document.body.classList.toggle('regions', regions); break;
+    case 'scrollTo': scrollToXY(c.x, c.y); { const s = getScroll(); setEvent('info', `Scrolled to ${s.x}, ${s.y}${gesture ? ' (mid-Gesture, pointer did not move)' : ''}.`); } break;
+    case 'scrollBy': { const s = getScroll(); scrollToXY(s.x + c.dx, s.y + c.dy); const t = getScroll(); setEvent('info', `Scrolled to ${t.x}, ${t.y}${gesture ? ' (mid-Gesture, pointer did not move)' : ''}.`); } break;
+    case 'point': probe = { x: c.x, y: c.y }; setEvent('info', `Probe dropped at screen ${c.x}, ${c.y}.`); drawPointer(); break;
+    case 'press': startGesture(c.id, noteCenter(c.id)); return;
+    case 'moveTo': {
+      const t = c.target === 'trash' ? center(R($('#trash'))) : c.target === 'cachedTrash' ? center(gesture.cachedTrashRect) : c.target;
+      setEvent('info', c.target === 'trash' ? 'Pointer moved onto the Trash zone you can see.' : c.target === 'cachedTrash' ? 'Pointer moved to where the Trash zone was at press time.' : `Pointer moved to ${t.x}, ${t.y}.`); moveTo(t); return;
+    }
+    case 'release': endGesture(); return;
+  }
+  schedule();
+});
+build(); post({ type: 'ready' }); report();
+</script>
+</template>
+
+<!-- ================= Page shell ================= -->
+<script>
+const PRESETS = [[1920, 1080], [1440, 900], [1280, 800], [1024, 768], [900, 600], [640, 480]];
+const LAYOUTS = [
+  ['decided', 'Decided: scroll container'],
+  ['inside', 'Wrong: Trash inside the scrolling content'],
+  ['page', 'Alternative: page scrolls'],
+];
+const LAYOUT_NAME = Object.fromEntries(LAYOUTS);
+let win = { w: 1280, h: 800 }, layout = 'decided', reserve = false, regions = true;
+let ready = false, queue = [], last = null, prevFacts = {}, activeWalk = 0, stepIdx = 0;
+const frame = document.getElementById('frame'), stageWrap = document.getElementById('stageWrap');
+const fmt = (p) => `${Math.round(p.x)}, ${Math.round(p.y)}`;
+const fmtR = (r) => `left ${Math.round(r.left)}, top ${Math.round(r.top)} · ${Math.round(r.width)}×${Math.round(r.height)}`;
+
+// Build the iframe document: pure model source + the window's own script.
+(function boot() {
+  const src = document.getElementById('frame-src').innerHTML;
+  const close = '</' + 'script>';
+  frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8">' +
+    '<script>const CoordModel = (' + CoordModelFactory.toString() + ')();' + close +
+    '</head><body>' + src + '</body></html>';
+})();
+addEventListener('message', (e) => {
+  if (e.source !== frame.contentWindow) return;
+  const m = e.data;
+  if (m.type === 'ready') { ready = true; queue.forEach(c => frame.contentWindow.postMessage(c, '*')); queue = []; }
+  if (m.type === 'report') { last = m.state; renderState(); }
+  if (m.type === 'log') addLog(m.text);
+});
+function send(cmd) { if (!ready) queue.push(cmd); else frame.contentWindow.postMessage(cmd, '*'); }
+
+function sizeFrame() {
+  const avail = stageWrap.clientWidth || 800;
+  const s = Math.min(1, avail / win.w);
+  frame.style.width = win.w + 'px'; frame.style.height = win.h + 'px';
+  frame.style.transform = `scale(${s})`;
+  stageWrap.style.height = Math.round(win.h * s) + 'px';
+  document.getElementById('winlabel').textContent = `Browser window ${win.w}×${win.h}${win.w < 1024 || win.h < 768 ? ' (below the brief’s 1024×768 minimum)' : ''} · shown at ${Math.round(s * 100)}%`;
+  renderControls();
+}
+addEventListener('resize', sizeFrame);
+function setWin(w, h) { win = { w, h }; sizeFrame(); }
+function resetWorld(opts = {}) {
+  if (opts.layout) layout = opts.layout;
+  reserve = !!opts.reserve;
+  if (opts.win) setWin(...opts.win);
+  send({ cmd: 'reset', layout, reserve, text: opts.text });
+  send({ cmd: 'regions', on: regions });
+  renderControls();
+}
+
+function renderControls() {
+  const p = document.getElementById('presets'); p.innerHTML = '';
+  for (const [w, h] of PRESETS) {
+    const b = document.createElement('button'); b.textContent = `${w}×${h}`;
+    if (w === win.w && h === win.h) b.className = 'on';
+    b.onclick = () => setWin(w, h); p.appendChild(b);
+  }
+  const l = document.getElementById('layouts'); l.innerHTML = '';
+  for (const [id, name] of LAYOUTS) {
+    const b = document.createElement('button'); b.textContent = name;
+    if (id === layout) b.className = 'on';
+    b.onclick = () => resetWorld({ layout: id, text: `Switched to: ${name}.` }); l.appendChild(b);
+  }
+}
+document.getElementById('reset').onclick = () => resetWorld({ reserve });
+document.getElementById('regions').onclick = (e) => { regions = !regions; e.target.classList.toggle('on', regions); send({ cmd: 'regions', on: regions }); };
+
+function addLog(text) {
+  const ul = document.getElementById('log'), li = document.createElement('li');
+  li.textContent = text; ul.prepend(li);
+  while (ul.children.length > 30) ul.lastChild.remove();
+}
+
+function renderState() {
+  const s = last;
+  const ev = document.getElementById('event'); ev.className = 'event ' + s.event.tone; ev.textContent = s.event.text;
+  const rows = [];
+  const sep = (t) => rows.push(['__sep', t]);
+  sep('Layout');
+  rows.push(['Layout', LAYOUT_NAME[s.layout] + (s.layout === 'page' ? (s.reserve ? ' (space reserved under toolbar)' : ' (toolbar overlays the Board)') : '')]);
+  rows.push(['Window', `${s.win.w}×${s.win.h}`]);
+  rows.push(['Who scrolls', s.layout === 'page' ? 'the whole page (window scrollbars)' : 'the scroll container only; the page never scrolls']);
+  rows.push(['Scroll offset', `${fmt(s.scroll)}  (max ${fmt(s.scrollMax)})`]);
+  rows.push(['Scrollbar thickness', s.sb.w || s.sb.h ? `${s.sb.w}px / ${s.sb.h}px` : '0 (overlay scrollbars on this system)']);
+  rows.push(['Visible part of Board', `x ${Math.round(s.visible.x0)}–${Math.round(s.visible.x1)}, y ${Math.round(s.visible.y0)}–${Math.round(s.visible.y1)}`]);
+  sep('Screen rects (getBoundingClientRect)');
+  rows.push(['Toolbar', fmtR(s.toolbar) + (s.toolbarClip ? `  · <span class="badv">content clipped by ${s.toolbarClip}px</span>` : '')]);
+  rows.push(['Board', fmtR(s.board)]);
+  rows.push(['Trash zone', fmtR(s.trash)]);
+  if (s.probe) {
+    sep('Probe: screen → Board');
+    const same = Math.round(s.probe.viaRect.x) === Math.round(s.probe.viaScroll.x) && Math.round(s.probe.viaRect.y) === Math.round(s.probe.viaScroll.y);
+    rows.push(['Screen point', fmt(s.probe.client)]);
+    rows.push(['Under it', s.probe.hit]);
+    rows.push(['client − boardRect', `<b>${fmt(s.probe.viaRect)}</b>`]);
+    rows.push(['screen − origin + scroll', `${fmt(s.probe.viaScroll)} ${same ? '<span class="good">same ✓</span>' : '<span class="badv">differs</span>'}`]);
+  }
+  if (s.gesture) {
+    const g = s.gesture;
+    sep(`Gesture on “${g.label}”`);
+    rows.push(['Pointer (screen)', fmt(g.client)]);
+    rows.push(['Note preview (Board)', fmt(g.preview)]);
+    rows.push(['Trash rect cached at press', fmtR(g.cachedTrash)]);
+    rows.push(['Trash rect now', fmtR(g.liveTrash)]);
+    rows.push(['Cached Trash rect still true?', g.trashValid ? '<span class="good">yes ✓</span>' : '<span class="badv">NO: stale, drops will be judged against the dashed box</span>']);
+    rows.push(['Cached Board rect still true?', g.boardValid ? '<span class="good">yes ✓</span>' : '<span class="badv">no: the Board moved under the pointer (open edge, next round)</span>']);
+    rows.push(['Pointer slid off its grab point by', g.drift.x || g.drift.y ? `<span class="badv">${fmt(g.drift)}</span>` : '0, 0']);
+  }
+  const facts = document.getElementById('facts'); facts.innerHTML = '';
+  const nextFacts = {};
+  for (const [k, v] of rows) {
+    if (k === '__sep') { const d = document.createElement('div'); d.className = 'sep'; d.textContent = v; facts.appendChild(d); continue; }
+    nextFacts[k] = v;
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.innerHTML = `<span class="${prevFacts[k] !== undefined && prevFacts[k] !== v ? 'changed' : ''}">${v}</span>`;
+    facts.append(dt, dd);
+  }
+  prevFacts = nextFacts;
+  const t = document.getElementById('notes');
+  t.innerHTML = '<tr><th>Note</th><th>Board x, y</th><th>On screen</th></tr>' + s.notes.map(n =>
+    `<tr><td>${n.label}</td><td>${n.x}, ${n.y}</td><td><span class="pill ${n.vis}">${n.vis === 'offscreen' ? 'off-screen' : n.vis}</span>${n.cover ? ` <span class="pill covered">${n.cover}</span>` : ''}</td></tr>`).join('');
+}
+
+// ---- Walkthroughs ----
+const WALKS = [
+  {
+    title: '1 · Three regions',
+    setup: { layout: 'decided', win: [1280, 800] },
+    situation: 'The decided layout at 1280×800. Four things on screen: the toolbar strip, the scroll container (the window onto the Board), the Board itself (1920×1080, a child of the container), and the Trash zone (a sibling of the scroller, positioned over its corner).',
+    predict: 'You scroll the Board 400 right and 250 down. Of the four screen rects (toolbar, scroll container, Board, Trash), which ones change?',
+    answer: 'Only the Board’s. Its rect moves to left −400, top 48−250 = −202. The toolbar and Trash rects stay identical, because they are not inside the scrolling content. The container never moves either: it is the frame, and the Board slides inside it. The DOM: <code>header#toolbar</code> + <code>div#viewport{position:relative}</code> › [<code>div#scroller{overflow:auto}</code> › <code>div#board 1920×1080</code>] + <code>div#trash{position:absolute; right; bottom}</code>.',
+    steps: [
+      ['Scroll the Board 400 right, 250 down', { cmd: 'scrollTo', x: 400, y: 250 }],
+      ['Scroll to the far bottom-right corner', { cmd: 'scrollTo', x: 99999, y: 99999 }],
+      ['Scroll back to the top-left', { cmd: 'scrollTo', x: 0, y: 0 }],
+    ],
+  },
+  {
+    title: '2 · The Board rect already includes scroll',
+    setup: { layout: 'decided', win: [1280, 800] },
+    situation: 'Drop a probe at a fixed screen point and convert it to Board coordinates two ways: the decided <code>client − boardRect</code>, and the Q1 prototype’s <code>screen − containerOrigin + scroll</code>.',
+    predict: 'Probe at screen (600, 400). Then scroll 300 right and 200 down without moving the pointer, and probe the same screen point again. Which Board point is under it now, and do the two formulas still agree?',
+    answer: 'First (600, 352): the toolbar takes 48px. After scrolling, (900, 552): +300, +200. The two formulas always agree because they are the same equation. <code>boardRect.left</code> <i>is</i> <code>containerOrigin.x − scrollLeft</code>, so <code>client − boardRect.left = client − origin + scrollLeft</code>. Reading the rect at press time means you never touch <code>scrollLeft</code> yourself, and the formula still works if the Board ever gets padding, a border or a different parent.',
+    steps: [
+      ['Probe screen point (600, 400)', { cmd: 'point', x: 600, y: 400 }],
+      ['Scroll 300 right, 200 down (pointer stays still)', { cmd: 'scrollTo', x: 300, y: 200 }],
+      ['Probe screen point (600, 400) again', { cmd: 'point', x: 600, y: 400 }],
+    ],
+  },
+  {
+    title: '3 · Cached Trash rect stays true',
+    setup: { layout: 'decided', win: [1280, 800] },
+    situation: 'A Gesture caches the Trash rect at press time (pointer capture means no hover events, so it uses rectangle maths). Here the Board scrolls in the middle of the Gesture.',
+    predict: 'Press “Call dentist”, scroll the Board 120 down mid-Gesture, move onto the Trash, release. Is the Note deleted?',
+    answer: 'Yes. The Trash zone is not in the scrolling content, so its screen rect at release is the one cached at press. The “cached Trash rect still true?” row stays ✓ throughout. (The Note sliding away from the pointer after the scroll is walkthrough 5, the open edge.)',
+    steps: [
+      ['Press “Call dentist”', { cmd: 'press', id: 'n2' }],
+      ['Scroll the Board 120 down (mid-Gesture)', { cmd: 'scrollBy', dx: 0, dy: 120 }],
+      ['Move the pointer onto the Trash zone', { cmd: 'moveTo', target: 'trash' }],
+      ['Release', { cmd: 'release' }],
+    ],
+  },
+  {
+    title: '4 · Contrast: Trash inside the scrolling content',
+    setup: { layout: 'inside', win: [1280, 800] },
+    situation: 'The wrong nesting: the Trash zone is placed at the visible corner but <i>inside</i> the Board, so it scrolls with it. Same Gesture code, same cached rect. This is the Q1 prototype’s walkthrough 5 failure, reproduced with a real layout.',
+    predict: 'Same moves as walkthrough 3. Is the Note deleted when you release on the Trash you can see? And what happens if you then drop a Note on the empty spot where the Trash used to be?',
+    answer: 'Not deleted: the Trash scrolled up 120px, and the drop is judged against the dashed cached box. The second drop, on empty space, <b>deletes</b> the Note. A stale rect fails both ways. Re-measuring on every move would hide the bug, but would also mean layout reads on every <code>pointermove</code> and still the wrong mental model: the Trash is a screen-level thing.',
+    steps: [
+      ['Press “Call dentist”', { cmd: 'press', id: 'n2' }],
+      ['Scroll the Board 120 down (mid-Gesture)', { cmd: 'scrollBy', dx: 0, dy: 120 }],
+      ['Move the pointer onto the Trash zone you can see', { cmd: 'moveTo', target: 'trash' }],
+      ['Release', { cmd: 'release' }],
+      ['Press “Groceries”', { cmd: 'press', id: 'n1' }],
+      ['Scroll 120 more (mid-Gesture)', { cmd: 'scrollBy', dx: 0, dy: 120 }],
+      ['Move to where the Trash was at press time', { cmd: 'moveTo', target: 'cachedTrash' }],
+      ['Release', { cmd: 'release' }],
+    ],
+  },
+  {
+    title: '5 · Open edge: scroll mid-Gesture',
+    setup: { layout: 'decided', win: [1280, 800] },
+    situation: 'What does <b>not</b> stay valid in the decided layout. The cached Board rect is a snapshot, and the Board moves under a captured pointer when the container scrolls. <b>Deliberately left to the next grilling round</b>: only name it.',
+    predict: 'Press “Call dentist”, then scroll 200 down without moving the pointer. Where is the Note on screen, and where is the pointer?',
+    answer: 'The Note keeps its Board position (520, 300), because <code>clientX/Y</code> deltas are zero, so it scrolls up with the Board. The pointer stays where it was, so they drift apart by exactly (0, 200). Release commits the Note where it started. The browser fires no <code>pointermove</code> on scroll, so nothing in the Gesture notices. Options for next round: listen to the container’s <code>scroll</code> event and fold the scroll delta into the preview, or re-read the Board rect.',
+    steps: [
+      ['Press “Call dentist”', { cmd: 'press', id: 'n2' }],
+      ['Scroll 200 down (pointer stays still)', { cmd: 'scrollBy', dx: 0, dy: 200 }],
+      ['Release without moving', { cmd: 'release' }],
+    ],
+  },
+  {
+    title: '6 · Below 1024×768',
+    setup: { layout: 'decided', win: [1024, 768] },
+    situation: 'The brief’s minimum is 1024×768. What scrolls and what stays put as the window gets smaller?',
+    predict: 'At 1024×768, 900×600 and 640×480: does the page ever scroll? Is the toolbar ever clipped? Does the Trash zone ever cover the scrollbar?',
+    answer: 'The page never scrolls (<code>overflow: hidden</code> on a 100vh body). Only the container does, and its scroll range simply grows. The Trash zone is offset by the measured scrollbar thickness, so it never sits on the scrollbar. The toolbar strip is <code>nowrap; overflow: hidden</code>, so it clips once the window is narrower than its content (about 690px here): at 640 the last buttons disappear. That is outside the brief’s minimum, so it doesn’t matter, but it’s a one-line fix (<code>flex-wrap</code> or <code>overflow-x: auto</code>) if asked.',
+    steps: [
+      ['Scroll to the far corner at 1024×768', { cmd: 'scrollTo', x: 99999, y: 99999 }],
+      ['Shrink the window to 900×600', { win: [900, 600] }],
+      ['Shrink the window to 640×480', { win: [640, 480] }],
+    ],
+  },
+  {
+    title: '7 · The alternative: page scrolls',
+    setup: { layout: 'page', win: [1280, 800] },
+    situation: 'The rejected option: no container. The document scrolls, and the toolbar and Trash zone are <code>position: fixed</code> overlays.',
+    predict: 'With nothing scrolled, can you see the “Top edge” Note at Board y = 8? Probe screen (760, 30): what is under it? After scrolling, do the two formulas still agree?',
+    answer: '“Top edge” is under the toolbar, and the probe lands on the toolbar, not the Board. Reserving space (<code>margin-top: 48px</code>) fixes scroll = 0, but as soon as you scroll the Board slides under the toolbar again. The Trash zone is fixed, so its cached rect is fine here too, and the formulas agree. <b>The coordinate maths is not the argument; ownership of scrolling and overlap is.</b> Also note “Who scrolls: the whole page”: window scrollbars sit alongside the toolbar, not just the Board.',
+    steps: [
+      ['Probe screen point (760, 30)', { cmd: 'point', x: 760, y: 30 }],
+      ['Scroll the page 250 down', { cmd: 'scrollTo', x: 0, y: 250 }],
+      ['Probe screen point (760, 200)', { cmd: 'point', x: 760, y: 200 }],
+      ['Start over with space reserved under the toolbar', { reset: { layout: 'page', reserve: true } }],
+      ['Scroll the page 250 down', { cmd: 'scrollTo', x: 0, y: 250 }],
+    ],
+  },
+];
+
+function renderTabs() {
+  const tabs = document.getElementById('tabs'); tabs.innerHTML = '';
+  WALKS.forEach((w, i) => {
+    const b = document.createElement('button'); b.textContent = w.title;
+    if (i === activeWalk) b.className = 'on';
+    b.onclick = () => startWalk(i); tabs.appendChild(b);
+  });
+}
+function startWalk(i) {
+  activeWalk = i; stepIdx = 0;
+  const w = WALKS[i];
+  resetWorld({ ...w.setup, text: `Walkthrough “${w.title}” started.` });
+  renderTabs(); renderScenario();
+}
+function runStep(j) {
+  const [, action] = WALKS[activeWalk].steps[j];
+  if (action.win) setWin(...action.win);
+  else if (action.reset) resetWorld({ ...action.reset, text: 'Started over with space reserved under the toolbar.' });
+  else send(action);
+  stepIdx = j + 1; renderScenario();
+}
+function renderScenario() {
+  const w = WALKS[activeWalk];
+  const el = document.getElementById('scenario');
+  el.innerHTML = `<div class="scenario">
+    <div>
+      <p>${w.situation}</p>
+      <div class="predict"><b>Predict first:</b> ${w.predict}</div>
+      <details><summary>Show the answer (after you've run the steps)</summary><div>${w.answer}</div></details>
+    </div>
+    <div><ol class="steps">${w.steps.map(([label], j) =>
+      `<li class="${j < stepIdx ? 'done' : ''}"><button data-j="${j}" ${j === stepIdx ? '' : 'disabled'}>${label}</button></li>`).join('')}</ol>
+      <p class="hint">${stepIdx >= w.steps.length ? 'Done. Press the tab again to replay, or keep poking in free play below.' : 'Each step is a real action on the window below.'}</p>
+    </div></div>`;
+  el.querySelectorAll('button[data-j]').forEach(b => b.onclick = () => runStep(+b.dataset.j));
+}
+
+sizeFrame();
+renderTabs();
+startWalk(0);
+</script>
+</body>
+</html>

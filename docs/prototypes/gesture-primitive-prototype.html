@@ -1,0 +1,502 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 005 (Gesture engine design), Q1 only.
+  Answers: "Separate hooks that reuse lifecycle helpers (a') vs one Gesture session with pluggable kinds (b):
+  where do the lifecycle obligations live, and what happens when one is forgotten?"
+  The GestureModel script block is pure (a fake environment stands in for the DOM). Everything else is shell.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesture primitive: a′ vs b</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc;
+    --ok: #1f7a4a; --ok-soft: #e4f4ea; --bad: #b42318; --bad-soft: #fde7e5;
+    --note: #fde68a; --note-edge: #d9b84a; --paper: #fbfaf7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 24px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 980px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section + section { margin-top: 18px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .tabs button { border-radius: 999px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
+  .row .tag { width: 90px; }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  ol.steps li { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  ol.steps li::before { counter-increment: s; content: counter(s); width: 20px; text-align: right; color: var(--muted); font-size: 12px; }
+  ol.steps li.done::before { content: "✓"; color: var(--ok); }
+  ol.steps button { text-align: left; flex: 1; }
+  .watch { color: var(--muted); margin: 6px 0 12px; }
+
+  /* Mini window */
+  .viewport { position: relative; width: 480px; height: 280px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #e9e7e1; }
+  .board { position: absolute; background: var(--paper); outline: 1px solid var(--line); }
+  .note { position: absolute; background: var(--note); border: 1px solid var(--note-edge); border-radius: 3px; font-size: 10px; padding: 2px 4px; }
+  .note.home { background: transparent; border: 1px dashed var(--note-edge); }
+  .note.over { outline: 2px solid var(--bad); }
+  .note.ghost { background: var(--bad-soft); border: 1px solid var(--bad); color: var(--bad); }
+  .handle { position: absolute; right: 0; bottom: 0; width: 6px; height: 6px; background: var(--note-edge); }
+  .trash { position: absolute; background: var(--bad-soft); border: 1px solid var(--bad); border-radius: 6px; color: var(--bad); font-size: 10px; display: grid; place-items: center; }
+  .pointer { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--accent); }
+  .pointer.down { background: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+
+  dl.state { display: grid; grid-template-columns: 170px 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+  dl.state dt { color: var(--muted); }
+  dl.state dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .good { color: var(--ok); font-weight: 600; }
+  .log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; height: 170px; overflow: auto; white-space: pre-wrap; }
+  .log .bad { font-weight: 600; }
+
+  pre.code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow: auto; margin: 0; }
+  pre.code mark { background: #fdf2d8; color: inherit; border-radius: 2px; }
+  pre.code .kind { background: var(--ok-soft); border-radius: 2px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Prototype · ticket 005 · Q1</span>
+  <h1>One Gesture session, or separate hooks that reuse helpers?</h1>
+  <p class="lede">Both designs share code. The real question is <b>who owns the lifecycle order</b>: what has to happen on release, on cancel and on lost capture, the "run cleanup only once" guard, and detaching the scroll listener. Under <b>separate hooks + helpers (a′)</b>, each hook wires that order itself. Under <b>one session + kinds (b)</b>, it is written once, and a kind supplies only two pure functions. Push the same pointer events through both, and flip the "forgot one obligation" switch to see what that costs.</p>
+
+  <section class="card">
+    <h2>The code shape of each option</h2>
+    <div class="tabs" id="codeTabs"></div>
+    <pre class="code" id="codeView"></pre>
+    <p class="watch" style="margin-top:8px"><mark style="background:#fdf2d8">Yellow</mark> = lifecycle obligations each hook author must get right. <span style="background:var(--ok-soft)">Green</span> = the part that is genuinely per-kind.</p>
+    <table id="obligations"></table>
+  </section>
+
+  <section class="card">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="scenarioTabs"></div>
+    <div class="grid">
+      <div><p id="scenarioText"></p><p class="watch" id="scenarioWatch"></p></div>
+      <ol class="steps" id="scenarioSteps"></ol>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Free play</h2>
+    <div class="row"><span class="tag">Runtime</span>
+      <button data-variant="aprime">Separate hooks + helpers (a / a′)</button>
+      <button data-variant="b">One session + kinds (b / b′)</button>
+      <label class="toggle" style="margin-left:12px"><input type="checkbox" id="forgot"> Resize hook's author forgot to detach scroll on cancel</label>
+    </div>
+    <div class="row"><span class="tag">Press</span>
+      <button data-act="pressBody">Press on the Note's body (move)</button>
+      <button data-act="pressHandle">Press on the resize handle</button>
+    </div>
+    <div class="row"><span class="tag">During</span>
+      <button data-act="moveRight">Move pointer → 60px</button>
+      <button data-act="moveDown">Move pointer ↓ 40px</button>
+      <button data-act="moveToTrash">Move pointer onto the Trash zone</button>
+      <button data-act="scrollDown">Roll wheel: Board scrolls ↓ 120px</button>
+      <button data-act="scrollRight">Board scrolls → 120px</button>
+    </div>
+    <div class="row"><span class="tag">End</span>
+      <button data-act="release">Release (pointerup, then lost capture)</button>
+      <button data-act="cancel">Browser cancels (pointercancel, then lost capture)</button>
+      <button data-act="reset" style="margin-left:auto">Reset everything</button>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div>
+        <div class="viewport" id="viewport"></div>
+        <p class="watch">The window, at 40% scale. Dashed = the Note's committed position. Solid = what's on screen (the live preview during a Gesture). Red = a preview written by a Gesture that has already ended.</p>
+        <div class="log" id="log"></div>
+      </div>
+      <div><dl class="state" id="state"></dl></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ===================== GestureModel: pure, no DOM ===================== */
+const GestureModel = (() => {
+  const BOARD = { w: 1920, h: 1080 }, MIN = { w: 80, h: 60 }, WINDOW = { w: 1200, h: 700 };
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const clampToBoard = r => {
+    const width = clamp(r.width, MIN.w, BOARD.w), height = clamp(r.height, MIN.h, BOARD.h);
+    return { x: clamp(r.x, 0, BOARD.w - width), y: clamp(r.y, 0, BOARD.h - height), width, height };
+  };
+  const moveRect = (n, d) => clampToBoard({ x: n.x + d.x, y: n.y + d.y, width: n.width, height: n.height });
+  const resizeRect = (n, d) => clampToBoard({ x: n.x, y: n.y, width: Math.min(n.width + d.x, BOARD.w - n.x), height: Math.min(n.height + d.y, BOARD.h - n.y) });
+  const roundRect = r => ({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+  const inRect = (p, r) => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
+  const rectKey = r => `${r.x},${r.y},${r.width},${r.height}`;
+
+  /* A fake environment standing in for the DOM: capture, scroll listeners, preview writes, dispatch. */
+  function createEnv() {
+    const env = {
+      scroll: { x: 0, y: 0 }, pointer: { x: 600, y: 350 }, pressed: false,
+      trashRect: { x: WINDOW.w - 140, y: WINDOW.h - 140, width: 120, height: 120 },
+      note: { id: 'n1', x: 200, y: 150, width: 200, height: 160 },
+      capture: null, scrollListeners: [], previews: [], dispatched: [], log: [], cleanups: 0, nextId: 1,
+      say(msg, cls) { env.log.push({ msg, cls }); },
+      setCapture(gesture, handlers) { env.capture = { gesture, handlers }; },
+      releaseCapture() { // explicit release fires lostpointercapture, as in browsers
+        const c = env.capture; if (!c) return; env.capture = null;
+        env.say(`  · lostpointercapture → Gesture #${c.gesture.id}`); c.handlers.lost();
+      },
+      addScroll(gesture, fn) { env.scrollListeners.push({ gesture, fn }); },
+      removeScroll(fn) { env.scrollListeners = env.scrollListeners.filter(l => l.fn !== fn); },
+      writePreview(gesture, preview) {
+        env.previews = env.previews.filter(p => p.gesture !== gesture);
+        env.previews.push({ gesture, ...preview });
+        if (gesture.done) env.say(`  ⚠ Gesture #${gesture.id} (${gesture.kind}) already ended but just wrote a preview`, 'bad');
+      },
+      clearPreview(gesture) { env.previews = env.previews.filter(p => p.gesture !== gesture); },
+      dispatch(action) {
+        env.dispatched.push(action); env.say(`  → dispatch ${JSON.stringify(action)}`, 'good');
+        if (action.type === 'delete') env.note = null;
+        else if (env.note) Object.assign(env.note, roundRect(clampToBoard({ ...env.note, ...action.rect })));
+      },
+      // Browser-side events
+      pointer_(type) {
+        const c = env.capture; if (!c) return;
+        if (type === 'move') c.handlers.move({ ...env.pointer });
+        if (type === 'up') { env.pressed = false; c.handlers.up({ ...env.pointer }); env.releaseCapture(); /* implicit release, no-op if already released */ }
+        if (type === 'cancel') { env.pressed = false; c.handlers.cancel(); env.releaseCapture(); }
+      },
+      scrollBy(dx, dy) {
+        const nx = clamp(env.scroll.x + dx, 0, BOARD.w - WINDOW.w), ny = clamp(env.scroll.y + dy, 0, BOARD.h - WINDOW.h);
+        if (nx === env.scroll.x && ny === env.scroll.y) { env.say('scroll: already at the edge'); return; }
+        env.scroll = { x: nx, y: ny };
+        env.say(`scroll → (${nx}, ${ny}); ${env.scrollListeners.length} scroll listener(s) run`);
+        [...env.scrollListeners].forEach(l => l.fn());
+      },
+    };
+    return env;
+  }
+
+  /* ---------- (b) one Gesture session; kinds plug in preview + commit ---------- */
+  const moveKind = {
+    name: 'move',
+    preview: (note, d, ctx) => ({ rect: moveRect(note, d), overTrash: inRect(ctx.pointer, ctx.trashRect) }),
+    commit: (note, d, ctx) => inRect(ctx.pointer, ctx.trashRect) ? { type: 'delete', id: note.id }
+      : (d.x || d.y) ? { type: 'move', id: note.id, rect: roundRect(moveRect(note, d)) } : null,
+  };
+  const resizeKind = {
+    name: 'resize',
+    preview: (note, d) => ({ rect: resizeRect(note, d), overTrash: false }),
+    commit: (note, d) => { const r = roundRect(resizeRect(note, d)); return rectKey(r) === rectKey(note) ? null : { type: 'resize', id: note.id, rect: r }; },
+  };
+
+  function startSession(env, kind, note, press) {
+    const s = { id: env.nextId++, kind: kind.name, noteId: note.id, from: { ...note }, press, pointer: press,
+      scrollAtPress: { ...env.scroll }, trashRect: { ...env.trashRect }, delta: { x: 0, y: 0 }, done: false };
+    const update = () => {
+      s.delta = { x: s.pointer.x - s.press.x + env.scroll.x - s.scrollAtPress.x, y: s.pointer.y - s.press.y + env.scroll.y - s.scrollAtPress.y };
+      env.writePreview(s, kind.preview(s.from, s.delta, s));
+    };
+    const finish = why => {
+      if (s.done) { env.say(`  · cleanup for #${s.id} already ran (${why}), skipped`); return; }
+      s.done = true; env.removeScroll(update); env.releaseCapture(); env.clearPreview(s); env.cleanups++;
+      env.say(`  · cleanup #${s.id} (${why}): scroll listener off, capture released, preview cleared`);
+    };
+    env.setCapture(s, {
+      move: p => { s.pointer = p; update(); },
+      up: p => { s.pointer = p; update(); const a = kind.commit(s.from, s.delta, s); finish('pointerup'); if (a) env.dispatch(a); else env.say('  · nothing to commit'); },
+      cancel: () => finish('pointercancel'),
+      lost: () => finish('lostpointercapture'),
+    });
+    env.addScroll(s, update);
+    return s;
+  }
+
+  /* ---------- (a′) separate hooks, each wiring the lifecycle with shared helpers ---------- */
+  const H = {
+    readPress: (env, note, press, kind) => ({ id: env.nextId++, kind, noteId: note.id, from: { ...note }, press, pointer: press,
+      scrollAtPress: { ...env.scroll }, trashRect: { ...env.trashRect }, delta: { x: 0, y: 0 }, done: false }),
+    boardDelta: (g, env) => ({ x: g.pointer.x - g.press.x + env.scroll.x - g.scrollAtPress.x, y: g.pointer.y - g.press.y + env.scroll.y - g.scrollAtPress.y }),
+    attachScroll: (env, g, fn) => { env.addScroll(g, fn); return () => env.removeScroll(fn); },
+  };
+
+  function startMoveHook(env, note, press) {
+    const g = H.readPress(env, note, press, 'move');
+    const render = () => { g.delta = H.boardDelta(g, env); env.writePreview(g, { rect: moveRect(g.from, g.delta), overTrash: inRect(g.pointer, g.trashRect) }); };
+    const detach = H.attachScroll(env, g, render);
+    const cleanup = why => {
+      if (g.done) { env.say(`  · cleanup for #${g.id} already ran (${why}), skipped`); return; }
+      g.done = true; detach(); env.releaseCapture(); env.clearPreview(g); env.cleanups++;
+      env.say(`  · cleanup #${g.id} (${why}): scroll listener off, capture released, preview cleared`);
+    };
+    env.setCapture(g, {
+      move: p => { g.pointer = p; render(); },
+      up: p => { g.pointer = p; render();
+        const a = inRect(g.pointer, g.trashRect) ? { type: 'delete', id: g.noteId } : (g.delta.x || g.delta.y) ? { type: 'move', id: g.noteId, rect: roundRect(moveRect(g.from, g.delta)) } : null;
+        cleanup('pointerup'); if (a) env.dispatch(a); else env.say('  · nothing to commit'); },
+      cancel: () => cleanup('pointercancel'),
+      lost: () => cleanup('lostpointercapture'),
+    });
+    return g;
+  }
+
+  function startResizeHook(env, note, press, forgot) {
+    const g = H.readPress(env, note, press, 'resize');
+    const render = () => { g.delta = H.boardDelta(g, env); env.writePreview(g, { rect: resizeRect(g.from, g.delta), overTrash: false }); };
+    const detach = H.attachScroll(env, g, render);
+    const cleanup = why => {
+      if (g.done) { env.say(`  · cleanup for #${g.id} already ran (${why}), skipped`); return; }
+      g.done = true; detach(); env.releaseCapture(); env.clearPreview(g); env.cleanups++;
+      env.say(`  · cleanup #${g.id} (${why}): scroll listener off, capture released, preview cleared`);
+    };
+    // The plausible slip: a hand-written cancel path that sets the guard but never detaches the scroll listener.
+    const onCancel = forgot
+      ? () => { g.done = true; env.clearPreview(g); env.say(`  · cancel #${g.id}: preview cleared (scroll listener NOT detached)`, 'bad'); }
+      : () => cleanup('pointercancel');
+    env.setCapture(g, {
+      move: p => { g.pointer = p; render(); },
+      up: p => { g.pointer = p; render(); const r = roundRect(resizeRect(g.from, g.delta));
+        const a = rectKey(r) === rectKey(g.from) ? null : { type: 'resize', id: g.noteId, rect: r };
+        cleanup('pointerup'); if (a) env.dispatch(a); else env.say('  · nothing to commit'); },
+      cancel: onCancel,
+      lost: () => cleanup('lostpointercapture'),
+    });
+    return g;
+  }
+
+  function press(env, variant, kind, forgot) {
+    if (!env.note || env.capture) return null;
+    const n = env.note;
+    env.pointer = kind === 'move'
+      ? { x: n.x - env.scroll.x + n.width / 2, y: n.y - env.scroll.y + n.height / 2 }
+      : { x: n.x - env.scroll.x + n.width - 3, y: n.y - env.scroll.y + n.height - 3 };
+    env.pressed = true;
+    const g = variant === 'b'
+      ? startSession(env, kind === 'move' ? moveKind : resizeKind, n, { ...env.pointer })
+      : kind === 'move' ? startMoveHook(env, n, { ...env.pointer }) : startResizeHook(env, n, { ...env.pointer }, forgot);
+    env.say(`pointerdown on ${kind === 'move' ? "the Note's body" : 'the resize handle'} → Gesture #${g.id} (${kind}) starts`);
+    return g;
+  }
+
+  return { createEnv, press, WINDOW, BOARD };
+})();
+
+/* ===================== Shell ===================== */
+const $ = id => document.getElementById(id);
+let env, variant = 'aprime';
+const S = 0.4;
+
+function reset(v) { env = GestureModel.createEnv(); if (v) variant = v; env.say(`— reset (runtime: ${variant === 'b' ? 'one session + kinds' : 'separate hooks + helpers'}) —`); }
+
+const actions = {
+  pressBody: () => GestureModel.press(env, variant, 'move', $('forgot').checked),
+  pressHandle: () => GestureModel.press(env, variant, 'resize', $('forgot').checked),
+  moveRight: () => { env.pointer = { x: env.pointer.x + 60, y: env.pointer.y }; env.say('pointermove → 60'); env.pointer_('move'); },
+  moveDown: () => { env.pointer = { x: env.pointer.x, y: env.pointer.y + 40 }; env.say('pointermove ↓ 40'); env.pointer_('move'); },
+  moveToTrash: () => { const t = env.trashRect; env.pointer = { x: t.x + t.width / 2, y: t.y + t.height / 2 }; env.say('pointermove onto the Trash zone'); env.pointer_('move'); },
+  scrollDown: () => env.scrollBy(0, 120),
+  scrollRight: () => env.scrollBy(120, 0),
+  release: () => { env.say('pointerup'); env.pointer_('up'); },
+  cancel: () => { env.say('pointercancel (native drag started)'); env.pointer_('cancel'); },
+  reset: () => reset(),
+};
+const needsGesture = ['moveRight', 'moveDown', 'moveToTrash', 'release', 'cancel'];
+const needsIdle = ['pressBody', 'pressHandle'];
+
+function fmtRect(r) { return r ? `x ${Math.round(r.x)}, y ${Math.round(r.y)}, ${Math.round(r.width)}×${Math.round(r.height)}` : '—'; }
+
+function render() {
+  document.querySelectorAll('[data-variant]').forEach(b => b.classList.toggle('on', b.dataset.variant === variant));
+  $('forgot').disabled = variant === 'b';
+  $('forgot').parentElement.title = variant === 'b' ? 'Under (b) a kind has no cancel path to forget: the session owns it.' : '';
+  document.querySelectorAll('[data-act]').forEach(b => {
+    const a = b.dataset.act;
+    b.disabled = (needsGesture.includes(a) && !env.capture) || (needsIdle.includes(a) && (!!env.capture || !env.note));
+  });
+
+  // Viewport
+  const vp = $('viewport'); vp.innerHTML = '';
+  const add = (cls, r, text) => { const d = document.createElement('div'); d.className = cls;
+    Object.assign(d.style, { left: r.x * S + 'px', top: r.y * S + 'px', width: r.width * S + 'px', height: r.height * S + 'px' });
+    if (text) d.textContent = text; vp.appendChild(d); return d; };
+  const toClient = r => ({ x: r.x - env.scroll.x, y: r.y - env.scroll.y, width: r.width, height: r.height });
+  add('board', toClient({ x: 0, y: 0, width: 1920, height: 1080 }));
+  const live = env.previews.find(p => env.capture && p.gesture === env.capture.gesture);
+  const stale = env.previews.filter(p => p.gesture.done);
+  if (env.note) {
+    if (live) add('note home', toClient(env.note));
+    const shown = live ? live.rect : env.note;
+    const el = add('note' + (live && live.overTrash ? ' over' : ''), toClient(shown), live ? `Gesture #${live.gesture.id}` : 'Note');
+    const h = document.createElement('div'); h.className = 'handle'; el.appendChild(h);
+  }
+  stale.forEach(p => add('note ghost', toClient(p.rect), `stale #${p.gesture.id}`));
+  add('trash', env.trashRect, 'Trash zone');
+  const pt = document.createElement('div'); pt.className = 'pointer' + (env.pressed ? ' down' : '');
+  Object.assign(pt.style, { left: env.pointer.x * S + 'px', top: env.pointer.y * S + 'px' }); vp.appendChild(pt);
+
+  // State
+  const g = env.capture && env.capture.gesture;
+  const rows = [
+    ['Runtime', variant === 'b' ? 'One session + kinds (b)' : 'Separate hooks + helpers (a′)'],
+    ['Active Gesture', g ? `#${g.id}, ${g.kind}` : 'none'],
+    ['Press point (window)', g ? `(${Math.round(g.press.x)}, ${Math.round(g.press.y)})` : '—'],
+    ['Scroll at press', g ? `(${g.scrollAtPress.x}, ${g.scrollAtPress.y})` : '—'],
+    ['Scroll now', `(${env.scroll.x}, ${env.scroll.y})`],
+    ['Board delta', g ? `(${Math.round(g.delta.x)}, ${Math.round(g.delta.y)}) = pointer delta + scroll delta` : '—'],
+    ['Live preview', live ? fmtRect(live.rect) + (live.overTrash ? ' · over the Trash zone' : '') : '—'],
+    ['Committed Note', env.note ? fmtRect(env.note) : '<span class="bad">deleted</span>'],
+    ['Pointer captured by', g ? `Gesture #${g.id}` : 'nobody'],
+    ['Scroll listeners attached', env.scrollListeners.length === 0 ? '<span class="good">0</span>'
+      : env.scrollListeners.map(l => l.gesture.done ? `<span class="bad">#${l.gesture.id} ${l.gesture.kind} (ended, leaked!)</span>` : `#${l.gesture.id} ${l.gesture.kind}`).join(', ')],
+    ['Stale previews on screen', stale.length ? `<span class="bad">${stale.length}</span>` : '<span class="good">0</span>'],
+    ['Cleanups run', String(env.cleanups)],
+    ['Actions dispatched', env.dispatched.length ? env.dispatched.map(a => a.type).join(', ') : 'none'],
+  ];
+  $('state').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  $('log').innerHTML = env.log.map(l => `<div class="${l.cls || ''}">${l.msg.replace(/</g, '&lt;')}</div>`).join('');
+  $('log').scrollTop = 1e9;
+}
+
+document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { actions[b.dataset.act](); render(); });
+document.querySelectorAll('[data-variant]').forEach(b => b.onclick = () => { reset(b.dataset.variant); render(); });
+$('forgot').onchange = () => render();
+
+/* ===================== Code views ===================== */
+const code = {
+  a: `// (a) Separate hooks, nothing shared. useResizeGesture is a near-copy of this.
+function useMoveGesture(note: Note) {
+  const live = useRef<Live | null>(null);
+  const onPointerDown = (e: PointerEvent) => {
+    <mark>e.currentTarget.setPointerCapture(e.pointerId);</mark>
+    <mark>const g = { press: client(e), scrollAtPress: readScroll(), trash: trashRect(), done: false };</mark>
+    <mark>const onScroll = () => render();</mark>
+    <mark>scroller.addEventListener('scroll', onScroll);</mark>
+    <mark>const cleanup = () => { if (g.done) return; g.done = true;</mark>
+    <mark>  scroller.removeEventListener('scroll', onScroll); clearTransform(el); live.current = null; };</mark>
+    <mark>const delta = () => add(sub(g.pointer, g.press), sub(readScroll(), g.scrollAtPress));</mark>
+    const render = () => <span class="kind">writeTransform(el, moveRect(note, delta()))</span>;
+    <mark>el.onpointermove = e => { g.pointer = client(e); render(); };</mark>
+    <mark>el.onpointerup = e => { const a = </mark><span class="kind">overTrash ? del(note) : move(note, delta())</span><mark>; cleanup(); dispatch(a); };</mark>
+    <mark>el.onpointercancel = cleanup;</mark>
+    <mark>el.onlostpointercapture = cleanup;</mark>
+  };
+  return { onPointerDown };
+}`,
+  aprime: `// (a′) Separate hooks reusing lifecycle helpers. Less typing, same wiring.
+function useResizeGesture(note: Note) {
+  const onPointerDown = (e: PointerEvent) => {
+    <mark>capture(e);</mark>
+    const g = readPress(e);                                  // helper
+    const render = () => <span class="kind">writeTransform(el, resizeRect(note, boardDelta(g)))</span>;
+    <mark>const detach = attachScroll(render);</mark>                    // helper, but I must keep the detach
+    <mark>const cleanup = () => { if (g.done) return; g.done = true; detach(); clearTransform(el); };</mark>
+    <mark>el.onpointermove = e => { g.pointer = client(e); render(); };</mark>
+    <mark>el.onpointerup = e => { const a = </mark><span class="kind">resize(note, boardDelta(g))</span><mark>; cleanup(); dispatch(a); };</mark>
+    <mark>el.onpointercancel = cleanup;</mark>        // ← the prototype's "forgot" switch breaks exactly here
+    <mark>el.onlostpointercapture = cleanup;</mark>
+  };
+  return { onPointerDown };
+}
+// useMoveGesture: the same eight marked lines again.`,
+  b: `// (b) One Gesture session owns the lifecycle; kinds are pure geometry.
+interface GestureKind<A> {
+  preview(from: Rect, delta: Vec, ctx: GestureCtx): Preview;   // pure
+  commit(from: Rect, delta: Vec, ctx: GestureCtx): A | null;    // pure
+}
+const moveKind: GestureKind<NoteAction> = {
+  <span class="kind">preview: (n, d, c) => ({ rect: moveRect(n, d), overTrash: inRect(c.pointer, c.trash) }),</span>
+  <span class="kind">commit:  (n, d, c) => inRect(c.pointer, c.trash) ? del(n) : move(n, d),</span>
+};
+const resizeKind: GestureKind<NoteAction> = {
+  <span class="kind">preview: (n, d) => ({ rect: resizeRect(n, d), overTrash: false }),</span>
+  <span class="kind">commit:  (n, d) => resize(n, d),</span>
+};
+
+// Written once: capture, press point, scroll compensation, up/cancel/lost, idempotent cleanup.
+function startGesture<A>(kind: GestureKind<A>, from: Rect, e: PointerEvent, io: GestureIO<A>): void { /* … */ }
+function useGesture<A>(kind: GestureKind<A>, from: Rect) { /* returns { onPointerDown } */ }`,
+  bprime: `// (b′) Your named hooks, as thin wrappers over (b). Same runtime as (b).
+export const useMoveGesture   = (note: Note) => useGesture(moveKind, note);
+export const useResizeGesture = (note: Note) => useGesture(resizeKind, note);
+
+// Call sites read exactly like (a):
+const move = useMoveGesture(note);
+const resize = useResizeGesture(note);
+<div onPointerDown={move.onPointerDown}> … <span onPointerDown={resize.onPointerDown} /> … </div>
+
+// A third kind later adds one object with two pure functions, plus a one-line hook.
+// No lifecycle line is touched.`,
+};
+const codeNames = { a: '(a) separate, duplicated', aprime: '(a′) separate + helpers', b: '(b) session + kinds', bprime: '(b′) named hooks over (b)' };
+let codeTab = 'aprime';
+function renderCode() {
+  $('codeTabs').innerHTML = '';
+  Object.keys(code).forEach(k => { const b = document.createElement('button'); b.textContent = codeNames[k]; b.className = k === codeTab ? 'on' : '';
+    b.onclick = () => { codeTab = k; renderCode(); }; $('codeTabs').appendChild(b); });
+  $('codeView').innerHTML = code[codeTab];
+}
+$('obligations').innerHTML = `
+  <tr><th>Option</th><th>Lifecycle obligations per kind</th><th>Adding a third kind means</th><th>Unit-testable without React</th></tr>
+  <tr><td>(a) separate, duplicated</td><td>~12 lines, re-typed in every hook</td><td>copy a hook and edit it</td><td>the geometry only</td></tr>
+  <tr><td>(a′) separate + helpers</td><td>~8 lines of <i>order</i> per hook (guard, detach, which handler calls what)</td><td>copy the wiring, call the helpers in the right order</td><td>helpers and geometry; the wiring isn't</td></tr>
+  <tr><td>(b) session + kinds</td><td>0: the kind writes <code>preview</code> and <code>commit</code></td><td>one object with two pure functions</td><td>kinds, plus the session driven by fake events (like this page)</td></tr>
+  <tr><td>(b′) named hooks over (b)</td><td>0</td><td>one object + a one-line hook</td><td>same as (b)</td></tr>`;
+
+/* ===================== Walkthroughs ===================== */
+const scenarios = [
+  { name: 'Move + wheel scroll', variant: 'b',
+    text: 'You move a Note, roll the wheel halfway through, then release. Both runtimes behave the same here; this is the happy path.',
+    watch: 'Watch the Board delta: after the scroll it is the pointer delta plus 120, so the Note stays under the pointer.',
+    steps: ['pressBody', 'moveRight', 'scrollDown', 'moveDown', 'release'] },
+  { name: 'Release over the Trash zone', variant: 'b',
+    text: 'You move a Note onto the Trash zone and let go. The session asks the move kind what to commit, and the kind says "delete".',
+    watch: 'The preview turns red while over the Trash zone; exactly one action is dispatched: delete.',
+    steps: ['pressBody', 'moveRight', 'moveToTrash', 'release'] },
+  { name: 'Browser cancels', variant: 'b',
+    text: 'Mid-Gesture the browser fires pointercancel (a native drag started), then lostpointercapture. Cleanup must run exactly once and nothing may be dispatched.',
+    watch: '"Cleanups run" goes to 1, the second call is skipped, and "Actions dispatched" stays empty.',
+    steps: ['pressHandle', 'moveRight', 'cancel'] },
+  { name: 'Forgotten obligation (a′)', variant: 'aprime', forgot: true,
+    text: 'Separate hooks + helpers. The resize hook\'s author hand-wrote the cancel path and forgot detach(). The resize is cancelled, then you start a normal move and roll the wheel.',
+    watch: 'After the cancel, a scroll listener from the dead resize Gesture stays attached. The scroll then wakes it, and a red stale preview appears next to the live move.',
+    steps: ['pressHandle', 'moveRight', 'cancel', 'pressBody', 'moveDown', 'scrollDown', 'release'] },
+  { name: 'Same steps under (b)', variant: 'b',
+    text: 'The exact same events under one session + kinds. The resize kind has no cancel path to get wrong, because it only supplies preview and commit.',
+    watch: 'Scroll listeners drop back to 0 after the cancel; no stale preview; the move commits cleanly.',
+    steps: ['pressHandle', 'moveRight', 'cancel', 'pressBody', 'moveDown', 'scrollDown', 'release'] },
+];
+const stepLabel = a => document.querySelector(`[data-act="${a}"]`).textContent;
+let scen = 0, stepAt = 0;
+function startScenario(i) {
+  scen = i; stepAt = 0; const s = scenarios[i];
+  $('forgot').checked = !!s.forgot; reset(s.variant);
+  $('scenarioTabs').innerHTML = '';
+  scenarios.forEach((sc, j) => { const b = document.createElement('button'); b.textContent = sc.name; b.className = j === i ? 'on' : '';
+    b.onclick = () => startScenario(j); $('scenarioTabs').appendChild(b); });
+  $('scenarioText').textContent = s.text; $('scenarioWatch').textContent = 'Watch: ' + s.watch;
+  renderSteps(); render();
+}
+function renderSteps() {
+  const s = scenarios[scen]; $('scenarioSteps').innerHTML = '';
+  s.steps.forEach((a, j) => { const li = document.createElement('li'); if (j < stepAt) li.className = 'done';
+    const b = document.createElement('button'); b.textContent = stepLabel(a); b.disabled = j !== stepAt;
+    b.onclick = () => { actions[a](); stepAt++; renderSteps(); render(); };
+    li.appendChild(b); $('scenarioSteps').appendChild(li); });
+}
+
+renderCode();
+startScenario(0);
+</script>
+</body>
+</html>

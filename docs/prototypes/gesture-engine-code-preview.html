@@ -1,0 +1,554 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 005 (Gesture engine design), rounds 2–3.
+  Answers: "Which file owns which responsibility, and which lines run for each pointer event?"
+  The code is a SKETCH of the planned modules (not compiled, action payloads illustrative).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gesture engine code preview</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gesture engine: who does what</h1>
+  <p class="lede">A sketch of the five files that the ticket 005 decisions produce. Read the diagram first, then choose a scenario on the left and step through it. Each step highlights the lines that run, in whichever files they're in. The code is a sketch: it isn't compiled, and the action payloads are only illustrative.</p>
+
+  <section class="card">
+    <h2>Five files, each answering one question</h2>
+    <div class="layers">
+      <div class="layer f-note"><b>Note.tsx</b><div class="q">Which Gesture kind?</div><small>Picks the kind at press time: body → move, handle → resize. Also dispatches raise.</small></div>
+      <div class="arrow">→</div>
+      <div class="layer f-hook"><b>useGesture.ts</b><div class="q">How do we talk to the DOM?</div><small>Filters presses, captures, attaches listeners, writes styles and data-attributes. Holds no decisions.</small></div>
+      <div class="arrow">→</div>
+      <div class="layer f-ctrl"><b>controller.ts</b><div class="q">When does each thing happen?</div><small>The lifecycle, written once: dead zone, scroll compensation, release/cancel/Escape, cleanup.</small></div>
+      <div class="arrow">→</div>
+      <div class="layer f-kind"><b>kinds.ts</b><div class="q">What does it show and save?</div><small>Pure: <code>preview()</code> returns a rect plus overTrash; <code>commit()</code> returns an action or null.</small></div>
+      <div class="arrow">→</div>
+      <div class="layer f-geo"><b>geometry.ts</b><div class="q">What is the maths?</div><small>Pure: moveRect, resizeRect, clampToBoard, pointInRect, roundRect.</small></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap">
+    <table>
+      <tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>
+      <tr><td>Note.tsx</td><td>Renders committed geometry as <code>left/top/width/height</code>. Chooses the kind and the <code>from</code> rect per press. Raises.</td><td>Sets <code>transform</code>. Tracks the pointer. Holds Gesture state.</td><td>Not unit-tested (thin JSX); exercised by hand in the app.</td></tr>
+      <tr><td>useGesture.ts</td><td>Filters presses (primary button, not inside an editable). <code>preventDefault</code>, <code>setPointerCapture</code>. The real DOM <code>io</code>: listeners, inline styles, <code>data-over-trash</code>. <code>dispose()</code> on unmount.</td><td>Decides anything about timing, deltas or actions.</td><td><code>isGesturePress</code> is a pure predicate with its own tests; the rest is wiring.</td></tr>
+      <tr><td>controller.ts</td><td>One session at a time. Press point, scroll at press, cached Trash zone rect. Dead zone. Scroll-compensated delta. Release → reset the preview, then dispatch. Cancel, Escape, lost capture → revert. Idempotent cleanup.</td><td>Touches the DOM or React. Knows what a move or a resize is.</td><td>Vitest with a fake <code>io</code> that records calls. No React, no jsdom.</td></tr>
+      <tr><td>kinds.ts</td><td>Per-kind <code>preview</code> and <code>commit</code>. Trash awareness (move only). <code>resizeKinds</code> built once.</td><td>Listeners, timing, cleanup.</td><td>Plain function tests.</td></tr>
+      <tr><td>geometry.ts</td><td>Rect maths, Board clamping, minimum size, rounding.</td><td>Anything else.</td><td>Plain function tests (004 already planned these).</td></tr>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain"></div>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What the sketch adds beyond the decisions so far</h2>
+    <p class="note">Writing real-looking code surfaced three details. They're refinements, not reversals, and they're open for you to accept or reject:</p>
+    <ol class="note">
+      <li><b>Kinds are generic over what they start from:</b> <code>GestureKind&lt;From extends Rect&gt;</code>. Move and resize are <code>GestureKind&lt;Note&gt;</code>, so their commit can read <code>note.id</code>. <code>start</code> is generic, so passing a plain rect to <code>moveKind</code> is a type error.</li>
+      <li><b>Capture moves out of <code>io</code> and into <code>start</code></b> (it's a DOM step, done right after filtering). In <code>io</code>, a single <code>listen(handlers) → detach</code> replaces separate scroll and keydown subscriptions: every listener is attached in one call and detached in one call, so none can be forgotten (Q1's bug class).</li>
+      <li><b>Because <code>listen</code> attaches native listeners on the captured element itself,</b> <code>lostpointercapture</code> still reaches the controller after the Note is removed. Round 3's Q5 gap therefore only affects React's <code>onLostPointerCapture</code>, which this design doesn't use. <code>dispose()</code> stays as a safety net for StrictMode and for browsers that skip the event.</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+const FILES = {
+  'Note.tsx': { cls: 'f-note', role: 'Picks WHICH Gesture kind a press starts. Knows nothing about the lifecycle.', src: [
+"// Note.tsx: decides WHICH kind a press starts. Knows nothing about the lifecycle.",
+"export const Note = memo(function Note({ id }: { id: NoteId }) {",
+"  const note = useNotes(s => s.notes[id]);                 // 003: re-renders this Note only",
+"  const dispatch = useDispatch();",
+"  const ref = useRef<HTMLDivElement>(null);",
+"  const start = useGesture(ref);                            // one session per Note",
+"  if (!note) return null;",
+"",
+"  return (",
+"    <div",
+"      ref={ref}",
+"      className={styles.note}",
+"      style={{ left: note.x, top: note.y, width: note.width, height: note.height, zIndex: note.z }} //@render never transform (003 gotcha)",
+"      onPointerDown={e => {                                 //@bodyDown",
+"        dispatch({ type: 'raise', id });                    //@bodyDown when to raise is ticket 006's call",
+"        start(e, moveKind, note);                           //@bodyDown kind chosen at press time",
+"      }}                                                    //@bodyDown",
+"    >",
+"      <textarea value={note.text} onChange={onText} />      {/* presses here are filtered out */}",
+"      <div",
+"        className={styles.handle}",
+"        onPointerDown={e => {                               //@handleDown",
+"          e.stopPropagation();                              //@handleDown don't also start a move on the body",
+"          dispatch({ type: 'raise', id });                  //@handleDown",
+"          start(e, resizeKinds.se, note);                   //@handleDown",
+"        }}                                                  //@handleDown",
+"      />",
+"    </div>",
+"  );",
+"});",
+  ]},
+  'useGesture.ts': { cls: 'f-hook', role: 'The DOM side: filters presses, captures, wires real listeners, writes styles. Thin on purpose.', src: [
+"// useGesture.ts: the DOM side. Thin on purpose: the decisions live in controller.ts.",
+"",
+"export function isGesturePress(e: React.PointerEvent): boolean {        //@filter",
+"  if (!e.isPrimary || e.button !== 0) return false;                     //@filter primary pointer, left button",
+"  const t = e.target as Element;                                        //@filter",
+"  return t.closest('textarea, [contenteditable=\"true\"]') === null;    //@filter keep the caret working (002)",
+"}                                                                       //@filter",
+"",
+"export function useGesture(previewRef: RefObject<HTMLElement | null>) {",
+"  const dispatch = useDispatch();",
+"  const { trashRef, scrollerRef } = useContext(BoardDomContext);        // refs; the value never changes",
+"  const captured = useRef<HTMLElement | null>(null);",
+"  const controller = useRef<GestureController | null>(null);",
+"",
+"  controller.current ??= createGestureController({                      // created once; the real DOM behind io",
+"    scrollPosition: () => {                                             //@scrollPos",
+"      const el = scrollerRef.current!;                                  //@scrollPos",
+"      return { x: el.scrollLeft, y: el.scrollTop };                     //@scrollPos",
+"    },                                                                  //@scrollPos",
+"    trashRect: () => trashRef.current!.getBoundingClientRect(),         //@trashRect",
+"",
+"    listen(h) {                                                         //@listen",
+"      const el = captured.current!, scroller = scrollerRef.current!;    //@listen",
+"      el.addEventListener('pointermove', h.move);                       //@listen",
+"      el.addEventListener('pointerup', h.up);                           //@listen",
+"      el.addEventListener('pointercancel', h.cancel);                   //@listen",
+"      el.addEventListener('lostpointercapture', h.lostCapture);         //@listen",
+"      scroller.addEventListener('scroll', h.scroll, { passive: true }); //@listen",
+"      window.addEventListener('keydown', h.key);                        //@listen",
+"      return () => { /* remove the same six listeners */ };             //@detach one function detaches all",
+"    },                                                                  //@listen",
+"    releaseCapture: id => captured.current?.releasePointerCapture(id),  //@release",
+"",
+"    writePreview(rect, base) {                                          //@write",
+"      const el = previewRef.current; if (!el) return;                   //@write",
+"      if (rect === null) {                                              //@reset reset to what React last rendered",
+"        el.style.transform = '';                                        //@reset",
+"        el.style.width = base.width + 'px';                             //@reset",
+"        el.style.height = base.height + 'px';                           //@reset",
+"        return;                                                         //@reset",
+"      }                                                                 //@reset",
+"      el.style.transform =                                              //@write",
+"        'translate(' + (rect.x - base.x) + 'px, ' + (rect.y - base.y) + 'px)'; //@write",
+"      el.style.width = rect.width + 'px';                               //@write",
+"      el.style.height = rect.height + 'px';                             //@write",
+"    },                                                                  //@write",
+"    setOverTrash(over) {                                                //@trashAttr",
+"      previewRef.current?.toggleAttribute('data-over-trash', over);     //@trashAttr",
+"      trashRef.current?.toggleAttribute('data-over-trash', over);       //@trashAttr",
+"    },                                                                  //@trashAttr",
+"    dispatch,                                                           //@dispatch",
+"  });",
+"",
+"  useEffect(() => () => controller.current?.dispose(), []);             //@unmount",
+"",
+"  return function start<F extends Rect>(                                //@start",
+"    e: React.PointerEvent<HTMLElement>, kind: GestureKind<F>, from: F,  //@start",
+"  ) {                                                                   //@start",
+"    if (!isGesturePress(e)) return;                                     //@start",
+"    e.preventDefault();                                                 //@start no focus steal, no native drag (002)",
+"    captured.current = e.currentTarget;                                 //@start",
+"    e.currentTarget.setPointerCapture(e.pointerId);                     //@start capture on currentTarget (002)",
+"    controller.current!.press(e, kind, from);                           //@start",
+"  };                                                                    //@start",
+"}",
+  ]},
+  'controller.ts': { cls: 'f-ctrl', role: 'WHEN things happen: the whole lifecycle, written once. No React, no DOM: the outside world is the io object, which tests fake.', src: [
+"// controller.ts: WHEN things happen. The whole lifecycle, written once.",
+"// No React, no DOM: everything outside goes through io (tests pass a fake one).",
+"",
+"export const DEAD_ZONE_PX = 3;",
+"",
+"export interface GestureIO {",
+"  scrollPosition(): Point;",
+"  trashRect(): Rect;",
+"  listen(h: Handlers): () => void;           // attach every listener; returns ONE detach",
+"  releaseCapture(pointerId: number): void;",
+"  writePreview(rect: Rect | null, base: Rect): void; // null = reset to base",
+"  setOverTrash(over: boolean): void;",
+"  dispatch(action: NoteAction): void;",
+"}",
+"",
+"type Session = {",
+"  from: Rect;                                // committed geometry at press time",
+"  preview: (d: Point, c: GestureCtx) => { rect: Rect; overTrash: boolean };",
+"  commit: (d: Point, c: GestureCtx) => NoteAction | null;",
+"  pointerId: number;",
+"  pressPoint: Point; pointer: Point;         // client coordinates",
+"  pressScroll: Point;                        // scroll position at press time",
+"  trashRect: Rect;                           // cached: the zone never moves (004)",
+"  pending: boolean;                          // still inside the dead zone",
+"  overTrash: boolean;",
+"  detach: () => void;",
+"};",
+"",
+"export function createGestureController(io: GestureIO) {",
+"  let s: Session | null = null;              // at most one Gesture at a time",
+"  const ctx = (s: Session) => ({ pointer: s.pointer, trashRect: s.trashRect });",
+"",
+"  function delta(s: Session): Point {                                   //@delta",
+"    const scroll = io.scrollPosition();                                 //@delta",
+"    return {                                                            //@delta scroll-compensated (004)",
+"      x: s.pointer.x - s.pressPoint.x + (scroll.x - s.pressScroll.x),   //@delta",
+"      y: s.pointer.y - s.pressPoint.y + (scroll.y - s.pressScroll.y),   //@delta",
+"    };                                                                  //@delta",
+"  }                                                                     //@delta",
+"",
+"  function update() {                                                   //@update",
+"    if (!s || s.pending) return;                                        //@pendingGuard inside the dead zone: show nothing",
+"    const p = s.preview(delta(s), ctx(s));                              //@update",
+"    io.writePreview(p.rect, s.from);                                    //@update straight from the event, no rAF",
+"    if (p.overTrash !== s.overTrash) {                                  //@edge only when it changes",
+"      s.overTrash = p.overTrash;                                        //@edge",
+"      io.setOverTrash(p.overTrash);                                     //@edge",
+"    }                                                                   //@edge",
+"  }                                                                     //@update",
+"",
+"  function end(revert: boolean) {                                       //@end",
+"    if (!s) return;                                                     //@idem idempotent: safe to call twice",
+"    const ended = s; s = null;                                          //@end",
+"    ended.detach();                                                     //@end every listener, in one call",
+"    if (ended.overTrash) io.setOverTrash(false);                        //@end",
+"    if (revert) io.writePreview(null, ended.from);                      //@end",
+"  }                                                                     //@end",
+"",
+"  const handlers: Handlers = {",
+"    move(e) {                                                           //@move",
+"      if (!s) return;                                                   //@move",
+"      s.pointer = { x: e.clientX, y: e.clientY };                       //@move",
+"      if (s.pending && Math.hypot(s.pointer.x - s.pressPoint.x,         //@deadzone",
+"                                  s.pointer.y - s.pressPoint.y) >= DEAD_ZONE_PX) //@deadzone",
+"        s.pending = false;                                              //@deadzone full delta from the press point",
+"      update();                                                         //@move",
+"    },                                                                  //@move",
+"    scroll: () => update(),                                             //@scroll",
+"    up(e) {                                                             //@up",
+"      if (!s) return;                                                   //@up",
+"      s.pointer = { x: e.clientX, y: e.clientY };                       //@up final point from pointerup itself",
+"      const action = s.pending ? null : s.commit(delta(s), ctx(s));     //@up a click saves nothing",
+"      end(true);                                                        //@up 1. reset the preview",
+"      if (action) io.dispatch(action);                                  //@up 2. then dispatch",
+"    },                                                                  //@up",
+"    cancel: () => end(true),                                            //@cancel pointercancel: revert, no dispatch",
+"    lostCapture: () => end(true),                                       //@lost usually a no-op: already ended",
+"    key(e) {                                                            //@key",
+"      if (e.key !== 'Escape' || !s) return;                             //@key",
+"      const id = s.pointerId;                                           //@key",
+"      end(true);                                                        //@key revert, dispatch nothing",
+"      io.releaseCapture(id);                                            //@key",
+"    },                                                                  //@key",
+"  };",
+"",
+"  return {",
+"    press<F extends Rect>(e: PointerInput, kind: GestureKind<F>, from: F) { //@press",
+"      if (s) return;                                                    //@press a second press is ignored",
+"      s = {                                                             //@press",
+"        from,                                                           //@press",
+"        preview: (d, c) => kind.preview(from, d, c),                    //@press bind the kind to its subject",
+"        commit: (d, c) => kind.commit(from, d, c),                      //@press",
+"        pointerId: e.pointerId,                                         //@press",
+"        pressPoint: { x: e.clientX, y: e.clientY },                     //@press",
+"        pointer: { x: e.clientX, y: e.clientY },                        //@press",
+"        pressScroll: io.scrollPosition(),                               //@press",
+"        trashRect: io.trashRect(),                                      //@press",
+"        pending: true, overTrash: false,                                //@press",
+"        detach: () => {},                                               //@press",
+"      };                                                                //@press",
+"      s.detach = io.listen(handlers);                                   //@press",
+"    },                                                                  //@press",
+"    dispose: () => end(false),                                          //@dispose unmount: drop listeners, no dispatch",
+"  };",
+"}",
+  ]},
+  'kinds.ts': { cls: 'f-kind', role: 'WHAT a Gesture shows and saves. Pure functions, no lifecycle.', src: [
+"// kinds.ts: WHAT a Gesture shows and saves. Pure functions, no lifecycle.",
+"",
+"export type GestureCtx = { pointer: Point; trashRect: Rect };",
+"",
+"export interface GestureKind<From extends Rect> {",
+"  preview(from: From, delta: Point, ctx: GestureCtx): { rect: Rect; overTrash: boolean };",
+"  commit(from: From, delta: Point, ctx: GestureCtx): NoteAction | null;",
+"}",
+"",
+"export const moveKind: GestureKind<Note> = {",
+"  preview: (note, d, ctx) => ({                                         //@movePreview",
+"    rect: moveRect(note, d),                                            //@movePreview",
+"    overTrash: pointInRect(ctx.pointer, ctx.trashRect),                 //@movePreview the POINTER decides",
+"  }),                                                                   //@movePreview",
+"  commit: (note, d, ctx) =>                                             //@moveCommit",
+"    pointInRect(ctx.pointer, ctx.trashRect)                             //@moveCommit",
+"      ? { type: 'delete', id: note.id }                                 //@moveCommit",
+"      : { type: 'move', id: note.id, to: roundRect(moveRect(note, d)) }, //@moveCommit",
+"};",
+"",
+"function resizeKind(edges: readonly Edge[]): GestureKind<Note> {",
+"  return {",
+"    preview: (note, d) => ({ rect: resizeRect(note, d, edges), overTrash: false }), //@resizePreview",
+"    commit: (note, d) =>                                                //@resizeCommit",
+"      ({ type: 'resize', id: note.id, to: roundRect(resizeRect(note, d, edges)) }), //@resizeCommit",
+"  };",
+"}",
+"",
+"// Built once, so identities are stable. Which handles exist is ticket 006's call.",
+"export const resizeKinds = {",
+"  e: resizeKind(['e']),",
+"  s: resizeKind(['s']),",
+"  se: resizeKind(['s', 'e']),",
+"} satisfies Record<string, GestureKind<Note>>;",
+"",
+  ]},
+  'geometry.ts': { cls: 'f-geo', role: 'Pure maths. No DOM, no React, no events. Unit-tested.', src: [
+"// geometry.ts: pure maths. No DOM, no React, no events.",
+"",
+"export const BOARD_SIZE = { width: 1920, height: 1080 };   // 004",
+"export const MIN_NOTE_SIZE = { width: 80, height: 60 };     // the value is ticket 006's call",
+"",
+"export function moveRect(from: Rect, d: Point): Rect {                //@moveRect",
+"  return clampToBoard({ x: from.x + d.x, y: from.y + d.y,              //@moveRect",
+"                        width: from.width, height: from.height });     //@moveRect",
+"}                                                                      //@moveRect",
+"",
+"export function resizeRect(from: Rect, d: Point, edges: readonly Edge[]): Rect { //@resizeRect",
+"  let left = from.x, top = from.y;                                     //@resizeRect",
+"  let right = from.x + from.width, bottom = from.y + from.height;      //@resizeRect",
+"  // At the minimum size the OPPOSITE edge stays put: the box stops shrinking, it doesn't slide",
+"  if (edges.includes('w')) left = Math.min(left + d.x, right - MIN_NOTE_SIZE.width);   //@resizeRect",
+"  if (edges.includes('e')) right = Math.max(right + d.x, left + MIN_NOTE_SIZE.width);  //@resizeRect",
+"  if (edges.includes('n')) top = Math.min(top + d.y, bottom - MIN_NOTE_SIZE.height);  //@resizeRect",
+"  if (edges.includes('s')) bottom = Math.max(bottom + d.y, top + MIN_NOTE_SIZE.height); //@resizeRect",
+"  left = Math.max(left, 0); right = Math.min(right, BOARD_SIZE.width);  //@resizeRect capped at the Board's edges",
+"  top = Math.max(top, 0); bottom = Math.min(bottom, BOARD_SIZE.height); //@resizeRect",
+"  return { x: left, y: top, width: right - left, height: bottom - top }; //@resizeRect",
+"}                                                                      //@resizeRect",
+"",
+"export function clampToBoard(r: Rect): Rect {                          //@clamp",
+"  return { ...r,                                                       //@clamp whole rect stays on the Board",
+"    x: Math.min(Math.max(r.x, 0), BOARD_SIZE.width - r.width),          //@clamp",
+"    y: Math.min(Math.max(r.y, 0), BOARD_SIZE.height - r.height) };      //@clamp",
+"}                                                                      //@clamp",
+"",
+"export const pointInRect = (p: Point, r: Rect) =>                      //@pointIn",
+"  p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height; //@pointIn",
+"",
+"export const roundRect = (r: Rect): Rect => ({                         //@round",
+"  x: Math.round(r.x), y: Math.round(r.y),                              //@round whole px on commit (004)",
+"  width: Math.round(r.width), height: Math.round(r.height) });         //@round",
+  ]},
+};
+
+// Each step: title, explanation, and the [file, marker] pairs that run.
+const SCENARIOS = {
+  'A click (no move)': [
+    { t: 'pointerdown on the Note body', run: [['Note.tsx','bodyDown'],['useGesture.ts','start'],['useGesture.ts','filter'],['controller.ts','press'],['useGesture.ts','scrollPos'],['useGesture.ts','trashRect'],['useGesture.ts','listen']],
+      x: '<p><b>Note.tsx</b> raises the Note and picks <code>moveKind</code>. <b>useGesture</b> checks that this is a real Gesture press (left button, not in the textarea), then calls <code>preventDefault</code> and captures the pointer. The <b>controller</b> opens a <i>pending</i> session: it records the press point, the scroll position and the Trash zone rect, then attaches all six listeners in one <code>listen()</code> call.</p>' },
+    { t: 'pointermove of 2px', run: [['controller.ts','move'],['controller.ts','deadzone'],['controller.ts','update'],['controller.ts','pendingGuard']],
+      x: '<p>2px is less than <code>DEAD_ZONE_PX</code>, so the session stays <i>pending</i>. <code>update()</code> returns straight away: no preview is written, and the Note doesn\'t move. A shaky click stays a click.</p>' },
+    { t: 'pointerup', run: [['controller.ts','up'],['controller.ts','end'],['useGesture.ts','detach'],['useGesture.ts','reset']],
+      x: '<p>The session is still pending, so <code>action = null</code>: <b>nothing is dispatched</b>. <code>end()</code> detaches every listener and resets the (unchanged) preview. Only the raise from step 1 reached the store.</p>' },
+    { t: 'lostpointercapture (from the browser)', run: [['controller.ts','lost'],['controller.ts','idem']],
+      x: '<p>After <code>pointerup</code>, the browser releases capture by itself and fires <code>lostpointercapture</code>. In this sketch, <code>end()</code> already removed that listener, so nothing runs. If the event did arrive, <code>end()</code> would see <code>s === null</code> and do nothing. That is what "idempotent cleanup" means.</p>' },
+  ],
+  'Move onto the Trash zone': [
+    { t: 'pointerdown on the Note body', run: [['Note.tsx','bodyDown'],['useGesture.ts','start'],['controller.ts','press'],['useGesture.ts','listen']],
+      x: '<p>Same as a click: a pending session, with the Trash zone rect cached now. The zone is pinned to the window, so this rect stays valid for the whole Gesture.</p>' },
+    { t: 'pointermove of 40px (leaves the dead zone)', run: [['controller.ts','move'],['controller.ts','deadzone'],['controller.ts','update'],['controller.ts','delta'],['kinds.ts','movePreview'],['geometry.ts','moveRect'],['geometry.ts','clamp'],['geometry.ts','pointIn'],['useGesture.ts','write']],
+      x: '<p><code>pending</code> becomes false. <code>update()</code> asks the <b>kind</b> for a preview: <code>moveRect</code> adds the delta to the committed rect, and <code>clampToBoard</code> keeps it on the Board. The hook writes <code>transform: translate(40px, 0)</code>. React doesn\'t re-render: no store change, no state.</p>' },
+    { t: 'roll the wheel (scroll 100px) without moving the mouse', run: [['controller.ts','scroll'],['controller.ts','update'],['controller.ts','delta'],['kinds.ts','movePreview'],['useGesture.ts','write']],
+      x: '<p>The <code>scroll</code> listener calls the same <code>update()</code>. <code>delta()</code> adds (scroll now − scroll at press), so the Note stays under the pointer while the Board scrolls past it. This is 004\'s scroll compensation, and nothing in it is specific to the move kind.</p>' },
+    { t: 'pointer enters the Trash zone', run: [['controller.ts','move'],['kinds.ts','movePreview'],['geometry.ts','pointIn'],['controller.ts','edge'],['useGesture.ts','trashAttr']],
+      x: '<p><code>moveKind.preview</code> now returns <code>overTrash: true</code>, because the <b>pointer point</b> is inside the cached rect. The controller notices the value <i>changed</i> and calls <code>setOverTrash(true)</code> once. The hook sets <code>data-over-trash</code> on the Note and on the zone, and CSS styles both.</p>' },
+    { t: 'pointerup over the zone', run: [['controller.ts','up'],['kinds.ts','moveCommit'],['controller.ts','end'],['useGesture.ts','trashAttr'],['useGesture.ts','reset'],['useGesture.ts','dispatch']],
+      x: '<p><code>moveKind.commit</code> sees the pointer in the zone and returns <code>{ type: \'delete\' }</code>. The order matters: <code>end()</code> first removes the listeners, clears <code>data-over-trash</code> and resets the inline styles, <b>then</b> the action is dispatched. The reducer removes the Note, and the Board re-renders without it.</p>' },
+  ],
+  'Resize, then Escape': [
+    { t: 'pointerdown on the resize handle', run: [['Note.tsx','handleDown'],['useGesture.ts','start'],['controller.ts','press']],
+      x: '<p>The handle\'s own handler runs first. <code>stopPropagation()</code> stops the body\'s handler from also starting a move (if it ran anyway, <code>press</code> would ignore it, because a session already exists). The kind is <code>resizeKinds.se</code>, but the session is exactly the same.</p>' },
+    { t: 'pointermove of 30px', run: [['controller.ts','move'],['controller.ts','update'],['kinds.ts','resizePreview'],['geometry.ts','resizeRect'],['useGesture.ts','write']],
+      x: '<p><code>resizeRect</code> moves only the south and east edges, keeps the minimum size and caps at the Board\'s edges. The hook writes <code>width</code>/<code>height</code> inline. Resize never reports <code>overTrash</code>, so passing over the zone deletes nothing.</p>' },
+    { t: 'press Escape', run: [['controller.ts','key'],['controller.ts','end'],['useGesture.ts','detach'],['useGesture.ts','reset'],['useGesture.ts','release']],
+      x: '<p>The <code>keydown</code> listener was attached by <code>listen()</code> at press time. Escape takes the cancel path: listeners detach, <code>writePreview(null)</code> restores the committed width and height, nothing is dispatched, and capture is released.</p>' },
+    { t: 'the user lets go of the button', run: [],
+      x: '<p>Nothing runs: <code>pointerup</code> no longer has a listener, and the session is gone. The store never saw this resize.</p>' },
+  ],
+  'Note removed mid-move': [
+    { t: 'press and move the Note', run: [['Note.tsx','bodyDown'],['controller.ts','press'],['controller.ts','move'],['useGesture.ts','write']],
+      x: '<p>A normal move is in progress, and the preview <code>transform</code> is written on the Note.</p>' },
+    { t: 'an async load replaces the Notes, and this Note unmounts', run: [['useGesture.ts','unmount'],['controller.ts','dispose'],['controller.ts','end'],['useGesture.ts','detach']],
+      x: '<p>React runs the effect cleanup, which calls <code>dispose()</code>, which calls <code>end(false)</code>: every listener is detached (including the <code>window</code> keydown and the scroll listener, which would otherwise leak), and nothing is dispatched. The Note is gone, so there is no preview to reset.</p><p>Also, since <code>listen()</code> uses native listeners on the element itself, the browser\'s <code>lostpointercapture</code> on the removed node would also reach <code>end()</code>. Whichever comes first does the work, and the other is a no-op.</p>' },
+  ],
+};
+
+const $ = id => document.getElementById(id);
+let curFile = 'Note.tsx', curScenario = Object.keys(SCENARIOS)[0], curStep = 0;
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+const KW = /\b(export|const|let|function|return|if|type|interface|import|from|true|false|null|new|extends|satisfies)\b/g;
+function paint(code) {
+  // split off a trailing // comment (good enough for this sketch: no URLs)
+  let c = code, com = '';
+  const i = code.indexOf('//');
+  if (i >= 0) { c = code.slice(0, i); com = code.slice(i); }
+  let h = esc(c).replace(/('[^']*')/g, '<span class="str">$1</span>');
+  h = h.replace(KW, (m, _g, off, whole) => {
+    // skip matches inside a string span
+    const before = whole.slice(0, off);
+    const open = (before.match(/<span class="str">/g) || []).length;
+    const close = (before.match(/<\/span>/g) || []).length;
+    return open > close ? m : '<span class="kw">' + m + '</span>';
+  });
+  return h + (com ? '<span class="com">' + esc(com) + '</span>' : '');
+}
+function parse(line) {
+  const m = line.match(/\s*\/\/@(\w+)\s*(.*)$/);
+  if (!m) return { text: line, mark: null };
+  const base = line.slice(0, m.index);
+  return { text: m[2] ? base.padEnd(Math.max(base.length, 1)) + '  // ' + m[2] : base, mark: m[1] };
+}
+function marksFor(file) {
+  const step = SCENARIOS[curScenario][curStep];
+  return new Set(step.run.filter(r => r[0] === file).map(r => r[1]));
+}
+function renderFiles() {
+  $('files').innerHTML = '';
+  for (const name of Object.keys(FILES)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    if (name === curFile) b.classList.add('on');
+    if (marksFor(name).size) b.classList.add('has-hl');
+    b.onclick = () => { curFile = name; renderFiles(); renderCode(); };
+    $('files').appendChild(b);
+  }
+}
+function renderCode() {
+  const f = FILES[curFile], marks = marksFor(curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + curFile + '</b>: ' + esc(f.role);
+  let first = null;
+  $('code').innerHTML = f.src.map((raw, n) => {
+    const { text, mark } = parse(raw);
+    const hl = mark && marks.has(mark);
+    if (hl && first === null) first = n;
+    return '<span class="ln' + (hl ? ' hl' : '') + '" id="l' + n + '"><span class="no">' + (n + 1) + '</span>' + paint(text) + '</span>';
+  }).join('');
+  const box = $('code').parentElement;
+  if (first !== null) {
+    const el = $('l' + first);
+    box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  }
+}
+function renderScenario() {
+  $('scenarios').innerHTML = '';
+  for (const name of Object.keys(SCENARIOS)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    if (name === curScenario) b.classList.add('on');
+    b.onclick = () => { curScenario = name; curStep = 0; renderScenario(); };
+    $('scenarios').appendChild(b);
+  }
+  $('steps').innerHTML = '';
+  SCENARIOS[curScenario].forEach((s, i) => {
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.textContent = s.t;
+    if (i === curStep) b.classList.add('on');
+    b.onclick = () => { curStep = i; renderScenario(); };
+    li.appendChild(b); $('steps').appendChild(li);
+  });
+  const step = SCENARIOS[curScenario][curStep];
+  const files = [...new Set(step.run.map(r => r[0]))];
+  if (files.length && !files.includes(curFile)) curFile = files[0];
+  $('explain').innerHTML = step.x + (files.length ? '<div class="chips">' + files.map(f =>
+    '<span class="chip ' + FILES[f].cls + '" data-f="' + f + '">' + f + '</span>').join('') + '</div>' : '');
+  $('explain').querySelectorAll('.chip').forEach(c => c.onclick = () => { curFile = c.dataset.f; renderFiles(); renderCode(); });
+  renderFiles(); renderCode();
+}
+renderScenario();
+</script>
+</body>
+</html>

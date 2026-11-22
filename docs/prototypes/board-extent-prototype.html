@@ -1,0 +1,606 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 004 (Board coordinate model), Q1 only.
+  Answers: "Window-sized Board with a 1024x768 floor (a) vs fixed 1920x1080 scrolling Board (b):
+  how do they behave under real cases?"
+  The BoardModel script block is pure (no DOM) and could be lifted out. Everything else is shell.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board extent: (a) vs (b)</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc;
+    --ok: #1f7a4a; --ok-soft: #e4f4ea; --warn: #8a5a00; --warn-soft: #fdf2d8; --bad: #b42318; --bad-soft: #fde7e5;
+    --note: #fde68a; --note-edge: #d9b84a; --paper: #fbfaf7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 24px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0; }
+  h3 { font-size: 14px; margin: 0 0 6px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section + section { margin-top: 18px; }
+
+  /* Walkthroughs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .tabs button { border-radius: 999px; }
+  .scenario { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; }
+  .watch { margin: 8px 0 0; padding: 0; list-style: none; }
+  .watch li { margin: 4px 0; padding-left: 26px; position: relative; }
+  .watch li b { position: absolute; left: 0; top: 0; font-size: 11px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 5px; }
+  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  ol.steps li { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  ol.steps li::before { counter-increment: s; content: counter(s); width: 20px; text-align: right; color: var(--muted); font-size: 12px; }
+  ol.steps li.done::before { content: "✓"; color: var(--ok); }
+  ol.steps button { text-align: left; flex: 1; }
+
+  /* Free play */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .toolbar .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+  /* Panels */
+  .panels { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  @media (min-width: 1100px) { .panels { grid-template-columns: 1fr 1fr; } }
+  .panel header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .event { border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; min-height: 40px; font-size: 13px; }
+  .event.info { background: var(--accent-soft); }
+  .event.ok { background: var(--ok-soft); color: var(--ok); }
+  .event.warn { background: var(--warn-soft); color: var(--warn); }
+  .event.bad { background: var(--bad-soft); color: var(--bad); font-weight: 600; }
+  .mini-wrap { width: 100%; min-height: 120px; margin-bottom: 8px; }
+  .mini { position: relative; overflow: hidden; touch-action: none; user-select: none; border-radius: 4px;
+          background: repeating-linear-gradient(45deg, #f1d8d5 0 6px, #f8ebe9 6px 12px); }
+  .mini > div { position: absolute; }
+  .m-board { background: var(--paper); outline: 1px solid #cfcbc2; }
+  .m-trash { background: #3b3f46; color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+  .m-ghost { border: 2px dashed var(--bad); color: var(--bad); font-size: 10px; display: flex; align-items: center; justify-content: center; text-align: center; border-radius: 3px; }
+  .m-note { background: var(--note); border: 1px solid var(--note-edge); font-size: 10px; padding: 2px 4px; overflow: hidden; white-space: nowrap; cursor: grab; border-radius: 2px; }
+  .m-note.beyond { border: 2px dashed var(--bad); }
+  .m-note.dragging { box-shadow: 0 2px 8px rgba(0,0,0,.25); cursor: grabbing; }
+  .m-window { border: 2px solid var(--accent); box-shadow: 0 0 0 4000px rgba(20,24,32,.38); pointer-events: none; }
+  .m-window span { position: absolute; top: 0; left: 0; background: var(--accent); color: #fff; font-size: 10px; padding: 0 5px; }
+  .m-pointer { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; pointer-events: none; }
+  .scrollctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .scrollctl button { padding: 2px 8px; }
+  .legend { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .changed { background: var(--warn-soft); border-radius: 3px; box-shadow: 0 0 0 3px var(--warn-soft); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 6px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .pill { font-size: 11px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .pill.visible { background: var(--ok-soft); color: var(--ok); }
+  .pill.partly, .pill.offscreen { background: var(--warn-soft); color: var(--warn); }
+  .pill.beyond { background: var(--bad-soft); color: var(--bad); }
+  .gesture { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .gesture.stale { border-color: var(--bad); }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">Prototype · throwaway · ticket 004, Q1</span>
+  <h1>Board extent: window-sized with a floor (a) vs fixed and scrolling (b)</h1>
+  <p class="lede">
+    <b>The question:</b> should the Board fill the window and never shrink below 1024×768 (a, recommended), or always be
+    1920×1080 and scroll inside a smaller window (b)? Both sides below get exactly the same actions. Watch where the
+    Trash zone ends up, which Notes you can still see, and whether the screen→Board conversion stays trivial.
+    A Gesture uses screen deltas and checks the Trash zone against the rectangle it measured at press time, as decided in the pointer research.
+  </p>
+
+  <section class="card" style="margin-top:18px">
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-bottom:10px">Free play</h2>
+    <div class="toolbar">
+      <div class="group"><span class="muted">Window size:</span><span id="presets" class="group"></span></div>
+      <div class="group"><button id="reset">Start over</button></div>
+    </div>
+    <p class="hint">In the pictures below: drag a Note to move it (drop it on the Trash zone to delete it). Double-click empty Board to add a Note.
+      Use the mouse wheel over a picture to scroll it, even in the middle of a drag.</p>
+  </section>
+
+  <section class="panels">
+    <div class="card panel" id="panel-a"></div>
+    <div class="card panel" id="panel-b"></div>
+  </section>
+</main>
+
+<!-- ================= Pure model: no DOM in here, liftable ================= -->
+<script>
+const BoardModel = (() => {
+  const FLOOR = { w: 1024, h: 768 };
+  const FIXED = { w: 1920, h: 1080 };
+  const TRASH = { w: 160, h: 110, margin: 16 };
+  const NEW_NOTE = { w: 200, h: 160 };
+
+  const initialNotes = () => [
+    { id: 'n1', label: 'Groceries',    x: 120,  y: 120, w: 200, h: 160 },
+    { id: 'n2', label: 'Call dentist', x: 520,  y: 300, w: 200, h: 160 },
+    { id: 'n3', label: 'Q4 plan',      x: 1150, y: 620, w: 200, h: 160 },
+  ];
+
+  const init = ({ mode, win, trashPin = 'board' }) => ({
+    mode, trashPin, win: { ...win }, scroll: { x: 0, y: 0 }, notes: initialNotes(), gesture: null, nextId: 4,
+    event: { tone: 'info', text: `Started with the window at ${win.w}×${win.h}.` },
+  });
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  const boardSize = (s) => s.mode === 'a'
+    ? { w: Math.max(s.win.w, FLOOR.w), h: Math.max(s.win.h, FLOOR.h) }
+    : { ...FIXED };
+  const maxScroll = (s) => { const b = boardSize(s); return { x: Math.max(0, b.w - s.win.w), y: Math.max(0, b.h - s.win.h) }; };
+  const clampScroll = (s, sc) => { const m = maxScroll(s); return { x: clamp(sc.x, 0, m.x), y: clamp(sc.y, 0, m.y) }; };
+
+  // Trash zone in Board coordinates.
+  function trashRect(s) {
+    if (s.mode === 'b' && s.trashPin === 'window') {
+      return { x: s.scroll.x + s.win.w - TRASH.w - TRASH.margin, y: s.scroll.y + s.win.h - TRASH.h - TRASH.margin, w: TRASH.w, h: TRASH.h };
+    }
+    const b = boardSize(s);
+    return { x: b.w - TRASH.w - TRASH.margin, y: b.h - TRASH.h - TRASH.margin, w: TRASH.w, h: TRASH.h };
+  }
+
+  // In both models the Board's top-left sits at (-scroll) on screen, so the conversion is the same formula.
+  // What differs is how often scroll is non-zero.
+  const screenToBoard = (s, p) => ({ x: p.x + s.scroll.x, y: p.y + s.scroll.y });
+  const boardToScreen = (s, p) => ({ x: p.x - s.scroll.x, y: p.y - s.scroll.y });
+  const rectToScreen = (s, r) => ({ ...r, ...boardToScreen(s, r) });
+  const visibleRect = (s) => { const b = boardSize(s); return { x: s.scroll.x, y: s.scroll.y, w: Math.min(s.win.w, b.w), h: Math.min(s.win.h, b.h) }; };
+  const contains = (r, p) => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
+  const insideWindow = (s, c) => c.x >= 0 && c.y >= 0 && c.x < s.win.w && c.y < s.win.h;
+
+  function coverage(r, v) {
+    const w = Math.max(0, Math.min(r.x + r.w, v.x + v.w) - Math.max(r.x, v.x));
+    const h = Math.max(0, Math.min(r.y + r.h, v.y + v.h) - Math.max(r.y, v.y));
+    return (w * h) / (r.w * r.h);
+  }
+  // 'beyond' = past the Board edge; 'offscreen' / 'partly' = on the Board but needs scrolling; 'visible'.
+  function rectStatus(s, r) {
+    const b = boardSize(s);
+    if (r.x < 0 || r.y < 0 || r.x + r.w > b.w || r.y + r.h > b.h) return 'beyond';
+    const f = coverage(r, visibleRect(s));
+    return f >= 1 ? 'visible' : f <= 0 ? 'offscreen' : 'partly';
+  }
+
+  const clampNote = (s, n) => {
+    const b = boardSize(s);
+    return { x: Math.round(clamp(n.x, 0, b.w - n.w)), y: Math.round(clamp(n.y, 0, b.h - n.h)) };
+  };
+  const noteAt = (s, p) => [...s.notes].reverse().find((n) => contains(n, p));
+  const scrollName = (s) => (s.mode === 'a' ? 'page' : 'Board');
+  const fmt = (p) => `(${Math.round(p.x)}, ${Math.round(p.y)})`;
+
+  function reduce(s, a) {
+    switch (a.type) {
+      case 'reset': return init({ mode: s.mode, win: a.win, trashPin: a.trashPin ?? 'board' });
+
+      case 'resize': {
+        const next = { ...s, win: { ...a.win } };
+        next.scroll = clampScroll(next, s.scroll);
+        const b = boardSize(next);
+        const below = a.win.w < FLOOR.w || a.win.h < FLOOR.h;
+        const why = s.mode === 'a' ? (below ? 'held at the 1024×768 minimum, so the page scrolls' : 'follows the window') : 'fixed';
+        const beyond = next.notes.filter((n) => rectStatus(next, n) === 'beyond').map((n) => `“${n.label}”`);
+        let text = `Window is now ${a.win.w}×${a.win.h}. Board is ${b.w}×${b.h} (${why}).`;
+        if (beyond.length) text += ` Now past the Board edge: ${beyond.join(', ')}. Stored positions are untouched here. What to do about this is a Round 2 question.`;
+        return { ...next, event: { tone: beyond.length ? 'warn' : 'info', text } };
+      }
+
+      case 'scroll': {
+        const scroll = clampScroll(s, { x: s.scroll.x + a.dx, y: s.scroll.y + a.dy });
+        if (scroll.x === s.scroll.x && scroll.y === s.scroll.y) {
+          const m = maxScroll(s);
+          const text = m.x === 0 && m.y === 0
+            ? (s.mode === 'a' ? 'Nothing to scroll: the window is at least 1024×768, so the Board fits it exactly.' : 'Nothing to scroll: the window is at least 1920×1080.')
+            : `The ${scrollName(s)} is already scrolled as far as it goes that way.`;
+          return { ...s, event: { tone: 'info', text } };
+        }
+        let text = `Scrolled the ${scrollName(s)} to ${fmt(scroll)}.`;
+        let tone = 'info';
+        if (s.gesture) {
+          const d = { x: scroll.x - s.gesture.scrollAtPress.x, y: scroll.y - s.gesture.scrollAtPress.y };
+          text += ` A Gesture is in progress: what the engine measured at press time is now off by ${fmt(d)}.`;
+          tone = 'warn';
+        }
+        return { ...s, scroll, event: { tone, text } };
+      }
+
+      case 'setTrashPin':
+        if (s.mode !== 'b' || s.gesture) return s;
+        return { ...s, trashPin: a.pin, event: { tone: 'info', text: a.pin === 'window'
+          ? 'Trash zone now sits in the corner of the window. Its Board position changes every time the Board scrolls.'
+          : 'Trash zone now sits in the corner of the 1920×1080 Board. It is off-screen unless you scroll there.' } };
+
+      case 'press': {
+        if (s.gesture) return s;
+        if (!insideWindow(s, a.client)) {
+          return { ...s, event: { tone: 'warn', text: 'That spot is off-screen. You can only press what you can see, so you would have to scroll there first.' } };
+        }
+        const p = screenToBoard(s, a.client);
+        const n = noteAt(s, p);
+        if (!n) return { ...s, event: { tone: 'info', text: `Pressed empty Board at ${fmt(p)}. Nothing to move.` } };
+        const gesture = {
+          id: n.id, startClient: { ...a.client }, client: { ...a.client },
+          startNote: { x: n.x, y: n.y }, draft: { x: n.x, y: n.y },
+          scrollAtPress: { ...s.scroll },
+          cachedTrash: rectToScreen(s, trashRect(s)), // measured once, at press time
+        };
+        const notes = [...s.notes.filter((x) => x !== n), n]; // Raise
+        return { ...s, notes, gesture, event: { tone: 'info',
+          text: `Pressed “${n.label}” at screen ${fmt(a.client)}, which is Board ${fmt(p)}. The engine measures where the Trash zone is on screen right now.` } };
+      }
+
+      case 'move': {
+        const g = s.gesture; if (!g) return s;
+        const n = s.notes.find((x) => x.id === g.id);
+        const d = { x: Math.round(a.client.x - g.startClient.x), y: Math.round(a.client.y - g.startClient.y) };
+        const want = { x: g.startNote.x + d.x, y: g.startNote.y + d.y };
+        const draft = clampNote(s, { ...n, ...want });
+        const held = draft.x !== want.x || draft.y !== want.y;
+        return { ...s, gesture: { ...g, client: { ...a.client }, draft }, event: { tone: 'info',
+          text: `Dragging “${n.label}”: the pointer moved ${fmt(d)} on screen, so the Note moves ${fmt(d)} on the Board${held ? ' (held inside the Board edge)' : ''}.` } };
+      }
+
+      case 'release': {
+        const g = s.gesture; if (!g) return s;
+        const n = s.notes.find((x) => x.id === g.id);
+        const engineSays = contains(g.cachedTrash, g.client);
+        const reallyOver = contains(trashRect(s), screenToBoard(s, g.client));
+        if (engineSays) {
+          const text = reallyOver
+            ? `Released over the Trash zone: “${n.label}” deleted.`
+            : `“${n.label}” deleted, but the pointer is NOT over the Trash zone any more. The ${scrollName(s)} scrolled during the Gesture, and the engine still used the Trash zone position it measured at press time.`;
+          return { ...s, notes: s.notes.filter((x) => x !== n), gesture: null, event: { tone: reallyOver ? 'ok' : 'bad', text } };
+        }
+        const notes = s.notes.map((x) => (x === n ? { ...x, ...g.draft } : x));
+        const text = reallyOver
+          ? `“${n.label}” kept at Board ${fmt(g.draft)}, but the pointer IS over the Trash zone. The engine missed it because the ${scrollName(s)} scrolled during the Gesture.`
+          : `Released: “${n.label}” now stored at Board ${fmt(g.draft)}.`;
+        return { ...s, notes, gesture: null, event: { tone: reallyOver ? 'bad' : 'info', text } };
+      }
+
+      case 'cancel':
+        return s.gesture ? { ...s, gesture: null, event: { tone: 'info', text: 'Gesture cancelled. The Note goes back to where it was.' } } : s;
+
+      case 'add': {
+        if (s.gesture || !insideWindow(s, a.client)) return s;
+        const p = screenToBoard(s, a.client);
+        if (noteAt(s, p)) return s;
+        const pos = clampNote(s, { x: p.x - NEW_NOTE.w / 2, y: p.y - NEW_NOTE.h / 2, ...NEW_NOTE });
+        const note = { id: `n${s.nextId}`, label: `New Note ${s.nextId - 3}`, ...NEW_NOTE, ...pos };
+        return { ...s, notes: [...s.notes, note], nextId: s.nextId + 1, event: { tone: 'info',
+          text: `Double-clicked screen ${fmt(a.client)} = Board ${fmt(p)}. Added “${note.label}” at Board ${fmt(pos)}.` } };
+      }
+
+      default: return s;
+    }
+  }
+
+  return { FLOOR, FIXED, TRASH, init, reduce, boardSize, maxScroll, trashRect, visibleRect, screenToBoard, boardToScreen, rectToScreen, rectStatus, contains };
+})();
+</script>
+
+<!-- ================= Throwaway page shell ================= -->
+<script>
+const M = BoardModel;
+const PRESETS = [{ w: 1920, h: 1080 }, { w: 1440, h: 900 }, { w: 1280, h: 800 }, { w: 1024, h: 768 }, { w: 900, h: 700 }];
+const TITLES = {
+  a: ['(a) Window-sized Board, 1024×768 minimum', 'Recommended'],
+  b: ['(b) Fixed 1920×1080 Board, scrolls inside the window', 'Alternative'],
+};
+const STATUS = { visible: 'on screen', partly: 'partly off-screen', offscreen: 'off-screen (scroll to see)', beyond: 'past the Board edge' };
+
+let models = {};
+const prev = { a: {}, b: {} };
+let scale = 0.25;
+let drag = null;
+
+function resetAll(win = { w: 1440, h: 900 }, trashPin = 'board') {
+  models = { a: M.init({ mode: 'a', win }), b: M.init({ mode: 'b', win, trashPin }) };
+}
+
+function dispatch(keys, actionOrFn) {
+  for (const k of keys) {
+    const a = typeof actionOrFn === 'function' ? actionOrFn(models[k]) : actionOrFn;
+    models[k] = M.reduce(models[k], a);
+  }
+  render();
+}
+
+// ---------- rendering ----------
+function worldSize(s) {
+  const b = M.boardSize(s);
+  const g = s.gesture;
+  let w = Math.max(b.w, s.scroll.x + s.win.w), h = Math.max(b.h, s.scroll.y + s.win.h);
+  for (const n of s.notes) {
+    const p = g && g.id === n.id ? g.draft : n;
+    w = Math.max(w, p.x + n.w); h = Math.max(h, p.y + n.h);
+  }
+  return { w, h };
+}
+
+const box = (cls, r, inner = '') =>
+  `<div class="${cls}" style="left:${r.x * scale}px;top:${r.y * scale}px;width:${r.w * scale}px;height:${r.h * scale}px">${inner}</div>`;
+
+function renderMini(el, s) {
+  const b = M.boardSize(s), t = M.trashRect(s), g = s.gesture, W = worldSize(s);
+  el.style.width = `${W.w * scale}px`; el.style.height = `${W.h * scale}px`;
+  let html = box('m-board', { x: 0, y: 0, ...b });
+  html += box('m-trash', t, 'Trash zone');
+  if (g) {
+    const ghost = { ...g.cachedTrash, ...M.screenToBoard(s, g.cachedTrash) };
+    if (ghost.x !== t.x || ghost.y !== t.y) html += box('m-ghost', ghost, 'engine thinks<br>Trash zone is here');
+  }
+  for (const n of s.notes) {
+    const dragging = g && g.id === n.id;
+    const r = dragging ? { ...n, ...g.draft } : n;
+    const st = M.rectStatus(s, n);
+    html += box(`m-note ${st === 'beyond' && !dragging ? 'beyond' : ''} ${dragging ? 'dragging' : ''}`, r, n.label);
+  }
+  html += box('m-window', { x: s.scroll.x, y: s.scroll.y, w: s.win.w, h: s.win.h }, `<span>window ${s.win.w}×${s.win.h}</span>`);
+  if (g) {
+    const p = M.screenToBoard(s, g.client);
+    html += `<div class="m-pointer" style="left:${p.x * scale}px;top:${p.y * scale}px"></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function facts(s) {
+  const b = M.boardSize(s), m = M.maxScroll(s), v = M.visibleRect(s), t = M.trashRect(s);
+  const scrollable = m.x > 0 || m.y > 0;
+  const pct = (f) => `${Math.round(f * 100)}%`;
+  let boardNote;
+  if (s.mode === 'b') boardNote = 'fixed';
+  else boardNote = s.win.w < M.FLOOR.w || s.win.h < M.FLOOR.h ? 'held at the minimum' : 'same as the window';
+  return [
+    ['win', 'Window', `${s.win.w} × ${s.win.h}`],
+    ['board', 'Board size', `${b.w} × ${b.h} (${boardNote})`],
+    ['scroll', s.mode === 'a' ? 'Page scroll' : 'Board scroll', scrollable ? `(${s.scroll.x}, ${s.scroll.y}), can go up to (${m.x}, ${m.y})` : 'none, nothing to scroll'],
+    ['conv', 'Screen → Board', `Board point = screen point + (${s.scroll.x}, ${s.scroll.y})`],
+    ['vis', 'Board visible on screen', `${pct(v.w / b.w)} of its width, ${pct(v.h / b.h)} of its height`],
+    ['trash', 'Trash zone', `at Board (${t.x}, ${t.y}), ${STATUS[M.rectStatus(s, t)]}`],
+  ];
+}
+
+function renderPanel(k) {
+  const s = models[k], el = document.getElementById(`panel-${k}`);
+  const [title, sub] = TITLES[k];
+  const f = facts(s);
+  const factHtml = f.map(([key, label, val]) => {
+    const changed = prev[k][key] !== undefined && prev[k][key] !== val;
+    prev[k][key] = val;
+    return `<dt>${label}</dt><dd><span class="${changed ? 'changed' : ''}">${val}</span></dd>`;
+  }).join('');
+  const rows = s.notes.map((n) => {
+    const st = M.rectStatus(s, n);
+    const key = `note-${n.id}`, val = `${n.x},${n.y},${st}`;
+    const changed = prev[k][key] !== undefined && prev[k][key] !== val;
+    prev[k][key] = val;
+    return `<tr><td>${n.label}</td><td><span class="${changed ? 'changed' : ''}">(${n.x}, ${n.y})</span></td><td><span class="pill ${st}">${STATUS[st]}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="3" class="muted">No Notes left.</td></tr>';
+
+  let gestureHtml = '';
+  const g = s.gesture;
+  if (g) {
+    const n = s.notes.find((x) => x.id === g.id);
+    const live = M.rectToScreen(s, M.trashRect(s));
+    const stale = live.x !== g.cachedTrash.x || live.y !== g.cachedTrash.y;
+    const d = { x: s.scroll.x - g.scrollAtPress.x, y: s.scroll.y - g.scrollAtPress.y };
+    const bp = M.screenToBoard(s, g.client);
+    gestureHtml = `<div class="gesture ${stale ? 'stale' : ''}"><h3>Gesture in progress: “${n.label}”</h3>
+      Pointer on screen (${Math.round(g.client.x)}, ${Math.round(g.client.y)}), which is Board (${Math.round(bp.x)}, ${Math.round(bp.y)}) right now.<br>
+      Trash zone on screen: measured at press (${g.cachedTrash.x}, ${g.cachedTrash.y}), actually now (${live.x}, ${live.y})
+      ${stale ? `<br><b style="color:var(--bad)">Out of date: the ${k === 'a' ? 'page' : 'Board'} scrolled (${d.x}, ${d.y}) since the press.</b>` : ''}</div>`;
+  }
+
+  const m = M.maxScroll(s);
+  const canScroll = m.x > 0 || m.y > 0;
+  const pin = k === 'b'
+    ? `<span style="margin-left:auto">Trash zone sits in the corner of the:</span>
+       <button data-pin="board" class="${s.trashPin === 'board' ? 'on' : ''}">Board</button>
+       <button data-pin="window" class="${s.trashPin === 'window' ? 'on' : ''}">window</button>`
+    : '';
+
+  if (!el.dataset.built) {
+    el.innerHTML = `
+      <header><h2>${title}</h2><span class="tag">${sub}</span></header>
+      <div class="event"></div>
+      <div class="mini-wrap"><div class="mini"></div></div>
+      <div class="legend"></div>
+      <div class="scrollctl"></div>
+      <dl class="facts"></dl>
+      <table><thead><tr><th>Note</th><th>Stored Board position</th><th>Where it is</th></tr></thead><tbody></tbody></table>
+      <div class="gesture-slot"></div>`;
+    el.dataset.built = '1';
+    wireMini(el.querySelector('.mini'), k);
+    el.querySelector('.scrollctl').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b || b.disabled) return;
+      if (b.dataset.scroll) { const [dx, dy] = b.dataset.scroll.split(',').map(Number); dispatch([k], { type: 'scroll', dx, dy }); }
+      if (b.dataset.pin) dispatch([k], { type: 'setTrashPin', pin: b.dataset.pin });
+    });
+  }
+  const ev = el.querySelector('.event');
+  ev.className = `event ${s.event.tone}`; ev.textContent = s.event.text;
+  el.querySelector('.legend').textContent = `Blue frame = what the window shows. Dimmed = off-screen. Red stripes = outside the Board.${g ? ' Blue dot = the pointer.' : ''}`;
+  el.querySelector('.scrollctl').innerHTML = `
+      <span>Scroll the ${k === 'a' ? 'page' : 'Board'}:</span>
+      <button data-scroll="-100,0" ${canScroll ? '' : 'disabled'}>←</button>
+      <button data-scroll="100,0" ${canScroll ? '' : 'disabled'}>→</button>
+      <button data-scroll="0,-100" ${canScroll ? '' : 'disabled'}>↑</button>
+      <button data-scroll="0,100" ${canScroll ? '' : 'disabled'}>↓</button>
+      ${pin}`;
+  el.querySelector('.facts').innerHTML = factHtml;
+  el.querySelector('tbody').innerHTML = rows;
+  el.querySelector('.gesture-slot').innerHTML = gestureHtml;
+}
+
+function render() {
+  // one shared scale so both pictures are directly comparable
+  const avail = Math.max(280, (document.querySelector('.panel')?.clientWidth ?? 600) - 38);
+  scale = Math.min(...['a', 'b'].map((k) => { const W = worldSize(models[k]); return Math.min(avail / W.w, 340 / W.h); }));
+  renderPanel('a'); renderPanel('b');
+  for (const k of ['a', 'b']) renderMini(document.querySelector(`#panel-${k} .mini`), models[k]);
+  renderPresets();
+  renderScenario();
+}
+
+function renderPresets() {
+  const el = document.getElementById('presets');
+  el.innerHTML = PRESETS.map((p, i) => {
+    const on = models.a.win.w === p.w && models.a.win.h === p.h;
+    return `<button data-i="${i}" class="${on ? 'on' : ''}">${p.w}×${p.h}${p.w < 1024 ? ' (below minimum)' : ''}</button>`;
+  }).join('');
+  el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => dispatch(['a', 'b'], { type: 'resize', win: PRESETS[b.dataset.i] })));
+}
+
+// ---------- picture interaction (free play) ----------
+function wireMini(el, k) {
+  const toClient = (e) => {
+    const r = el.getBoundingClientRect();
+    return M.boardToScreen(models[k], { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale });
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const client = toClient(e);
+    dispatch([k], { type: 'press', client });
+    if (models[k].gesture) {
+      el.setPointerCapture(e.pointerId);
+      drag = { k, last: { x: e.clientX, y: e.clientY }, client };
+    }
+  });
+  el.addEventListener('dblclick', (e) => dispatch([k], { type: 'add', client: toClient(e) }));
+  el.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const f = e.deltaMode === 1 ? 40 : 1;
+    dispatch([k], { type: 'scroll', dx: Math.round(e.deltaX * f), dy: Math.round(e.deltaY * f) });
+  }, { passive: false });
+}
+window.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  // screen deltas in the picture are scaled up to real screen deltas
+  drag.client = { x: drag.client.x + (e.clientX - drag.last.x) / scale, y: drag.client.y + (e.clientY - drag.last.y) / scale };
+  drag.last = { x: e.clientX, y: e.clientY };
+  dispatch([drag.k], { type: 'move', client: drag.client });
+});
+window.addEventListener('pointerup', () => { if (drag) { const k = drag.k; drag = null; dispatch([k], { type: 'release' }); } });
+window.addEventListener('pointercancel', () => { if (drag) { const k = drag.k; drag = null; dispatch([k], { type: 'cancel' }); } });
+
+// ---------- guided walkthroughs ----------
+const noteCenter = (s, id) => { const n = s.notes.find((x) => x.id === id); return n && M.boardToScreen(s, { x: n.x + n.w / 2, y: n.y + n.h / 2 }); };
+const step = {
+  start: (win, trashPin = 'board') => ({ label: `Start: window ${win.w}×${win.h}${trashPin === 'window' ? ', (b) Trash zone in the window corner' : ''}`, act: () => ({ type: 'reset', win, trashPin }) }),
+  resize: (w, h) => ({ label: `Resize the window to ${w}×${h}`, act: () => ({ type: 'resize', win: { w, h } }) }),
+  scrollBy: (dx, dy, label) => ({ label, act: () => ({ type: 'scroll', dx, dy }) }),
+  scrollToEnd: (label) => ({ label, act: (s) => { const m = M.maxScroll(s); return { type: 'scroll', dx: m.x - s.scroll.x, dy: m.y - s.scroll.y }; } }),
+  press: (id, name) => ({ label: `Press on “${name}”`, act: (s) => ({ type: 'press', client: noteCenter(s, id) ?? { x: -1, y: -1 } }) }),
+  dragBy: (dx, dy) => ({ label: `Drag ${dx} px right and ${dy} px down`, act: (s) => s.gesture ? { type: 'move', client: { x: s.gesture.startClient.x + dx, y: s.gesture.startClient.y + dy } } : { type: 'noop' } }),
+  dragToCorner: () => ({ label: 'Drag to the bottom-right corner of the window (where the Trash zone sits in (a))', act: (s) => s.gesture
+    ? { type: 'move', client: { x: s.win.w - M.TRASH.margin - M.TRASH.w / 2, y: s.win.h - M.TRASH.margin - M.TRASH.h / 2 } } : { type: 'noop' } }),
+  dragToTrash: () => ({ label: 'Drag onto the Trash zone', act: (s) => { if (!s.gesture) return { type: 'noop' }; const t = M.trashRect(s); return { type: 'move', client: M.boardToScreen(s, { x: t.x + t.w / 2, y: t.y + t.h / 2 }) }; } }),
+  release: () => ({ label: 'Release', act: () => ({ type: 'release' }) }),
+};
+
+const SCENARIOS = [
+  {
+    name: 'Delete a Note on a laptop',
+    intro: 'A typical 1440×900 laptop. The user drags “Groceries” to the corner where they expect the Trash zone, then tries again with “Call dentist”.',
+    watch: [
+      ['a', 'The Board is the window, so the Trash zone is always in the window corner. Both deletes work straight away.'],
+      ['b', 'The Trash zone is in the corner of the 1920×1080 Board, which is off-screen. The first drop just moves the Note. The user has to scroll to find the Trash zone.'],
+    ],
+    steps: [step.start({ w: 1440, h: 900 }), step.press('n1', 'Groceries'), step.dragToCorner(), step.release(),
+      step.scrollToEnd('Scroll to the bottom-right (only (b) can scroll)'), step.press('n2', 'Call dentist'), step.dragToTrash(), step.release()],
+  },
+  {
+    name: '(b) with the Trash zone in the window corner',
+    intro: 'The obvious fix for (b): keep the Trash zone in the window corner, so it is always visible. Scroll the Board a bit, then delete “Q4 plan”.',
+    watch: [
+      ['a', 'Unchanged: the Trash zone never moves, because nothing scrolls.'],
+      ['b', 'The delete works, but look at “Trash zone” in the facts: its Board position changes with every scroll. Hit-testing it now depends on the scroll offset, which is exactly the coupling (a) avoids.'],
+    ],
+    steps: [step.start({ w: 1440, h: 900 }, 'window'), step.scrollBy(300, 100, 'Scroll 300 right and 100 down (only (b) can scroll)'),
+      step.press('n3', 'Q4 plan'), step.dragToTrash(), step.release()],
+  },
+  {
+    name: 'The window shrinks',
+    intro: 'Notes are placed on a big 1920×1080 window, then the user makes the window smaller, then full size again. “Q4 plan” sits at x = 1150.',
+    watch: [
+      ['a', 'The Board shrinks with the window, so “Q4 plan” ends up past the Board edge (red). Its stored position is not touched here. Whether to clamp it on screen or rewrite it is the Round 2 question this choice creates. At full size again, it is fine.'],
+      ['b', 'Nothing ever becomes invalid. “Q4 plan” is just off-screen, and the user has to scroll to find it.'],
+    ],
+    steps: [step.start({ w: 1920, h: 1080 }), step.resize(1280, 800), step.resize(1024, 768), step.resize(1920, 1080)],
+  },
+  {
+    name: 'Window below 1024×768',
+    intro: 'The brief only promises 1024×768, but someone opens it at 900×700. Scroll a little, then move “Groceries”.',
+    watch: [
+      ['a', 'The Board stays at 1024×768 and the page scrolls by up to (124, 68). Screen → Board now adds the scroll, the same maths as (b), but only in this below-minimum case. The move is still correct, because the Board position is measured at press time. Also note “Q4 plan” is past the edge from the start, as if it had been saved on a bigger screen.'],
+      ['b', 'Same maths as always. A lot of the Board is off-screen.'],
+    ],
+    steps: [step.start({ w: 900, h: 700 }), step.scrollBy(124, 68, 'Scroll 124 right and 68 down'), step.press('n1', 'Groceries'), step.dragBy(300, 200), step.release()],
+  },
+  {
+    name: 'Scrolling during a drag',
+    intro: 'The tricky case. In (b) the user scrolls to the Trash zone, drags “Q4 plan” onto it, then nudges the mouse wheel up before letting go.',
+    watch: [
+      ['a', 'At 1440×900 there is nothing to scroll, so this cannot happen. (It can below 1024×768: try it in free play at 900×700.)'],
+      ['b', 'The Trash zone scrolls away under the pointer, and the dragged Note rides off with the Board. The engine still uses the Trash zone position it measured at press time, so it deletes a Note the user did not drop on the Trash zone. Fixing this means re-measuring on every scroll, or blocking scroll during a Gesture.'],
+    ],
+    steps: [step.start({ w: 1440, h: 900 }), step.scrollToEnd('Scroll to the bottom-right (only (b) can scroll)'), step.press('n3', 'Q4 plan'), step.dragToTrash(),
+      step.scrollBy(0, -150, 'Scroll the wheel up 150 px while still holding'), step.release()],
+  },
+];
+
+let active = 0, progress = 0;
+
+function renderScenario() {
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = SCENARIOS.map((sc, i) => `<button data-i="${i}" class="${i === active ? 'on' : ''}">${i + 1}. ${sc.name}</button>`).join('');
+  tabs.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { active = +b.dataset.i; progress = 0; renderScenario(); }));
+  const sc = SCENARIOS[active];
+  document.getElementById('scenario').innerHTML = `
+    <div class="scenario">
+      <div><p>${sc.intro}</p><h3 style="margin-top:12px">What to watch for</h3>
+        <ul class="watch">${sc.watch.map(([k, t]) => `<li><b>${k}</b>${t}</li>`).join('')}</ul></div>
+      <div><h3>Steps (each one runs on both sides)</h3>
+        <ol class="steps">${sc.steps.map((st, i) => `<li class="${i < progress ? 'done' : ''}">
+          <button data-i="${i}" class="${i === progress ? 'primary' : ''}" ${i === progress ? '' : 'disabled'}>${st.label}</button></li>`).join('')}</ol>
+        ${progress >= sc.steps.length ? '<p class="muted">Done. Pick another tab, or <a href="#" id="again">run this one again</a>.</p>' : ''}
+      </div>
+    </div>`;
+  document.querySelectorAll('#scenario ol.steps button').forEach((b) => b.addEventListener('click', () => {
+    progress = +b.dataset.i + 1;
+    dispatch(['a', 'b'], sc.steps[+b.dataset.i].act);
+  }));
+  document.getElementById('again')?.addEventListener('click', (e) => { e.preventDefault(); progress = 0; renderScenario(); });
+}
+
+document.getElementById('reset').addEventListener('click', () => { resetAll(models.a.win); progress = 0; render(); });
+window.addEventListener('resize', render);
+resetAll();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,537 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket 006 (Note interaction UX).
+  Question: how should a Note feel under the pointer? Grip and edit entry, resize handles, MIN_NOTE_SIZE,
+  when to raise, selection, Trash zone placement/size/hit rule, and undo after delete.
+  One working Board (scroll container + window-pinned Trash zone, per ADR 0001) with a cut-down copy of the
+  005 lifecycle: 3px dead zone, pointer capture, scroll-compensated delta, transform preview, reset-then-commit,
+  Escape cancels. Every open choice is a toggle; ★ marks the current recommendation. Config lives in the URL hash.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Note interaction UX</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --bad: #b42318; --bad-soft: #fde7e5; --ok: #1f7a4a;
+    --board: #fbfaf7; --grid: #ece9e2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1600px; margin: 0 auto; padding: 20px 20px 60px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .lede { color: var(--muted); max-width: 1100px; margin: 0 0 14px; }
+  code { font: 12px ui-monospace, Menlo, monospace; background: #f1efea; padding: 1px 4px; border-radius: 4px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card + .card { margin-top: 12px; }
+
+  /* Controls */
+  .opt { margin: 0 0 12px; }
+  .opt .lbl { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .opt .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .opt .row button { font-size: 12.5px; padding: 3px 8px; }
+  .opt .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  /* App frame */
+  .frame { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .toolbar .sp { flex: 1; }
+  .toolbar .small { color: var(--muted); font-size: 12px; }
+  .viewport { position: relative; height: 600px; }
+  .scroller { position: absolute; inset: 0; overflow: auto; }
+  .board { position: relative; width: 1920px; height: 1080px; background-color: var(--board);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px; touch-action: none; }
+  body.gesturing { user-select: none; -webkit-user-select: none; }
+  body.gesturing * { cursor: inherit !important; }
+
+  /* Note */
+  .note { position: absolute; display: flex; flex-direction: column; border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 4px 10px rgba(0,0,0,.06); touch-action: none; user-select: none; -webkit-user-select: none; }
+  .note.gesture { box-shadow: 0 6px 18px rgba(0,0,0,.22); }
+  .note[data-over-trash] { opacity: .55; outline: 2px dashed var(--bad); }
+  .note.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .note .grip { display: none; height: 22px; flex: none; border-radius: 4px 4px 0 0; background: rgba(0,0,0,.07); cursor: grab; }
+  .note .grip::after { content: "⋮⋮"; display: block; text-align: center; color: rgba(0,0,0,.35); font-size: 11px; letter-spacing: 2px; line-height: 22px; }
+  body.grip-header .note .grip, body.grip-hybrid .note .grip { display: block; }
+  body.grip-hybrid .note.editing .grip { background: rgba(47,91,211,.14); }
+  .note textarea { flex: 1; min-height: 0; width: 100%; border: 0; resize: none; background: transparent; padding: 10px 12px; font: 14px/1.4 inherit; font-family: inherit; color: #2b2a26; outline: none; }
+  /* Body grip: textarea is inert until editing */
+  body.grip-body .note { cursor: grab; }
+  body.grip-body .note textarea { pointer-events: none; }
+  body.grip-body .note.editing textarea { pointer-events: auto; cursor: text; user-select: text; -webkit-user-select: text; }
+  body.grip-body .note.editing { box-shadow: 0 0 0 2px rgba(47,91,211,.55), 0 4px 10px rgba(0,0,0,.08); }
+  body.grip-header .note textarea { cursor: text; user-select: text; -webkit-user-select: text; }
+
+  /* Resize handles: invisible hit zones, visible corner tick for se */
+  .h { position: absolute; z-index: 2; }
+  .h.n, .h.s { left: 10px; right: 10px; height: 8px; }
+  .h.e, .h.w { top: 10px; bottom: 10px; width: 8px; }
+  .h.n { top: -4px; cursor: ns-resize; } .h.s { bottom: -4px; cursor: ns-resize; }
+  .h.e { right: -4px; cursor: ew-resize; } .h.w { left: -4px; cursor: ew-resize; }
+  .h.nw, .h.ne, .h.sw, .h.se { width: 14px; height: 14px; }
+  .h.nw { left: -5px; top: -5px; cursor: nwse-resize; } .h.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+  .h.ne { right: -5px; top: -5px; cursor: nesw-resize; } .h.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+  .h.se::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 7px; height: 7px;
+    border-right: 2px solid rgba(0,0,0,.28); border-bottom: 2px solid rgba(0,0,0,.28); }
+  body.show-zones .h { background: rgba(47,91,211,.25); }
+
+  /* Trash zone */
+  .trash { position: absolute; z-index: 1000000; display: grid; place-items: center; border-radius: 14px;
+    border: 2px dashed #c9c4b8; background: rgba(255,255,255,.88); color: var(--muted); font-size: 12px; text-align: center;
+    transition: background .1s, border-color .1s, transform .1s; }
+  .trash svg { width: 26px; height: 26px; display: block; margin: 0 auto 2px; }
+  .trash[data-over] { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); transform: scale(1.06); }
+  .trash.gesture-hint { border-color: #9c968a; color: var(--ink); }
+
+  /* Toast + confirm */
+  .toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1000001;
+    background: #1d1f23; color: #fff; border-radius: 8px; padding: 8px 10px 8px 14px; display: flex; gap: 12px; align-items: center; font-size: 13px; }
+  .toast button { background: transparent; color: #9db7ff; border-color: #444; }
+  .modal { position: absolute; inset: 0; z-index: 1000002; background: rgba(0,0,0,.25); display: grid; place-items: center; }
+  .modal .box { background: var(--surface); border-radius: 10px; padding: 16px; width: 280px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+  .modal .box .row { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+
+  /* State panel */
+  .below { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+  @media (max-width: 1200px) { .below { grid-template-columns: 1fr; } }
+  table { border-collapse: collapse; width: 100%; font: 12px ui-monospace, Menlo, monospace; }
+  th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  tr.ed td { background: var(--accent-soft); }
+  .log { font: 12px ui-monospace, Menlo, monospace; max-height: 220px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  .log li { padding: 2px 0; border-bottom: 1px dotted var(--line); }
+  .log .k { color: var(--accent); }
+  .tries { margin: 0; padding-left: 18px; }
+  .tries li { margin-bottom: 6px; }
+  .tries b { font-weight: 600; }
+</style>
+</head>
+<body class="grip-body">
+<main>
+  <h1>Note interaction UX: playground</h1>
+  <p class="lede">Ticket 006. A working Board (1920×1080 in its own scroll container, Trash zone pinned to the visible corner) running a cut-down copy of the 005 Gesture lifecycle. Flip a toggle on the left and feel the difference on the Board. <b>★</b> marks the current recommendation. Toggles land in the URL hash, so a link reproduces a setup. Escape cancels a running Gesture.</p>
+
+  <div class="layout">
+    <aside>
+      <div class="card">
+        <div class="presets">
+          <button id="preset-rec">★ Load recommendation</button>
+          <button id="reset-notes">Reset notes</button>
+          <button id="zones">Show hit zones</button>
+        </div>
+        <div id="controls"></div>
+      </div>
+    </aside>
+
+    <section>
+      <div class="frame">
+        <div class="toolbar">
+          <span class="small">New note:</span>
+          <button data-size="S">S</button><button data-size="M">M</button><button data-size="L">L</button>
+          <span class="sp"></span>
+          <span class="small" id="status">idle</span>
+        </div>
+        <div class="viewport" id="viewport">
+          <div class="scroller" id="scroller"><div class="board" id="board"></div></div>
+          <div class="trash" id="trash"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span id="trash-label">Drop to delete</span></div></div>
+        </div>
+      </div>
+
+      <div class="below">
+        <div class="card">
+          <h2>Things to try</h2>
+          <ol class="tries">
+            <li><b>Grip:</b> under each grip, select a word in a Note, then move the Note. Count the presses each one needs.</li>
+            <li><b>Edit entry:</b> under <i>Body, click to edit</i>, click a Note just to bring it to the front. Did it start editing when you didn't want it to?</li>
+            <li><b>Hit rule:</b> drag the big L Note so only its corner brushes the Trash zone, with the pointer well away. Compare <i>pointer</i> and <i>overlap</i>.</li>
+            <li><b>Raise:</b> drag the back Note across the front one under <i>raise on release</i>. It slides underneath while you drag it.</li>
+            <li><b>Resize:</b> shrink a Note from its top-left corner down to the minimum. The bottom-right corner must stay put.</li>
+            <li><b>Min size:</b> type three lines into a Note at each minimum. Which minimum still leaves the text readable?</li>
+            <li><b>Undo:</b> delete a Note, then undo. Does it come back at the same place and depth?</li>
+            <li><b>Scroll:</b> scroll the Board with the wheel while dragging. The Note stays under the pointer (005 scroll compensation).</li>
+          </ol>
+        </div>
+        <div class="card">
+          <h2>State <span style="text-transform:none;font-weight:400">(store = committed only; preview lives in the DOM)</span></h2>
+          <div id="state"></div>
+          <h2 style="margin-top:10px">Log</h2>
+          <ul class="log" id="log"></ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+// ---------- Config ----------
+const OPTIONS = [
+  { key: "grip", label: "Grip & edit entry", choices: [
+      ["hybrid", "Hybrid: idle body, editing strip"], ["body-dbl", "★ Body, double-click to edit"], ["body-click", "Body, click to edit"], ["header", "Header strip, text always live"]],
+    hint: { "body-dbl": "The whole Note moves it. Double-click (or creating a new Note) opens the text. Blur or Escape closes it.",
+            "body-click": "The whole Note moves it. A click inside the dead zone opens the text, so a click to raise also starts editing.",
+            "hybrid": "Idle: the whole Note (strip included) moves it, and a click opens the text with the caret where you clicked. Editing: the body is text (caret, select, double-click a word) and only the strip moves it. Escape, a click outside or a press on another Note ends editing.",
+            "header": "Only the 22px strip moves the Note. The text area is always a normal textarea. A press there never starts a Gesture." } },
+  { key: "newEdit", label: "New Note opens in edit", choices: [["yes", "★ yes"], ["no", "no"]],
+    hint: { yes: "Toolbar or double-click creation focuses the new Note's text, so you can type straight away.", no: "New Notes are created empty and idle." } },
+  { key: "handles", label: "Resize handles", choices: [["se", "SE corner only"], ["corners", "4 corners"], ["all", "★ corners + edges"]],
+    hint: { se: "One visible grip. The easiest to discover, but the top and left edges can't be resized.", corners: "resizeKinds.{nw,ne,sw,se}.", all: "Invisible hit zones on all 8. The cursor shows which one you're on; only SE has a visible tick." } },
+  { key: "min", label: "MIN_NOTE_SIZE", choices: [["80x60", "80×60"], ["120x80", "★ 120×80"], ["160x120", "160×120"]],
+    hint: {} },
+  { key: "raise", label: "Raise", choices: [["press", "★ on press"], ["release", "on release"], ["click", "only on click"]],
+    hint: { press: "The Note's onPointerDown dispatches raise, then calls start. The grabbed Note is on top for the whole Gesture.",
+            release: "Raise happens after the commit, so while you drag the Note it can slide under others.",
+            click: "Gestures never raise; only a click inside the dead zone does." } },
+  { key: "selection", label: "Selection", choices: [["none", "★ none (top = active)"], ["selected", "selectedId + Delete key"]],
+    hint: { none: "No selection state. The Note on top is the one you last touched.", selected: "An outline marks the Note last pressed; Delete/Backspace deletes it; a press on the empty Board clears it." } },
+  { key: "corner", label: "Trash zone corner", choices: [["br", "★ bottom-right"], ["bl", "bottom-left"], ["tr", "top-right"]], hint: {} },
+  { key: "tsize", label: "Trash zone size", choices: [["s", "72"], ["m", "★ 104"], ["l", "140"]], hint: {} },
+  { key: "hit", label: "Trash hit rule", choices: [["pointer", "★ pointer inside (005)"], ["overlap", "Note overlaps (rejected)"], ["center", "Note centre inside"]],
+    hint: { pointer: "Decided in 005 R2-Q7. Shown here so you can feel why.", overlap: "A corner brushing the zone counts as a hit.", center: "A middle ground; for big Notes it's far from where the pointer is." } },
+  { key: "undo", label: "After delete", choices: [["toast", "★ toast with Undo (5s)"], ["none", "nothing"], ["confirm", "confirm dialog"]],
+    hint: { toast: "Not blocking. Undo puts the Note back with the same id, rect and z.", none: "Gone for good.", confirm: "Interrupts every deliberate drop." } },
+];
+const REC = { grip: "body-dbl", newEdit: "yes", handles: "all", min: "120x80", raise: "press", selection: "none", corner: "br", tsize: "m", hit: "pointer", undo: "toast" };
+let cfg = { ...REC };
+try { const h = new URLSearchParams(location.hash.slice(1)); for (const o of OPTIONS) { const v = h.get(o.key); if (v && o.choices.some(c => c[0] === v)) cfg[o.key] = v; } } catch {}
+
+const BOARD = { w: 1920, h: 1080 };
+const SIZES = { S: [140, 110], M: [200, 160], L: [300, 240] };
+const COLORS = ["#fff4a8", "#ffd6a5", "#caffbf", "#bde0fe", "#ffc6ff"];
+const minSize = () => { const [w, h] = cfg.min.split("x").map(Number); return { w, h }; };
+
+// ---------- Store (committed state only) ----------
+let store = { notes: new Map(), topZ: 0, selectedId: null, editingId: null };
+let nextId = 1, cascade = 0;
+const $ = id => document.getElementById(id);
+const scroller = $("scroller"), board = $("board"), trash = $("trash"), viewport = $("viewport");
+const els = new Map();
+
+function log(kind, msg) {
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="k">${kind}</span> ${msg}`;
+  $("log").prepend(li);
+  while ($("log").children.length > 60) $("log").lastChild.remove();
+}
+function dispatch(a) {
+  const n = a.id != null ? store.notes.get(a.id) : null;
+  switch (a.type) {
+    case "create": store.notes.set(a.note.id, a.note); store.topZ = Math.max(store.topZ, a.note.z); break;
+    case "move": n.x = a.x; n.y = a.y; break;
+    case "resize": Object.assign(n, { x: a.x, y: a.y, w: a.w, h: a.h }); break;
+    case "delete": store.notes.delete(a.id); if (store.selectedId === a.id) store.selectedId = null; break;
+    case "raise": if (n.z === store.topZ) return; n.z = ++store.topZ; break;
+    case "setText": n.text = a.text; break;
+  }
+  if (a.type !== "setText") log(a.type, JSON.stringify(a, (k, v) => k === "type" ? undefined : v));
+  render();
+}
+
+function makeNote(x, y, w, h, text = "") {
+  const id = nextId++;
+  return { id, x: Math.round(x), y: Math.round(y), w, h, z: ++store.topZ, text, color: COLORS[id % COLORS.length] };
+}
+function seed() {
+  store = { notes: new Map(), topZ: 0, selectedId: null, editingId: null }; nextId = 1; cascade = 0;
+  for (const el of els.values()) el.remove(); els.clear();
+  const s = [[60, 60, 200, 160, "Back Note: drag me across the front one"], [180, 120, 200, 160, "Front Note"],
+             [520, 80, 300, 240, "Big L Note: brush the Trash zone with my corner"], [140, 340, 140, 110, "Small S"]];
+  for (const [x, y, w, h, t] of s) { const n = makeNote(x, y, w, h, t); store.notes.set(n.id, n); }
+  $("log").innerHTML = ""; log("seed", "4 notes"); render();
+}
+
+// ---------- Rendering (never sets transform) ----------
+function handlesFor() { return cfg.handles === "se" ? ["se"] : cfg.handles === "corners" ? ["nw", "ne", "sw", "se"] : ["n", "e", "s", "w", "nw", "ne", "sw", "se"]; }
+function buildNoteEl(n) {
+  const el = document.createElement("div");
+  el.className = "note"; el.dataset.id = n.id;
+  el.innerHTML = `<div class="grip"></div><textarea spellcheck="false"></textarea>`;
+  for (const hnd of handlesFor()) { const h = document.createElement("div"); h.className = "h " + hnd; h.dataset.edges = hnd; el.append(h); }
+  const ta = el.querySelector("textarea");
+  ta.value = n.text;
+  ta.addEventListener("input", () => dispatch({ type: "setText", id: n.id, text: ta.value }));
+  ta.addEventListener("focus", () => { if (cfg.grip === "header") { store.editingId = n.id; render(); } });
+  ta.addEventListener("blur", () => { if (store.editingId === n.id) { store.editingId = null; log("edit", `exit #${n.id}`); render(); } });
+  ta.addEventListener("keydown", e => { if (e.key === "Escape") ta.blur(); });
+  el.addEventListener("pointerdown", e => onNotePointerDown(e, n.id, el));
+  el.addEventListener("dblclick", e => { e.stopPropagation(); if (cfg.grip === "body-dbl" && !e.target.dataset.edges) enterEdit(n.id); });
+  board.append(el); els.set(n.id, el);
+  return el;
+}
+function render() {
+  for (const [id, el] of els) if (!store.notes.has(id)) { el.remove(); els.delete(id); }
+  for (const n of store.notes.values()) {
+    const el = els.get(n.id) || buildNoteEl(n);
+    const s = el.style;
+    s.left = n.x + "px"; s.top = n.y + "px"; s.width = n.w + "px"; s.height = n.h + "px"; s.zIndex = n.z; s.background = n.color;
+    el.classList.toggle("editing", store.editingId === n.id);
+    el.classList.toggle("selected", cfg.selection === "selected" && store.selectedId === n.id);
+    const ta = el.querySelector("textarea");
+    ta.readOnly = cfg.grip !== "header" && store.editingId !== n.id;
+  }
+  renderState();
+}
+function rebuildAll() { for (const el of els.values()) el.remove(); els.clear(); render(); }
+
+function renderState() {
+  const rows = [...store.notes.values()].sort((a, b) => b.z - a.z).map(n =>
+    `<tr class="${store.editingId === n.id ? "ed" : ""}"><td>#${n.id}</td><td>${n.x},${n.y}</td><td>${n.w}×${n.h}</td><td>z ${n.z}</td><td>${(n.text || "").slice(0, 22).replace(/</g, "&lt;")}</td></tr>`).join("");
+  $("state").innerHTML = `<table><tr><th>id</th><th>x,y</th><th>size</th><th>z</th><th>text</th></tr>${rows}</table>
+    <div style="margin-top:6px;font:12px ui-monospace,Menlo,monospace;color:var(--muted)">topZ ${store.topZ} · editingId ${store.editingId ?? "null"}${cfg.selection === "selected" ? " · selectedId " + (store.selectedId ?? "null") : ""}</div>`;
+}
+
+// ---------- Editing ----------
+function enterEdit(id, at) {
+  if (!store.notes.has(id)) return;
+  store.editingId = id; render();
+  const ta = els.get(id).querySelector("textarea");
+  let pos = ta.value.length, how = "end";
+  if (at && document.caretPositionFromPoint) {
+    const cp = document.caretPositionFromPoint(at.x, at.y);
+    if (cp && cp.offsetNode === ta) { pos = cp.offset; how = "caretPositionFromPoint"; }
+  }
+  ta.focus(); ta.setSelectionRange(pos, pos);
+  log("edit", `enter #${id} caret ${pos} (${how})`);
+}
+
+// ---------- Geometry (pure) ----------
+function clampMove(r) { return { ...r, x: Math.min(Math.max(r.x, 0), BOARD.w - r.w), y: Math.min(Math.max(r.y, 0), BOARD.h - r.h) }; }
+function resizeRect(f, d, edges, min) {
+  let { x, y, w, h } = f;
+  if (edges.includes("e")) w = Math.max(min.w, f.w + d.dx);
+  if (edges.includes("s")) h = Math.max(min.h, f.h + d.dy);
+  if (edges.includes("w")) { w = Math.max(min.w, f.w - d.dx); x = f.x + f.w - w; }
+  if (edges.includes("n")) { h = Math.max(min.h, f.h - d.dy); y = f.y + f.h - h; }
+  if (x < 0) { w += x; x = 0; } if (y < 0) { h += y; y = 0; }
+  w = Math.min(w, BOARD.w - x); h = Math.min(h, BOARD.h - y);
+  return { x, y, w, h };
+}
+const inRect = (p, r) => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+const overlaps = (a, r) => a.x < r.right && a.x + a.w > r.left && a.y < r.bottom && a.y + a.h > r.top;
+
+// ---------- Diagnostics: recent pointer events, shown when a Gesture is cancelled ----------
+const trail = [];
+for (const t of ["pointerdown", "pointermove", "pointerup", "pointercancel", "gotpointercapture", "lostpointercapture", "blur", "visibilitychange"]) {
+  document.addEventListener(t, e => {
+    const name = t === "pointermove" ? "move" : t.replace("pointer", "");
+    if (name === "move" && g && !g.pending) g.moves = (g.moves || 0) + 1;  // count before merging
+    if (name === "move" && trail[trail.length - 1] === "move") return;
+    const ms = `@${Math.round(e.timeStamp)}ms`;
+    let entry = t === "pointerdown" || t === "pointerup" ? `${name}(${e.pointerType},btns=${e.buttons})${ms}` : name;
+    if (t === "lostpointercapture") entry += ms;
+    if (t === "lostpointercapture" && g && !g.pending) log("info", "lostpointercapture while active (ignored; waiting for pointerup)");
+    if (t === "lostpointercapture" && g) {
+      entry += `(on=${e.target === g.el ? "note" : e.target.nodeName || "document"}, connected=${g.el.isConnected}, ` +
+        `${g.activeAt ? Math.round(performance.now() - g.activeAt) + "ms after dead zone" : "still pending"}, activeMoves=${g.moves || 0}, hasCapture=${g.el.hasPointerCapture(g.pointerId)})`;
+    }
+    trail.push(entry);
+    if (trail.length > 500) trail.splice(0, 250);
+  }, true);
+}
+window.addEventListener("blur", () => { trail.push("window-blur"); });
+for (const t of ["dragstart", "selectstart", "contextmenu", "mousedown", "mouseup"]) {
+  document.addEventListener(t, e => trail.push(`${t}(${e.target.nodeName === "#text" ? "text" : (e.target.className || e.target.nodeName)})`), true);
+}
+let rawMoves = 0; document.addEventListener("mousemove", () => { rawMoves++; }, true);
+const browser = () => (navigator.userAgent.match(/(Firefox|Edg|Chrome|Safari)\/[\d.]+/) || ["?"])[0];
+
+// ---------- Gesture session (cut-down 005 controller) ----------
+let g = null;
+function onNotePointerDown(e, id, el) {
+  if (!e.isPrimary || e.button !== 0 || g) return;
+  const n = store.notes.get(id);
+  if (cfg.raise === "press") dispatch({ type: "raise", id });
+  if (cfg.selection === "selected" && store.selectedId !== id) { store.selectedId = id; render(); }
+  const handle = e.target.dataset.edges;
+  if (!handle) {
+    if (e.target.tagName === "TEXTAREA" && !e.target.readOnly) return;  // isGesturePress: editable target
+    if (cfg.grip === "header" && !e.target.classList.contains("grip")) return;
+    if (cfg.grip === "hybrid" && store.editingId === id && !e.target.classList.contains("grip")) return;
+  }
+  e.preventDefault();
+  const keepEditing = cfg.grip === "hybrid" && store.editingId === id;  // moving the Note you're typing in keeps the caret
+  if (!keepEditing && document.activeElement && document.activeElement.tagName === "TEXTAREA") document.activeElement.blur(); // see 002 §3: cancelled press doesn't blur
+  el.setPointerCapture(e.pointerId);
+  g = { id, el, pointerId: e.pointerId, from: { x: n.x, y: n.y, w: n.w, h: n.h }, edges: handle || null,
+        sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop,
+        boardRect: board.getBoundingClientRect(), trashRect: trash.getBoundingClientRect(), pending: true, over: false, rect: null };
+  // Amended 005: end signals are window-level and filtered by pointerId. lostpointercapture is NOT an end signal,
+  // because Chrome can fire it before pointerup when a coalesced move is still pending (measured in Chrome 150).
+  const mine = ev => g && ev.pointerId === g.pointerId;
+  const onMove = ev => {
+    if (!mine(ev)) return;
+    if (ev.buttons === 0) { log("note", "missed pointerup (move with buttons=0) → commit"); finish(); return; }
+    g.px = ev.clientX; g.py = ev.clientY; update();
+  };
+  const onUp = ev => { if (!mine(ev)) return; g.px = ev.clientX; g.py = ev.clientY; update(); finish(); };
+  const onCancel = ev => { if (mine(ev)) end("pointercancel"); };
+  const onKey = ev => { if (ev.key === "Escape") { ev.preventDefault(); end("Escape"); } };
+  window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
+  scroller.addEventListener("scroll", update); window.addEventListener("keydown", onKey);
+  g.detach = () => {
+    window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    scroller.removeEventListener("scroll", update); window.removeEventListener("keydown", onKey);
+  };
+  status(handle ? `pending (resize ${handle})` : "pending (move)");
+}
+function delta() { return { dx: g.px - g.sx + scroller.scrollLeft - g.sl, dy: g.py - g.sy + scroller.scrollTop - g.st }; }
+function update() {
+  if (!g) return;
+  if (g.pending) {
+    if (Math.hypot(g.px - g.sx, g.py - g.sy) < 3) return;
+    g.pending = false; g.activeAt = performance.now(); trail.push("ACTIVE"); g.el.classList.add("gesture"); document.body.classList.add("gesturing");
+    document.body.style.cursor = g.edges ? getComputedStyle(g.el.querySelector(".h." + g.edges)).cursor : "grabbing";
+    trash.classList.toggle("gesture-hint", !g.edges);
+  }
+  const d = delta(), f = g.from;
+  const r = g.edges ? resizeRect(f, d, g.edges, minSize()) : clampMove({ ...f, x: f.x + d.dx, y: f.y + d.dy });
+  g.rect = r;
+  // writePreview(rect, base): translate(rect − base) + width/height
+  g.el.style.transform = `translate(${r.x - f.x}px, ${r.y - f.y}px)`;
+  g.el.style.width = r.w + "px"; g.el.style.height = r.h + "px";
+  // The kind decides Trash zone hits (move only)
+  let over = false;
+  if (!g.edges) {
+    const ox = g.boardRect.left - (scroller.scrollLeft - g.sl), oy = g.boardRect.top - (scroller.scrollTop - g.st);
+    const client = { x: r.x + ox, y: r.y + oy, w: r.w, h: r.h };
+    over = cfg.hit === "pointer" ? inRect({ x: g.px, y: g.py }, g.trashRect)
+         : cfg.hit === "overlap" ? overlaps(client, g.trashRect)
+         : inRect({ x: client.x + client.w / 2, y: client.y + client.h / 2 }, g.trashRect);
+  }
+  if (over !== g.over) {  // edge-triggered setOverTrash
+    g.over = over;
+    if (over) { g.el.dataset.overTrash = ""; trash.dataset.over = ""; } else { delete g.el.dataset.overTrash; delete trash.dataset.over; }
+  }
+  status(`${g.edges ? "resize " + g.edges : "move"} Δ(${Math.round(d.dx)}, ${Math.round(d.dy)})${over ? " · over Trash zone" : ""}`);
+}
+function resetPreview(s) {
+  s.el.style.transform = ""; s.el.style.width = s.from.w + "px"; s.el.style.height = s.from.h + "px";
+  delete s.el.dataset.overTrash; delete trash.dataset.over; trash.classList.remove("gesture-hint");
+  s.el.classList.remove("gesture"); document.body.classList.remove("gesturing"); document.body.style.cursor = "";
+}
+function end(why) {  // idempotent cancel path
+  if (!g) return;
+  const s = g; g = null; s.detach(); resetPreview(s);
+  try { s.el.releasePointerCapture(s.pointerId); } catch {}
+  if (!s.pending) {
+    log("cancel", `${why} after: ${trail.slice(-10).join(" → ")} [${browser()}]`);
+    const mark = trail.length;  // what arrives right after the cancel? (a late pointerup would show here)
+    setTimeout(() => log("…then", trail.slice(mark).join(" → ") || "(nothing within 300ms)"), 300);
+  }
+  status("idle");
+}
+function finish() {
+  const s = g; g = null; s.detach();
+  const wasPending = s.pending, rect = s.rect, over = s.over;
+  resetPreview(s);  // reset, then dispatch
+  status("idle");
+  if (wasPending) {  // a click
+    if (cfg.raise === "click" || cfg.raise === "release") dispatch({ type: "raise", id: s.id });
+    if ((cfg.grip === "body-click" || cfg.grip === "hybrid") && !s.edges && store.editingId !== s.id) enterEdit(s.id, { x: s.px, y: s.py });
+    return;
+  }
+  if (over) { requestDelete(s.id); return; }
+  const R = { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) };
+  if (s.edges) dispatch({ type: "resize", id: s.id, ...R }); else dispatch({ type: "move", id: s.id, x: R.x, y: R.y });
+  if (cfg.raise === "release") dispatch({ type: "raise", id: s.id });
+}
+function status(t) { $("status").textContent = t; }
+
+// ---------- Delete + undo ----------
+let toastTimer = null;
+function requestDelete(id) {
+  if (cfg.undo === "confirm") {
+    const m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = `<div class="box"><b>Delete this note?</b><div class="row"><button data-a="no">Cancel</button><button data-a="yes" class="on">Delete</button></div></div>`;
+    m.addEventListener("click", ev => { const a = ev.target.dataset.a; if (!a) return; m.remove(); if (a === "yes") dispatch({ type: "delete", id }); else log("delete", "cancelled in dialog"); });
+    viewport.append(m); m.querySelector("[data-a=yes]").focus(); return;
+  }
+  const snapshot = { ...store.notes.get(id) };
+  dispatch({ type: "delete", id });
+  if (cfg.undo !== "toast") return;
+  document.querySelector(".toast")?.remove(); clearTimeout(toastTimer);
+  const t = document.createElement("div"); t.className = "toast";
+  t.innerHTML = `Note deleted <button>Undo</button>`;
+  t.querySelector("button").onclick = () => { t.remove(); clearTimeout(toastTimer); dispatch({ type: "create", note: snapshot }); log("undo", `restored #${id} at z ${snapshot.z}`); };
+  viewport.append(t); toastTimer = setTimeout(() => t.remove(), 5000);
+}
+
+// ---------- Board: create + selection clear + Delete key ----------
+board.addEventListener("pointerdown", e => { if (e.target === board && cfg.selection === "selected" && store.selectedId != null) { store.selectedId = null; render(); } });
+board.addEventListener("dblclick", e => {
+  if (e.target !== board) return;
+  const r = board.getBoundingClientRect(); const [w, h] = SIZES.M;
+  const n = makeNote(e.clientX - r.left - w / 2, e.clientY - r.top - h / 2, w, h);
+  Object.assign(n, clampMove(n)); n.x = Math.round(n.x); n.y = Math.round(n.y);
+  dispatch({ type: "create", note: n });
+  if (cfg.newEdit === "yes") enterEdit(n.id);
+});
+document.querySelectorAll("[data-size]").forEach(b => b.addEventListener("click", () => {
+  const [w, h] = SIZES[b.dataset.size];
+  const cx = scroller.scrollLeft + scroller.clientWidth / 2, cy = scroller.scrollTop + scroller.clientHeight / 2;
+  const k = (cascade++ % 8) * 24;
+  const n = makeNote(cx - w / 2 + k, cy - h / 2 + k, w, h); Object.assign(n, clampMove(n));
+  dispatch({ type: "create", note: n });
+  if (cfg.newEdit === "yes") enterEdit(n.id);
+}));
+window.addEventListener("keydown", e => {
+  if (cfg.selection !== "selected" || g || store.selectedId == null) return;
+  if (document.activeElement?.tagName === "TEXTAREA") return;
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); requestDelete(store.selectedId); }
+});
+
+// ---------- Trash placement ----------
+function placeTrash() {
+  const sz = { s: 72, m: 104, l: 140 }[cfg.tsize];
+  const sbW = scroller.offsetWidth - scroller.clientWidth, sbH = scroller.offsetHeight - scroller.clientHeight;
+  const inset = 14, st = trash.style;
+  st.width = st.height = sz + "px"; st.left = st.right = st.top = st.bottom = "";
+  if (cfg.corner.includes("r")) st.right = inset + sbW + "px"; else st.left = inset + "px";
+  if (cfg.corner.includes("b")) st.bottom = inset + sbH + "px"; else st.top = inset + "px";
+  $("trash-label").style.display = sz < 90 ? "none" : "";
+}
+
+// ---------- Controls ----------
+function renderControls() {
+  const box = $("controls"); box.innerHTML = "";
+  for (const o of OPTIONS) {
+    const d = document.createElement("div"); d.className = "opt";
+    d.innerHTML = `<div class="lbl">${o.label}</div><div class="row"></div><div class="hint">${o.hint[cfg[o.key]] || ""}</div>`;
+    for (const [v, l] of o.choices) {
+      const b = document.createElement("button"); b.textContent = l; if (cfg[o.key] === v) b.className = "on";
+      b.onclick = () => setCfg({ [o.key]: v }); d.querySelector(".row").append(b);
+    }
+    box.append(d);
+  }
+}
+function setCfg(patch) {
+  end("config change");
+  if (document.activeElement?.tagName === "TEXTAREA") document.activeElement.blur();
+  Object.assign(cfg, patch);
+  document.body.classList.toggle("grip-header", cfg.grip === "header");
+  document.body.classList.toggle("grip-hybrid", cfg.grip === "hybrid");
+  document.body.classList.toggle("grip-body", cfg.grip !== "header");
+  history.replaceState(null, "", "#" + new URLSearchParams(cfg));
+  renderControls(); placeTrash(); rebuildAll();
+}
+$("preset-rec").onclick = () => setCfg({ ...REC });
+$("reset-notes").onclick = seed;
+$("zones").onclick = e => { e.target.classList.toggle("on"); document.body.classList.toggle("show-zones"); };
+window.addEventListener("resize", placeTrash);
+
+setCfg({}); seed();
+</script>
+</body>
+</html>
