@@ -27,6 +27,7 @@ export function clampToBoard(rect: Rect): Rect {
     height,
   };
 }
+
 /** The rect that is stored: whole pixels, inside the Board. */
 export function toCommittedRect({ x, y, width, height }: Rect): Rect {
   // Round first: the bounds are whole pixels, so clamping can't bring a fraction back.
