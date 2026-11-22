@@ -1,0 +1,23 @@
+/* Global CSS: the reset and the design tokens only. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+:root {
+  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --color-text: #2b2a26;
+  --color-text-muted: #6b6962;
+  --color-board: #fbfaf7;
+
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-board);
+}
