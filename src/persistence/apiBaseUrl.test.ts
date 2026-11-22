@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apiBaseUrl } from './apiBaseUrl';
 
 describe('apiBaseUrl', () => {
-  it('puts the API under the GitHub Pages base path, inside the service worker scope', () => {
+  it('puts the API under the GitHub Pages base path', () => {
     expect(apiBaseUrl('/sticky-notes/')).toBe('/sticky-notes/api');
   });
 
