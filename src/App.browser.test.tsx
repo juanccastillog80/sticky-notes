@@ -90,6 +90,28 @@ it('a double-click that starts on a Note creates nothing', async () => {
   expect(notes.elements()).toHaveLength(1);
 });
 
+it('a double-click that starts outside the Board creates nothing', async () => {
+  const { screen, board, notes } = await setup();
+  // An earlier press on empty Board, which must not count towards the double-click.
+  await userEvent.click(board, { position: { x: 700, y: 400 } });
+  const topBar = screen.getByRole('banner').element() as HTMLElement;
+  // Shrink the top bar after the first click, so the second lands on empty Board.
+  topBar.addEventListener(
+    'click',
+    () => {
+      topBar.style.height = '24px';
+    },
+    { once: true },
+  );
+  let target: EventTarget | null = null;
+  board.element().addEventListener('dblclick', (event) => (target = event.target));
+
+  await userEvent.dblClick(document.body, { position: { x: 500, y: 40 }, delay: 50 });
+
+  expect(target).toBe(board.element());
+  expect(notes.elements()).toHaveLength(0);
+});
+
 it('a Note created near the edge is pushed fully inside the Board', async () => {
   const { board, notes } = await setup();
 
