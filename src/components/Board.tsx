@@ -1,4 +1,4 @@
-import type { MouseEvent, RefObject } from 'react';
+import { useRef, type MouseEvent, type PointerEvent, type RefObject } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE } from '../notes/note';
 import { useCommands, useNotes } from '../StoresContext';
@@ -10,9 +10,18 @@ export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement |
   const ids = useNotes((state) => state.ids);
   const { createNote } = useCommands();
 
+  // A `dblclick` reports only where the second press landed, so the first is remembered.
+  const presses = useRef({ first: false, second: false });
+
+  function rememberPress(event: PointerEvent<HTMLElement>) {
+    const onEmptyBoard = event.target === event.currentTarget;
+    presses.current = { first: presses.current.second, second: onEmptyBoard };
+  }
+
   function createAtPointer(event: MouseEvent<HTMLElement>) {
-    // A double-click on a Note bubbles up to here, and must create nothing.
-    if (event.target !== event.currentTarget) return;
+    // Both presses must be on empty Board: either one on a Note creates nothing.
+    const { first, second } = presses.current;
+    if (!first || !second) return;
     const pointer = toBoardPoint(
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
@@ -27,6 +36,7 @@ export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement |
           aria-label="Board"
           className={styles.board}
           style={BOARD_SIZE}
+          onPointerDownCapture={rememberPress}
           onDoubleClick={createAtPointer}
         >
           {ids.map((id) => (
