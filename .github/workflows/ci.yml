@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels the run for its old commit. Pushes to main are
+# never cancelled, so every merge deploys.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -65,6 +71,60 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+  # The required browsers on their real platforms. Only the browser tests run
+  # here: typecheck, lint, coverage and build give the same result on any OS,
+  # so `check` covers them once. Runs on PRs only; the merge was already tested.
+  cross-browser:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Chrome and Edge come preinstalled on GitHub's runners; only
+          # Firefox is downloaded.
+          - os: windows-latest
+            browsers: chrome,msedge,firefox
+          - os: macos-latest
+            browsers: chrome,firefox
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - id: playwright
+        shell: bash
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v5
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-firefox
+
+      - run: npx playwright install firefox
+
+      - name: Browser tests (${{ matrix.browsers }})
+        env:
+          BROWSERS: ${{ matrix.browsers }}
+        run: npm run test:browser
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-test-screenshots-${{ matrix.os }}
+          path: .vitest/attachments/failure-screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
 
   deploy:
     needs: check
