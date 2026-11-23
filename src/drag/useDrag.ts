@@ -17,6 +17,16 @@ export interface DragOptions {
  * builds the real `io`. The decisions are all in the controller.
  *
  * `previewRef` is the element the Preview is drawn on: the Note.
+ *
+ * Lifecycle (the session phase is documented on `createDragController`):
+ *
+ *   Mount: the effect builds `io` and creates the controller, once. The `io`
+ *     methods read refs when called, so they always see the current options.
+ *     Nothing listens yet. `start` is returned for the Note's pointerdown.
+ *   Session: start → isDragPress, setPointerCapture → controller.press
+ *     → io.attachPointerListeners → window listeners, until the session ends.
+ *   Unmount (or StrictMode's remount): dispose → end(false), so a running Drag
+ *     is cancelled and its listeners removed.
  */
 export function useDrag(previewRef: RefObject<HTMLElement | null>, options: DragOptions) {
   // The latest options, read only inside handlers, so the controller is created once.
@@ -35,7 +45,7 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
         const scroller = latest.current.scrollerRef.current;
         return { x: scroller?.scrollLeft ?? 0, y: scroller?.scrollTop ?? 0 };
       },
-      listen(handlers) {
+      attachPointerListeners(handlers) {
         return listenForDrag(handlers, latest.current.scrollerRef.current);
       },
       releaseCapture(pointerId) {

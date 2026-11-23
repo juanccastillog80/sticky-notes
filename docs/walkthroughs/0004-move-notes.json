@@ -92,6 +92,27 @@
       "name": "Drag a Note and release it",
       "steps": [
         {
+          "title": "The Note mounts: the engine is wired, nothing listens",
+          "explain": "The lifecycle has three phases. **Mount** (this step, once per Note): `useDrag`'s effect builds the real `io` and creates the controller. The `io` methods read refs (`latest`, `previewRef`, `scrollerRef`) **when called**, not when built, so the controller is never re-created when props change. No listener is attached yet; the hook just returns `start` for the Note's pointerdown. **Session** (every press, the next steps): `start` → `controller.press` → `io.attachPointerListeners(sessionHandlers)` → window listeners, until `end` detaches them. **Unmount**: the cleanup calls `dispose` → `end(false)`, so a running Drag is cancelled and its listeners removed (see the Cancel scenario). The two lifecycle comments split the same way: mount and unmount on `useDrag`, the session on `createDragController`.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "export function useDrag(",
+              "to": "const controller = useRef<DragController | null>(null);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "const drag = createDragController({",
+              "to": "}, [previewRef]);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "export function createDragController(",
+              "to": "let session: Session | null = null;"
+            }
+          ]
+        },
+        {
           "title": "pointerdown on the Note",
           "explain": "Raise first, so the Note is in front before it moves and stays there for the whole Drag. Then `start` gets the Note **as rendered**: that is the `from` rect every delta is added to.",
           "run": [
@@ -109,7 +130,7 @@
         },
         {
           "title": "start filters, captures, presses",
-          "explain": "The Note gets the scroll container from `BoardDomContext`, which App provides with a value that never changes, so reading it renders nothing. `preventDefault` stops focus moves, text selection and native drags. Capture keeps hover and double-clicks off the neighbours. The controller then records the press point and the scroll position, and attaches every listener in one `listen`. Nothing is drawn yet: the press is pending.",
+          "explain": "The Note gets the scroll container from `BoardDomContext`, which App provides with a value that never changes, so reading it renders nothing. `preventDefault` stops focus moves, text selection and native drags. Capture keeps hover and double-clicks off the neighbours. The controller then records the press point and the scroll position, and calls `io.attachPointerListeners(sessionHandlers)`, the only moment the window listeners exist. Nothing is drawn yet: the press is pending.",
           "run": [
             {
               "file": "src/components/Note.tsx",
@@ -134,7 +155,7 @@
             {
               "file": "src/drag/controller.ts",
               "from": "press(e, kind, from) {",
-              "to": "detach: io.listen(handlers),"
+              "to": "detach: io.attachPointerListeners(sessionHandlers),"
             },
             {
               "file": "src/drag/useDrag.ts",

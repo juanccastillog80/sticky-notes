@@ -6,7 +6,7 @@ import { createDragController, type DragHandlers, type DragIO } from './controll
 import { moveKind } from './kinds';
 
 type Call =
-  | { readonly call: 'listen' }
+  | { readonly call: 'attachPointerListeners' }
   | { readonly call: 'detach' }
   | { readonly call: 'releaseCapture'; readonly pointerId: number }
   | { readonly call: 'writePreview'; readonly rect: Rect | null }
@@ -20,8 +20,8 @@ function setup() {
 
   const io: DragIO = {
     scrollPosition: () => scroll,
-    listen(handlers) {
-      calls.push({ call: 'listen' });
+    attachPointerListeners(handlers) {
+      calls.push({ call: 'attachPointerListeners' });
       attached = handlers;
       return () => {
         calls.push({ call: 'detach' });
@@ -278,7 +278,7 @@ describe('ending', () => {
     t.press();
 
     expect(t.of('detach')).toHaveLength(1);
-    expect(t.of('listen')).toHaveLength(2);
+    expect(t.of('attachPointerListeners')).toHaveLength(2);
     expect(t.of('dispatch')).toEqual([]);
   });
 });

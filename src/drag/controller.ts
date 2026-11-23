@@ -16,7 +16,10 @@ export interface MoveSignal extends PointerSignal {
   readonly buttons: number;
 }
 
-/** What the controller listens to. The DOM side attaches all of them in one `listen`. */
+/**
+ * DOM → controller. The controller's session handlers: the DOM side attaches them
+ * in `attachPointerListeners` on press, and removes them when the session ends.
+ */
 export interface DragHandlers {
   move: (e: MoveSignal) => void;
   up: (e: PointerSignal) => void;
@@ -25,12 +28,15 @@ export interface DragHandlers {
   key: (e: { readonly key: string }) => void;
 }
 
-/** Everything outside the controller. The hook passes the real DOM; tests pass a recording fake. */
+/**
+ * Controller → DOM. Everything outside the controller. The hook passes the real DOM;
+ * tests pass a recording fake.
+ */
 export interface DragIO {
   /** The scroll container's offset, so a scroll mid-drag moves the Preview with the Board. */
   scrollPosition: () => Point;
-  /** Attaches every listener. Returns the one function that detaches them all. */
-  listen: (handlers: DragHandlers) => () => void;
+  /** Called on press. Attaches every session handler; returns the one function that detaches them all. */
+  attachPointerListeners: (handlers: DragHandlers) => () => void;
   releaseCapture: (pointerId: number) => void;
   /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */
   writePreview: (rect: Rect | null, base: Rect) => void;
@@ -58,7 +64,16 @@ export interface DragController {
   dispose: () => void;
 }
 
-/** The one Drag lifecycle: press, Dead zone, Preview, then exactly one release or cancel. */
+/**
+ * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`.
+ *
+ *   press → io.attachPointerListeners(sessionHandlers)
+ *   move / scroll → Dead zone → Preview (io.writePreview)
+ *   up / buttons === 0 → end(true);  cancel / Escape / dispose → end(false)
+ *   end → detach, io.releaseCapture, reset Preview, io.dispatch the commit
+ *
+ * The handlers exist for the whole controller, but are attached only while a press is live.
+ */
 export function createDragController(io: DragIO): DragController {
   let session: Session | null = null;
 
@@ -95,7 +110,7 @@ export function createDragController(io: DragIO): DragController {
 
   const ownPointer = (e: Pick<PointerSignal, 'pointerId'>) => e.pointerId === session?.pointerId;
 
-  const handlers: DragHandlers = {
+  const sessionHandlers: DragHandlers = {
     move(e) {
       if (!session || !ownPointer(e)) return;
       session.pointer = { x: e.clientX, y: e.clientY };
@@ -134,7 +149,7 @@ export function createDragController(io: DragIO): DragController {
         pressScroll: io.scrollPosition(),
         pointer: pressPoint,
         pending: true,
-        detach: io.listen(handlers),
+        detach: io.attachPointerListeners(sessionHandlers),
       };
     },
     dispose() {
