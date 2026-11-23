@@ -11,14 +11,17 @@ export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement |
   const { createNote } = useCommands();
 
   const boardRef = useRef<HTMLElement>(null);
-  // A `dblclick` reports only where the second press landed, so the first is remembered.
-  const presses = useRef({ previousToLast: false, last: false });
+  // A `dblclick` reports only where the second press landed, so the first is remembered:
+  // the last two presses anywhere on the page, and whether each landed on empty Board.
+  const lastTwoPresses = useRef({ previousWasOnEmptyBoard: false, lastWasOnEmptyBoard: false });
 
   useEffect(() => {
     // On the document, as a double-click can start outside the Board.
     function rememberPress(event: PointerEvent) {
-      const onEmptyBoard = event.target === boardRef.current;
-      presses.current = { previousToLast: presses.current.last, last: onEmptyBoard };
+      lastTwoPresses.current = {
+        previousWasOnEmptyBoard: lastTwoPresses.current.lastWasOnEmptyBoard,
+        lastWasOnEmptyBoard: event.target === boardRef.current,
+      };
     }
     document.addEventListener('pointerdown', rememberPress, { capture: true });
     return () => {
@@ -28,8 +31,8 @@ export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement |
 
   function createAtPointer(event: MouseEvent<HTMLElement>) {
     // Both presses must be on empty Board: either one anywhere else creates nothing.
-    const { previousToLast, last } = presses.current;
-    if (!previousToLast || !last) return;
+    const { previousWasOnEmptyBoard, lastWasOnEmptyBoard } = lastTwoPresses.current;
+    if (!previousWasOnEmptyBoard || !lastWasOnEmptyBoard) return;
     const pointer = toBoardPoint(
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
