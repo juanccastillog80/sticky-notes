@@ -101,9 +101,9 @@ function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): ()
 
 /**
  * The Preview is a `translate` from the committed rect, plus `width`/`height` for
- * a resize, never `scale`, so text reflows and is never distorted. A move only
- * composites. `data-dragging` gives the lifted shadow. A reset puts back what
- * React rendered.
+ * a resize, never `scale`, so text reflows and is never distorted. A move writes
+ * the same size back, so it only composites. `data-dragging` gives the lifted
+ * shadow. A reset writes `base`, the rect React rendered at press.
  */
 function writePreview(element: HTMLElement, rect: Rect | null, base: Rect) {
   const { x, y, width, height } = rect ?? base;

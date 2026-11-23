@@ -1,4 +1,11 @@
-import { BOARD_SIZE, MIN_NOTE_SIZE, toCommittedRect, type Point, type Rect } from '../geometry';
+import {
+  BOARD_SIZE,
+  clamp,
+  MIN_NOTE_SIZE,
+  toCommittedRect,
+  type Point,
+  type Rect,
+} from '../geometry';
 import type { Note } from '../notes/note';
 import type { NoteAction } from '../notes/notesReducer';
 
@@ -60,8 +67,6 @@ function resized(from: Rect, delta: Point, handle: ResizeHandle): Rect {
   }
   return { x, y, width, height };
 }
-
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {

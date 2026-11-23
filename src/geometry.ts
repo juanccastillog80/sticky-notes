@@ -14,7 +14,8 @@ export interface Rect extends Point, Size {}
 export const BOARD_SIZE = { width: 1920, height: 1080 } as const satisfies Size;
 export const MIN_NOTE_SIZE = { width: 140, height: 100 } as const satisfies Size;
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+export const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 /** Keeps the whole rect inside the Board, at a legal Note size. Fractions are kept. */
 export function clampToBoard(rect: Rect): Rect {
