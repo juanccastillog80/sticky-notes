@@ -124,8 +124,8 @@
   ],
   "notes": [
     {
-      "title": "The new jobs are not required yet",
-      "detail": "The ruleset requires only `check`. Until `cross-browser (windows-latest, …)` and `cross-browser (macos-latest, …)` are added as required checks, a failing one won't block merging. They can only be added after they have run once."
+      "title": "The required checks name each matrix job",
+      "detail": "Both `cross-browser` jobs are now required on `main`, by exact name, and the name includes `os` and `browsers`. A comment above the matrix says to update the ruleset after changing either; otherwise PRs wait forever for a check that never reports."
     },
     {
       "title": "Edge was not run locally",
@@ -136,5 +136,7 @@
       "detail": "The `check` job is unchanged. Branded Chrome on Linux would add little: the task names Chrome on Windows and Mac, which the matrix now covers."
     }
   ],
-  "omitted": { ".gitignore": "Ignores the cached Firefox folder." }
+  "omitted": {
+    ".gitignore": "Ignores the cached Firefox folder."
+  }
 }
