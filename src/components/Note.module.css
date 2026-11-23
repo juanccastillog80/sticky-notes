@@ -7,6 +7,16 @@
   background: var(--note-bg);
   box-shadow: var(--shadow-note);
   color: var(--color-note-text);
+  /* A Drag, not a pan, on touch and pen. */
+  touch-action: none;
+  user-select: none;
+  /* Only the shadow animates: the Preview itself follows the pointer with no lag. */
+  transition: box-shadow 120ms ease-out;
+}
+
+/* Lifted while a Drag runs. Set and cleared by the Drag engine. */
+.note[data-dragging] {
+  box-shadow: var(--shadow-note-dragging);
 }
 
 .note[data-colour='yellow'] {

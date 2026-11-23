@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
+import { mouse } from './test/browserCommands.ts';
 
 // Pure-core folders held to the coverage gate (spec: Coverage and gates).
 // Components and the composition root are covered by browser tests instead.
@@ -52,7 +53,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: PURE_CORE,
-      exclude: ['**/*.test.ts', '**/*.test-d.ts', '**/*.browser.test.tsx'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test-d.ts',
+        '**/*.browser.test.tsx',
+        // DOM wiring with no decisions in it, covered by the browser tests.
+        'src/drag/useDrag.ts',
+      ],
       thresholds: { lines: 90, branches: 90 },
     },
     projects: [
@@ -79,6 +86,7 @@ export default defineConfig({
             headless: true,
             provider: playwright(),
             instances: browserInstances(process.env.BROWSERS),
+            commands: { mouse },
           },
         },
       },

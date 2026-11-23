@@ -6,5 +6,6 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vitest/browser"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  "exclude": ["test/browserCommands.ts"]
 }
