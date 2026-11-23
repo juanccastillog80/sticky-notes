@@ -20,7 +20,7 @@ CI's `check` job fails unless the branch adds exactly one walkthrough that is cu
 
 ## PR body section
 
-GitHub doesn't render HTML files, so give a command that opens the page without switching branches. Once merged, `main` publishes every walkthrough at `https://juanccastillog80.github.io/sticky-notes/walkthroughs/<name>.html`, so link that from places that outlive the PR, like the README:
+GitHub doesn't render HTML files, so give a command that opens the page without switching branches. Once merged, `main` publishes every walkthrough at `https://juanccastillog80.github.io/sticky-notes/walkthroughs/<name>.html`, listed at `https://juanccastillog80.github.io/sticky-notes/walkthroughs/`, so link that from places that outlive the PR, like the README:
 
 ````markdown
 ## Walkthrough
