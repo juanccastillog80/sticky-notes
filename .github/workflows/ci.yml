@@ -79,6 +79,9 @@ jobs:
     if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
+      # The ruleset on main requires each job by its exact name, which includes
+      # `os` and `browsers`. After changing either, update the required checks
+      # (Settings > Rules), or PRs wait forever for a check that never reports.
       matrix:
         include:
           # Chrome and Edge come preinstalled on GitHub's runners; only
