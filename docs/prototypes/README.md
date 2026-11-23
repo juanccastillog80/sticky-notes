@@ -5,10 +5,10 @@ Throwaway, self-contained HTML pages built to settle one design question each be
 | Prototype | Question it answered |
 |---|---|
 | [board-extent](board-extent-prototype.html) | Should the Board follow the window size or be a fixed size that scrolls, and where does the Trash zone sit? ([ADR 0001](../adr/0001-fixed-scrolling-board.md)) |
-| [board-scroll-container](board-scroll-container-prototype.html) | Why the Board scrolls in its own container below the toolbar, and how a Gesture compensates for scrolling. |
+| [board-scroll-container](board-scroll-container-prototype.html) | Why the Board scrolls in its own container below the toolbar, and how a Drag compensates for scrolling. |
 | [board-rounding](board-rounding-prototype.html) | Whole pixels on commit: what rounding changes, and what it doesn't. |
-| [gesture-primitive](gesture-primitive-prototype.html) | One shared Gesture lifecycle with pure kinds, or a separate hook per gesture? |
-| [gesture-engine-code-preview](gesture-engine-code-preview.html) | A step-through of the gesture engine's files: controller, kinds, hook and geometry. |
+| [gesture-primitive](gesture-primitive-prototype.html) | One shared Drag lifecycle with pure kinds, or a separate hook per drag? (Written when the term was "Gesture".) |
+| [gesture-engine-code-preview](gesture-engine-code-preview.html) | A step-through of the drag engine's files (then called the gesture engine): controller, kinds, hook and geometry. |
 | [note-interaction](note-interaction-prototype.html) | Grip and Editing model, resize handles, minimum size, Trash zone hit rule, and Undo. |
 | [visual-design](visual-design-prototype.html) | Note colours, Board surface, toolbar, Trash zone and typography. |
 

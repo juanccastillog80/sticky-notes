@@ -13,7 +13,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
       aria-label="Note"
       className={styles.note}
       data-colour={colour}
-      // Geometry only. `transform` is left free for the Gesture Preview.
+      // Geometry only. `transform` is left free for the Drag Preview.
       style={{ left: x, top: y, width, height, zIndex: z }}
     >
       <div className={styles.gripStrip} />
