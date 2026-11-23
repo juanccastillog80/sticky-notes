@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"Cross-platform browser tests","lede":"The task requires Chrome (Windows and Mac), Firefox (all platforms) and Edge. CI used to run the browser tests only in Chromium and Firefox on Linux. PRs now also run them in the real Chrome, Edge and Firefox builds on Windows and macOS, without making the other checks slower.","files":[{"path":"vite.config.ts","question":"Which browsers do the browser tests run in?","summary":"Reads a comma-separated `BROWSERS` list, defaulting to Chromium and Firefox.","owns":"Mapping a browser name to a Vitest browser instance, including the branded Chrome and Edge builds.","never":"Knows which OS it runs on.","tested":"Run locally with `BROWSERS=chrome,firefox` (26 passed) and with an unknown name (fails loudly).","lines":["import react from '@vitejs/plugin-react';","import { playwright } from '@vitest/browser-playwright';","import { defineConfig } from 'vitest/config';","","// Pure-core folders held to the coverage gate (spec: Coverage and gates).","// Components and the composition root are covered by browser tests instead.","const PURE_CORE = [","  'src/store/**',","  'src/notes/**',","  'src/ui/**',","  'src/gesture/**',","  'src/persistence/**',","  'src/geometry.ts',","  'src/commands.ts',","];","","// Which browsers the browser project runs in: a comma-separated BROWSERS list,","// or Chromium and Firefox by default. `chrome` and `msedge` are the installed","// branded builds, launched through Playwright's Chromium with a channel.","const BROWSER_NAMES = ['chromium', 'firefox', 'chrome', 'msedge'] as const;","type BrowserName = (typeof BROWSER_NAMES)[number];","","function isBrowserName(name: string): name is BrowserName {","  return (BROWSER_NAMES as readonly string[]).includes(name);","}","","function browserInstance(name: BrowserName) {","  if (name === 'chromium' || name === 'firefox') return { browser: name };","  return {","    browser: 'chromium' as const,","    name,","    provider: playwright({ launchOptions: { channel: name } }),","  };","}","","function browserInstances(list = 'chromium,firefox') {","  return list.split(',').map((raw) => {","    const name = raw.trim();","    if (!isBrowserName(name)) {","      throw new Error(`BROWSERS: unknown browser \"${name}\" (expected ${BROWSER_NAMES.join(', ')})`);","    }","    return browserInstance(name);","  });","}","","export default defineConfig({","  // The same base for every command, dev included, so the service-worker","  // scope and URLs match the GitHub Pages deployment.","  base: '/sticky-notes/',","  plugins: [react()],","  test: {","    coverage: {","      provider: 'v8',","      include: PURE_CORE,","      exclude: ['**/*.test.ts', '**/*.test-d.ts', '**/*.browser.test.tsx'],","      thresholds: { lines: 90, branches: 90 },","    },","    projects: [","      {","        extends: true,","        test: {","          name: 'unit',","          environment: 'node',","          include: ['src/**/*.test.ts', 'docs/walkthroughs/*.test.js'],","          typecheck: {","            enabled: true,","            include: ['src/**/*.test-d.ts'],","            tsconfig: './tsconfig.app.json',","          },","        },","      },","      {","        extends: true,","        test: {","          name: 'browser',","          include: ['src/**/*.browser.test.tsx'],","          browser: {","            enabled: true,","            headless: true,","            provider: playwright(),","            instances: browserInstances(process.env.BROWSERS),","          },","        },","      },","    ],","  },","});"],"added":[16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,80]},{"path":".github/workflows/ci.yml","question":"Where and when does each browser run?","summary":"Adds a PR-only `cross-browser` matrix over Windows and macOS, and cancels outdated PR runs.","owns":"Which browsers each OS runs, browser caching, and run cancellation.","never":"Repeats the checks that don't depend on the OS.","tested":"Runs on this PR.","lines":["name: CI","","on:","  pull_request:","  push:","    branches: [main]","  workflow_dispatch:","","permissions:","  contents: read","","# A new push to a PR cancels the run for its old commit. Pushes to main are","# never cancelled, so every merge deploys.","concurrency:","  group: ci-${{ github.ref }}","  cancel-in-progress: ${{ github.event_name == 'pull_request' }}","","jobs:","  check:","    runs-on: ubuntu-latest","    timeout-minutes: 15","    steps:","      - uses: actions/checkout@v7","        with:","          # The walkthrough check needs the branch tip and its merge base with main.","          fetch-depth: 0","","      - uses: actions/setup-node@v7","        with:","          node-version-file: .nvmrc","          cache: npm","","      - run: npm ci","","      - name: Install Playwright browsers","        run: npx playwright install --with-deps chromium firefox","","      - run: npm run typecheck","","      - run: npm run lint","","      - name: Tests (unit + browser in Chromium and Firefox)","        run: npm test","","      # The v8 gate runs on the unit project only (the pure core); the unit","      # tests are fast, so running them twice is cheap.","      - name: Coverage gate","        run: npm run coverage","","      - name: Upload failure screenshots","        if: failure()","        uses: actions/upload-artifact@v7","        with:","          name: browser-test-screenshots","          path: .vitest/attachments/failure-screenshots/","          if-no-files-found: ignore","          retention-days: 7","","      - run: npm run build","","      # Part of `check`, the status the ruleset requires. It also runs on a manual","      # dispatch of a branch, whose `check` would otherwise pass without it.","      - name: Walkthrough","        if: github.ref != 'refs/heads/main'","        env:","          TIP: ${{ github.event.pull_request.head.sha || github.sha }}","        run: node docs/walkthroughs/check.js \"$TIP\"","","      - name: Upload Pages artifact","        if: github.event_name != 'pull_request'","        uses: actions/upload-pages-artifact@v5","        with:","          path: dist","","  # The required browsers on their real platforms. Only the browser tests run","  # here: typecheck, lint, coverage and build give the same result on any OS,","  # so `check` covers them once. Runs on PRs only; the merge was already tested.","  cross-browser:","    if: github.event_name == 'pull_request'","    strategy:","      fail-fast: false","      matrix:","        include:","          # Chrome and Edge come preinstalled on GitHub's runners; only","          # Firefox is downloaded.","          - os: windows-latest","            browsers: chrome,msedge,firefox","          - os: macos-latest","            browsers: chrome,firefox","    runs-on: ${{ matrix.os }}","    timeout-minutes: 20","    env:","      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers","    steps:","      - uses: actions/checkout@v7","","      - uses: actions/setup-node@v7","        with:","          node-version-file: .nvmrc","          cache: npm","","      - run: npm ci","","      - id: playwright","        shell: bash","        run: echo \"version=$(node -p \"require('playwright/package.json').version\")\" >> \"$GITHUB_OUTPUT\"","","      - uses: actions/cache@v5","        with:","          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}","          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-firefox","","      - run: npx playwright install firefox","","      - name: Browser tests (${{ matrix.browsers }})","        env:","          BROWSERS: ${{ matrix.browsers }}","        run: npm run test:browser","","      - name: Upload failure screenshots","        if: failure()","        uses: actions/upload-artifact@v7","        with:","          name: browser-test-screenshots-${{ matrix.os }}","          path: .vitest/attachments/failure-screenshots/","          if-no-files-found: ignore","          retention-days: 7","","  deploy:","    needs: check","    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')","    runs-on: ubuntu-latest","    timeout-minutes: 5","    permissions:","      pages: write","      id-token: write","    concurrency:","      group: pages","      cancel-in-progress: false","    environment:","      name: github-pages","      url: ${{ steps.deployment.outputs.page_url }}","    steps:","      - id: deployment","        uses: actions/deploy-pages@v5"],"added":[11,12,13,14,15,16,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127]}],"flow":[[".github/workflows/ci.yml","vite.config.ts"]],"scenarios":[{"name":"A PR runs the Windows job","steps":[{"title":"Only PRs start the matrix","explain":"The matrix is skipped on pushes to `main`: the PR already tested the same code, and the Linux `check` job still guards every deploy. `fail-fast: false` lets a Windows failure not hide a macOS one.","run":[{"file":".github/workflows/ci.yml","start":77,"end":80}]},{"title":"Each OS picks its browsers","explain":"Windows runs all three required browsers. macOS runs Chrome and Firefox, the two the task names for Mac. Both jobs run in parallel, so the wait is the slower of the two, not the sum.","run":[{"file":".github/workflows/ci.yml","start":85,"end":88}]},{"title":"Only Firefox is downloaded, and it is cached","explain":"GitHub's runners already have Chrome and Edge. Firefox goes into a folder in the workspace, cached by OS and Playwright version, so a version bump downloads it again and nothing else does. `.playwright-browsers/` is git-ignored.","run":[{"file":".github/workflows/ci.yml","start":92,"end":92},{"file":".github/workflows/ci.yml","start":103,"end":112}]},{"title":"Only the browser tests run","explain":"Typecheck, lint, coverage, build and the walkthrough check give the same answer on any OS, so they run once, in `check`. The job passes its browser list to the tests through `BROWSERS`.","run":[{"file":".github/workflows/ci.yml","start":114,"end":117}]},{"title":"The config turns names into browser instances","explain":"`chromium` and `firefox` are Playwright's own builds. `chrome` and `msedge` are the installed branded browsers, launched through Playwright's Chromium with a `channel`, each with its own provider and a `name` so the report tells them apart. Without `BROWSERS`, local runs and the Linux job behave exactly as before.","run":[{"file":"vite.config.ts","start":26,"end":36},{"file":"vite.config.ts","start":80,"end":80}]}]},{"name":"A typo in BROWSERS","steps":[{"title":"The run fails instead of testing nothing","explain":"An unknown name throws with the list of valid names. Run locally: `BROWSERS=bogus` fails with `unknown browser \"bogus\"`. Silently skipping it would make a job pass while testing fewer browsers than it claims.","run":[{"file":"vite.config.ts","start":38,"end":41}]}]},{"name":"A second push to the same PR","steps":[{"title":"The outdated run is cancelled","explain":"Runs share a group per ref. Only PR runs cancel each other: a push to `main` is never cancelled, so every merge deploys.","run":[{"file":".github/workflows/ci.yml","start":14,"end":15}]}]}],"notes":[{"title":"The new jobs are not required yet","detail":"The ruleset requires only `check`. Until `cross-browser (windows-latest, …)` and `cross-browser (macos-latest, …)` are added as required checks, a failing one won't block merging. They can only be added after they have run once."},{"title":"Edge was not run locally","detail":"This Mac has no Edge, so `msedge` failed to launch here. Chrome and Firefox passed locally; Edge is first proven by this PR's Windows job."},{"title":"Linux keeps Chromium, not branded Chrome","detail":"The `check` job is unchanged. Branded Chrome on Linux would add little: the task names Chrome on Windows and Mac, which the matrix now covers."}],"omitted":{".gitignore":"Ignores the cached Firefox folder."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
