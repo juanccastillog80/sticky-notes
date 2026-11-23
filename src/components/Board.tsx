@@ -1,4 +1,11 @@
-import { useEffect, useRef, type MouseEvent, type RefObject } from 'react';
+import {
+  Profiler,
+  useEffect,
+  useRef,
+  type MouseEvent,
+  type ProfilerOnRenderCallback,
+  type RefObject,
+} from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE } from '../notes/note';
 import { useCommands, useNotes } from '../StoresContext';
@@ -6,7 +13,13 @@ import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
 import styles from './Board.module.css';
 
-export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement | null> }) {
+export function Board({
+  scrollerRef,
+  onNoteRender,
+}: {
+  scrollerRef: RefObject<HTMLDivElement | null>;
+  onNoteRender?: ProfilerOnRenderCallback;
+}) {
   const ids = useNotes((state) => state.ids);
   const { createNote } = useCommands();
 
@@ -50,9 +63,15 @@ export function Board({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement |
           style={BOARD_SIZE}
           onDoubleClick={createAtPointer}
         >
-          {ids.map((id) => (
-            <Note key={id} id={id} />
-          ))}
+          {ids.map((id) =>
+            onNoteRender ? (
+              <Profiler key={id} id={id} onRender={onNoteRender}>
+                <Note id={id} />
+              </Profiler>
+            ) : (
+              <Note key={id} id={id} />
+            ),
+          )}
         </section>
       </div>
       <EmptyHint />

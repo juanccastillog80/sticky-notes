@@ -28,4 +28,6 @@
     var(--shadow-board);
   /* Always, not only during a Drag: double-click creates here and must not select text. */
   user-select: none;
+  /* Drags, not pans, on touch and pen. */
+  touch-action: none;
 }

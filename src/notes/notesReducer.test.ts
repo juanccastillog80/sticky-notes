@@ -132,3 +132,82 @@ describe('the Notes store', () => {
     expect(calls).toBe(0);
   });
 });
+
+describe('move', () => {
+  const move = (state: NotesState, x: number, y: number, id = a.id) =>
+    notesReducer(state, { type: 'move', id, x, y });
+
+  it('moves the Note to the new position, keeping its size', () => {
+    const next = move(makeState(a, b), 300, 250);
+
+    expect(next.notes[a.id]).toEqual({ ...a, x: 300, y: 250 });
+  });
+
+  it('stops the Note at the Board edges', () => {
+    const next = move(makeState(a), 5000, -40);
+
+    expect(next.notes[a.id]).toMatchObject({ x: 1920 - a.width, y: 0 });
+  });
+
+  it('rounds to whole pixels', () => {
+    expect(move(makeState(a), 10.4, 20.6).notes[a.id]).toMatchObject({ x: 10, y: 21 });
+  });
+
+  it('keeps ids and the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = move(state, 300, 250);
+
+    expect(next.ids).toBe(state.ids);
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the position does not change', () => {
+    const state = makeState(a);
+
+    expect(move(state, a.x, a.y)).toBe(state);
+    expect(move(state, a.x + 0.2, a.y - 0.3)).toBe(state);
+  });
+
+  it('returns the same state for a missing Note', () => {
+    const state = makeState(a);
+
+    expect(move(state, 1, 1, testId('gone'))).toBe(state);
+  });
+});
+
+describe('raise', () => {
+  const raise = (state: NotesState, id: Note['id']) => notesReducer(state, { type: 'raise', id });
+
+  it('brings the Note to the front with z = ++topZ', () => {
+    const next = raise(makeState(a, b), a.id);
+
+    expect(next.notes[a.id]).toEqual({ ...a, z: 3 });
+    expect(next.topZ).toBe(3);
+  });
+
+  it('never changes DOM order, and keeps the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = raise(state, a.id);
+
+    expect(next.ids).toBe(state.ids);
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the Note is already alone at the front', () => {
+    const state = makeState(a, b);
+
+    expect(raise(state, b.id)).toBe(state);
+  });
+
+  it('raises a Note that shares the front with another', () => {
+    const tied = makeNote({ id: testId('c'), z: 2 });
+
+    expect(raise(makeState(a, b, tied), b.id).notes[b.id]?.z).toBe(3);
+  });
+
+  it('returns the same state for a missing Note', () => {
+    const state = makeState(a);
+
+    expect(raise(state, testId('gone'))).toBe(state);
+  });
+});
