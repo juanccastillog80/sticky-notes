@@ -67,10 +67,11 @@ jobs:
         run: node docs/walkthroughs/check.js "$TIP"
 
       # Walkthroughs are self-contained pages, so reviewers can read them on the
-      # deployed site without cloning: <site>/walkthroughs/<name>.html
+      # deployed site without cloning: <site>/walkthroughs/<name>.html, listed
+      # at <site>/walkthroughs/
       - name: Add walkthroughs to the site
         if: github.event_name != 'pull_request'
-        run: mkdir -p dist/walkthroughs && cp docs/walkthroughs/*.html dist/walkthroughs/
+        run: node docs/walkthroughs/site.js dist/walkthroughs
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
