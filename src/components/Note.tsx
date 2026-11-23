@@ -1,10 +1,11 @@
 import { memo, useRef, type PointerEvent } from 'react';
 import { useBoardDom } from '../BoardDomContext';
-import { moveKind } from '../drag/kinds';
+import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
 import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
 import { useNotes, useStores } from '../StoresContext';
 import styles from './Note.module.css';
+import { ResizeHandles } from './ResizeHandles';
 
 export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
@@ -21,6 +22,12 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     start(e, moveKind, note);
   }
 
+  function pressHandle(e: PointerEvent<HTMLElement>, handle: ResizeHandle) {
+    if (!note) return;
+    notes.dispatch({ type: 'raise', id });
+    start(e, resizeKinds[handle], note);
+  }
+
   const { x, y, width, height, z, colour, text } = note;
   return (
     <article
@@ -34,6 +41,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     >
       <div className={styles.gripStrip} />
       <div className={styles.text}>{text}</div>
+      <ResizeHandles onPress={pressHandle} />
     </article>
   );
 });

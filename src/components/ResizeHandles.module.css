@@ -1,0 +1,85 @@
+/* Edges are 8 px deep, corners 14 px square, all inside the Note (it clips overflow). */
+.handle {
+  position: absolute;
+  z-index: 1;
+  --edge: 8px;
+  --corner: 14px;
+}
+
+.handle[data-handle='n'],
+.handle[data-handle='s'] {
+  left: var(--corner);
+  right: var(--corner);
+  height: var(--edge);
+  cursor: ns-resize;
+}
+.handle[data-handle='n'] {
+  top: 0;
+}
+.handle[data-handle='s'] {
+  bottom: 0;
+}
+
+.handle[data-handle='e'],
+.handle[data-handle='w'] {
+  top: var(--corner);
+  bottom: var(--corner);
+  width: var(--edge);
+  cursor: ew-resize;
+}
+.handle[data-handle='e'] {
+  right: 0;
+}
+.handle[data-handle='w'] {
+  left: 0;
+}
+
+.handle[data-handle='ne'],
+.handle[data-handle='nw'],
+.handle[data-handle='se'],
+.handle[data-handle='sw'] {
+  width: var(--corner);
+  height: var(--corner);
+}
+.handle[data-handle='nw'] {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.handle[data-handle='ne'] {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.handle[data-handle='sw'] {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+.handle[data-handle='se'] {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+/* The tick: two short diagonal strokes in the corner. */
+.handle[data-handle='se']::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(
+    135deg,
+    transparent 45%,
+    currentColor 45%,
+    currentColor 55%,
+    transparent 55%,
+    transparent 70%,
+    currentColor 70%,
+    currentColor 80%,
+    transparent 80%
+  );
+  opacity: 0.35;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeNote, makeState, testId } from '../../test/factories';
+import type { Rect } from '../geometry';
 import type { Note } from './note';
 import { createNotesStore, notesReducer, type NotesState } from './notesReducer';
 
@@ -130,6 +131,39 @@ describe('the Notes store', () => {
     store.dispatch({ type: 'load', notes: [a] });
 
     expect(calls).toBe(0);
+  });
+});
+
+describe('resize', () => {
+  const resize = (state: NotesState, to: Rect, id = a.id) =>
+    notesReducer(state, { type: 'resize', id, ...to });
+
+  it('sets the position and size together', () => {
+    const next = resize(makeState(a, b), { x: 80, y: 90, width: 300, height: 200 });
+
+    expect(next.notes[a.id]).toEqual({ ...a, x: 80, y: 90, width: 300, height: 200 });
+  });
+
+  it('keeps a Note at least the minimum size and inside the Board', () => {
+    const next = resize(makeState(a), { x: 1900, y: 10, width: 5, height: 5 });
+
+    expect(next.notes[a.id]).toMatchObject({ x: 1780, y: 10, width: 140, height: 100 });
+  });
+
+  it('keeps ids and the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = resize(state, { x: 80, y: 90, width: 300, height: 200 });
+
+    expect(next.ids).toBe(state.ids);
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the rect does not change, or the Note is missing', () => {
+    const state = makeState(a);
+
+    expect(resize(state, a)).toBe(state);
+    expect(resize(state, { ...a, width: a.width + 0.3 })).toBe(state);
+    expect(resize(state, a, testId('gone'))).toBe(state);
   });
 });
 

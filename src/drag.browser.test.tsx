@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
 import { drag, press, pressAndMove, release } from '../test/mouse';
@@ -146,4 +146,82 @@ it('a move on Note a re-renders a and not b', async () => {
 
   expect(renders).toContain('a');
   expect(renders).not.toContain('b');
+});
+
+const handle = (note: Locator, name: string) => {
+  const element = note.element().querySelector(`[data-handle="${name}"]`);
+  if (!element) throw new Error(`No ${name} handle`);
+  return page.elementLocator(element);
+};
+const resizes = (actions: readonly NoteAction[]) =>
+  actions.filter((action) => action.type === 'resize');
+
+it('dragging the se corner inward stops at the minimum Note size (scenario 4)', async () => {
+  const { stores, actions, notes } = await setup();
+  // `b`, which is in front, so its corner is not covered.
+  const noteB = notes.nth(1);
+
+  // Far past the minimum, while the pointer stays in the window.
+  await drag(handle(noteB, 'se'), { dx: -250, dy: -150 });
+
+  expect(resizes(actions)).toEqual([
+    { type: 'resize', id: b.id, x: 200, y: 150, width: 140, height: 100 },
+  ]);
+  expect(stores.notes.getSnapshot().notes[b.id]).toMatchObject({ width: 140, height: 100 });
+  expect(noteB.element().getBoundingClientRect()).toMatchObject({ width: 140, height: 100 });
+});
+
+it('the nw corner Preview moves the top-left and saves exactly what it showed', async () => {
+  const { stores, noteA } = await setup();
+  const before = noteA.element().getBoundingClientRect();
+
+  await pressAndMove(handle(noteA, 'nw'), { dx: -30, dy: 20 });
+  const during = noteA.element().getBoundingClientRect();
+  const style = (noteA.element() as HTMLElement).style;
+  await release();
+  const after = noteA.element().getBoundingClientRect();
+
+  expect([during.x - before.x, during.y - before.y]).toEqual([-30, 20]);
+  expect([during.width, during.height]).toEqual([a.width + 30, a.height - 20]);
+  expect(style.transform).not.toContain('scale');
+  expect(after).toEqual(during);
+  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({
+    x: 70,
+    y: 120,
+    width: a.width + 30,
+    height: a.height - 20,
+  });
+});
+
+it('each handle shows its resize cursor, and only se draws a tick', async () => {
+  const { noteA } = await setup();
+  const cursors = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map(
+    (name) => getComputedStyle(handle(noteA, name).element()).cursor,
+  );
+  const ticks = [...noteA.element().querySelectorAll('[data-handle]')].filter(
+    (el) => getComputedStyle(el, '::after').content !== 'none',
+  );
+
+  expect(cursors).toEqual([
+    'ns-resize',
+    'ns-resize',
+    'ew-resize',
+    'ew-resize',
+    'nesw-resize',
+    'nwse-resize',
+    'nwse-resize',
+    'nesw-resize',
+  ]);
+  expect(ticks.map((el) => el.getAttribute('data-handle'))).toEqual(['se']);
+});
+
+it('a resize on Note b re-renders b and not a', async () => {
+  const renders: string[] = [];
+  const { notes } = await setup({ onNoteRender: (id) => renders.push(id) });
+  renders.length = 0;
+
+  await drag(handle(notes.nth(1), 'e'), { dx: 40, dy: 0 });
+
+  expect(renders).toContain('b');
+  expect(renders).not.toContain('a');
 });

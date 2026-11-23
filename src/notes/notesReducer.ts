@@ -1,4 +1,4 @@
-import { toCommittedRect, type Point } from '../geometry';
+import { toCommittedRect, type Point, type Rect } from '../geometry';
 import { createStore, type Store } from '../store/createStore';
 import type { Note, NoteId } from './note';
 
@@ -12,6 +12,7 @@ export interface NotesState {
 export type NoteAction =
   | { readonly type: 'create'; readonly note: Omit<Note, 'z'> }
   | { readonly type: 'move'; readonly id: NoteId; readonly x: number; readonly y: number }
+  | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)
   | { readonly type: 'raise'; readonly id: NoteId }
   | { readonly type: 'load'; readonly notes: readonly Note[] };
 
@@ -27,6 +28,8 @@ export function notesReducer(state: NotesState, action: NoteAction): NotesState 
       return create(state, action.note);
     case 'move':
       return move(state, action.id, action);
+    case 'resize':
+      return resize(state, action.id, action);
     case 'raise':
       return raise(state, action.id);
     case 'load':
@@ -52,6 +55,14 @@ function move(state: NotesState, id: NoteId, to: Point): NotesState {
   const { x, y } = toCommittedRect({ ...note, x: to.x, y: to.y });
   if (x === note.x && y === note.y) return state;
   return withNote(state, { ...note, x, y });
+}
+
+function resize(state: NotesState, id: NoteId, to: Rect): NotesState {
+  const note = state.notes[id];
+  if (!note) return state;
+  const { x, y, width, height } = toCommittedRect(to);
+  if (x === note.x && y === note.y && width === note.width && height === note.height) return state;
+  return withNote(state, { ...note, x, y, width, height });
 }
 
 /** Sets `z = ++topZ`. A Note already alone at the front stays as it is. */

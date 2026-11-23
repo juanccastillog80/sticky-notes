@@ -100,15 +100,17 @@ function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): ()
 }
 
 /**
- * A move is a `translate` from the committed rect, which only composites.
- * `data-dragging` gives the lifted shadow. A reset puts back what React rendered.
+ * The Preview is a `translate` from the committed rect, plus `width`/`height` for
+ * a resize, never `scale`, so text reflows and is never distorted. A move only
+ * composites. `data-dragging` gives the lifted shadow. A reset puts back what
+ * React rendered.
  */
 function writePreview(element: HTMLElement, rect: Rect | null, base: Rect) {
-  if (rect === null) {
-    element.style.transform = '';
-    delete element.dataset.dragging;
-    return;
-  }
-  element.style.transform = `translate(${String(rect.x - base.x)}px, ${String(rect.y - base.y)}px)`;
-  element.dataset.dragging = '';
+  const { x, y, width, height } = rect ?? base;
+  element.style.transform =
+    rect === null ? '' : `translate(${String(x - base.x)}px, ${String(y - base.y)}px)`;
+  element.style.width = `${String(width)}px`;
+  element.style.height = `${String(height)}px`;
+  if (rect === null) delete element.dataset.dragging;
+  else element.dataset.dragging = '';
 }
