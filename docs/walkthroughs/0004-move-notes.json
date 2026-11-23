@@ -1,0 +1,344 @@
+{
+  "issue": 4,
+  "title": "Move a Note by dragging, with Raise",
+  "lede": "The Drag engine, written once: a press becomes a Drag past a 3 px Dead zone, the Preview is a `translate` written straight from each event, and the one way out, `end()`, either resets and dispatches one `move` or resets and saves nothing. Resize (#5) will reuse all of it with a new Drag kind.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Which Drag does a press start?",
+      "summary": "Raises the Note, then starts a move with the Note as it was rendered.",
+      "owns": "Choosing the Drag kind at press time, and Raise.",
+      "never": "Tracks the pointer, holds Drag state or writes `transform`.",
+      "tested": "Browser tests with real mouse input."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "How does the engine talk to the DOM?",
+      "summary": "Filters presses, captures the pointer and builds the real `io`.",
+      "owns": "Listeners on `window`, the inline `transform`, `data-dragging`.",
+      "never": "Decides timing, deltas or actions.",
+      "tested": "Browser tests. Kept out of the coverage gate: it is wiring."
+    },
+    {
+      "path": "src/drag/isDragPress.ts",
+      "question": "Which presses may start a Drag?",
+      "summary": "Primary pointer, left button, not inside a textarea or contenteditable.",
+      "owns": "The press filter.",
+      "never": "Touches anything.",
+      "tested": "Example tests in Node."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When does each thing happen?",
+      "summary": "The lifecycle: Dead zone, scroll-compensated delta, release, cancel, one idempotent `end()`.",
+      "owns": "The one running Drag and every exit from it.",
+      "never": "Imports React or touches the DOM: everything goes through `io`.",
+      "tested": "Node tests with a recording fake `io`."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "What does a move show and save?",
+      "summary": "`moveKind`: the Preview and the commit come from the same function.",
+      "owns": "Per-kind maths.",
+      "never": "Listens, times or cleans up.",
+      "tested": "Through the controller tests."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How do `move` and `raise` change the Notes?",
+      "summary": "`move` clamps and rounds; `raise` sets `z = ++topZ`.",
+      "owns": "Committed positions and the Stacking order.",
+      "never": "Knows a Drag happened.",
+      "tested": "Unit tests, including reference stability and no-ops."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "How does a test see which Notes render?",
+      "summary": "Wraps each Note in a `<Profiler>` only when a test passes `onNoteRender`.",
+      "owns": "The list of Notes.",
+      "never": "Knows about Drags.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/App.tsx",
+      "question": "How does a Note find the scroll container?",
+      "summary": "Provides `BoardDomContext`, and the test-only Profiler hook.",
+      "owns": "Providers and layout.",
+      "never": "Holds state or effects.",
+      "tested": "Every browser test mounts it."
+    },
+    {
+      "path": "test/browserCommands.ts",
+      "question": "How do tests make real mouse input?",
+      "summary": "A Vitest browser command over Playwright's `page.mouse`, mapped into the scaled test iframe.",
+      "owns": "Coordinates from the test page to the outer page.",
+      "never": "Knows about Notes.",
+      "tested": "By the browser tests that use it."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/notes/notesReducer.ts"],
+    ["src/components/Note.tsx", "src/drag/useDrag.ts", "src/drag/isDragPress.ts"],
+    ["src/drag/useDrag.ts", "src/drag/controller.ts", "src/drag/kinds.ts"],
+    [
+      "src/drag/controller.ts",
+      "src/drag/useDrag.ts",
+      "src/notes/notesReducer.ts",
+      "src/components/Note.tsx"
+    ]
+  ],
+  "scenarios": [
+    {
+      "name": "Drag a Note and release it",
+      "steps": [
+        {
+          "title": "pointerdown on the Note",
+          "explain": "Raise first, so the Note is in front before it moves and stays there for the whole Drag. Then `start` gets the Note **as rendered**: that is the `from` rect every delta is added to.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function press(",
+              "to": "start(e, moveKind, note);"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function raise(",
+              "to": "return { ...withNote(state, { ...note, z }), topZ: z };"
+            }
+          ]
+        },
+        {
+          "title": "start filters, captures, presses",
+          "explain": "The Note gets the scroll container from `BoardDomContext`, which App provides with a value that never changes, so reading it renders nothing. `preventDefault` stops focus moves, text selection and native drags. Capture keeps hover and double-clicks off the neighbours. The controller then records the press point and the scroll position, and attaches every listener in one `listen`. Nothing is drawn yet: the press is pending.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const { scrollerRef } = useBoardDom();",
+              "to": "const start = useDrag("
+            },
+            {
+              "file": "src/App.tsx",
+              "from": "const boardDom = useMemo(",
+              "to": "<BoardDomContext value={boardDom}>"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "return function start<",
+              "to": "controller.current?.press(e, kind, from);"
+            },
+            {
+              "file": "src/drag/isDragPress.ts",
+              "from": "export function isDragPress(",
+              "to": "return element?.closest"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "press(e, kind, from) {",
+              "to": "detach: io.listen(handlers),"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "function listenForDrag(",
+              "to": "scroller?.addEventListener('scroll'"
+            }
+          ]
+        },
+        {
+          "title": "pointermove past the Dead zone",
+          "explain": "While the delta stays within 3 px nothing is written, so a click never nudges a Note. Past it, `pending` turns off for good, and the Preview is written **synchronously**: no rAF, so it is never a frame behind the pointer. It is a `translate`, which only composites.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "move(e) {",
+              "to": "update(session);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function update(s: Session)",
+              "to": "io.writePreview(s.preview("
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "function moved(",
+              "to": "return toCommittedRect("
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "element.style.transform = `translate(",
+              "to": "element.dataset.dragging = '';"
+            }
+          ]
+        },
+        {
+          "title": "pointerup",
+          "explain": "`end(true)` detaches and releases capture, then computes the action from the **same** maths the Preview used, so the drop is exactly what was shown. The Preview is reset **before** the dispatch: the store update re-renders the Note with new `left/top` before the next paint, so it lands where the Preview was. Dispatching first would briefly add the old translate to the new position. (No flicker was seen in the tests; that ordering wasn't measured frame by frame.)",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "up(e) {",
+              "to": "end(true);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function end(commit: boolean)",
+              "to": "if (action) io.dispatch(action);"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "commit(from, delta) {",
+              "to": "return { type: 'move', id: from.id, x, y };"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function move(",
+              "to": "return withNote(state, { ...note, x, y });"
+            }
+          ]
+        },
+        {
+          "title": "Only that Note re-renders",
+          "explain": "`withNote` replaces one Note and keeps `ids` and the rest by reference, so the Board and Note *b* see no change. The browser test wraps each Note in a `<Profiler>` (test-only, through App) and checks that only *a* rendered.",
+          "run": [
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function withNote(",
+              "to": "return { ...state, notes:"
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "onNoteRender ? (",
+              "to": "<Note key={id} id={id} />"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scroll mid-drag",
+      "steps": [
+        {
+          "title": "The container scrolls; the pointer is still",
+          "explain": "The Board moves under the pointer, so the delta adds the scroll since the press. The scroll listener calls `update` too, so the Note follows the Board without waiting for a pointer move.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "scroll() {",
+              "to": "if (session) update(session);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function delta(s: Session)",
+              "to": "y: s.pointer.y - s.pressPoint.y"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A click: release inside the Dead zone",
+      "steps": [
+        {
+          "title": "pointerup while pending",
+          "explain": "`end` returns before writing or dispatching anything: a click saves nothing. Editing will hook in here later, since a click enters it.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (s.pending) return;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cancel: Escape, pointercancel or unmount",
+      "steps": [
+        {
+          "title": "Any cancel goes through end(false)",
+          "explain": "All three revert the Preview and dispatch nothing. `end` clears `session` first, so a second signal (another Escape, a late `pointerup`) finds nothing to end: one detach, at most one dispatch.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "cancel(e) {",
+              "to": "if (e.key === 'Escape') end(false);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "drag.dispose();",
+              "to": "controller.current = null;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A release the page never saw",
+      "steps": [
+        {
+          "title": "pointermove with no button down",
+          "explain": "If the button came up outside the window, the next move arrives with `buttons === 0`. The controller treats it as the missed release and commits where the pointer is, so the Note doesn't stay stuck to it. `lostpointercapture` is deliberately not a signal: Chrome can fire it before a valid `pointerup`.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (e.buttons === 0) {",
+              "to": "return;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "How the browser tests press the mouse",
+      "steps": [
+        {
+          "title": "A test calls drag(locator, { dx, dy })",
+          "explain": "Synthetic `PointerEvent`s can't take pointer capture, so the test runs a command in Node that drives Playwright's real mouse. The test iframe is scaled down to fit the window, so every client point is multiplied by the iframe's scale and offset by its box.",
+          "run": [
+            {
+              "file": "test/browserCommands.ts",
+              "from": "export const mouse:",
+              "to": "if (step.type === 'down')"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "No Trash zone in `io` yet",
+      "detail": "The spec's `DragIO` has `trashRect()` and `setOverTrash()`, and the kind context has `trashRect`. They are left out until #6 adds the Trash zone, which may be cut. Adding them then is additive."
+    },
+    {
+      "title": "The controller is created in an effect",
+      "detail": "Creating it during render tripped `react-hooks/refs`. In an effect, StrictMode's double mount gets a fresh controller and the cleanup always disposes. The counter-argument: `start` reads `controller.current`, which is null before the first effect; a press can't arrive before then."
+    },
+    {
+      "title": "The Dead zone counts scroll too",
+      "detail": "A scroll during a pending press can start the Drag, since the Note would otherwise jump when the pointer finally moves. The spec doesn't say either way."
+    },
+    {
+      "title": "`useDrag` is excluded from the coverage gate",
+      "detail": "Node can't run it without jsdom, which the spec rules out. The browser tests drive every line of it with a real mouse in Chromium and Firefox."
+    },
+    {
+      "title": "Real mouse input, through the scaled iframe",
+      "detail": "Vitest scales the 1024×768 test iframe into a smaller window, so `test/browserCommands.ts` maps each client point by the iframe's box and scale. A first version of the edge test moved the pointer out of the window and flaked in Firefox; it now stays over the top bar."
+    }
+  ],
+  "omitted": {
+    "src/BoardDomContext.ts": "A context holding the scroll container ref, read by Note.",
+    "src/components/Board.module.css": "`touch-action: none` on the Board.",
+    "src/components/Note.module.css": "`touch-action: none`, `user-select: none` and the lifted shadow.",
+    "src/tokens.css": "The dragging shadow token.",
+    "src/drag/controller.test.ts": "Controller tests, shown through the scenarios.",
+    "src/drag/isDragPress.test.ts": "isDragPress examples.",
+    "src/drag.browser.test.tsx": "Browser scenarios 1 and 6, Raise, edges, Escape and render isolation.",
+    "src/notes/notesReducer.test.ts": "Reducer tests for move and raise.",
+    "test/mouse.ts": "`drag`, `press`, `pressAndMove` and `release` helpers over the command.",
+    "test/mouseStep.ts": "The command's step type, shared by both tsconfigs.",
+    "test/renderApp.tsx": "Passes the test-only Profiler callback.",
+    "tsconfig.app.json": "Excludes the Node-side command.",
+    "tsconfig.node.json": "Includes the Node-side command.",
+    "vite.config.ts": "Registers the command and excludes useDrag from coverage."
+  }
+}
