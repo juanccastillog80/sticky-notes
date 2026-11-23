@@ -66,12 +66,12 @@ jobs:
           TIP: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node docs/walkthroughs/check.js "$TIP"
 
-      # Walkthroughs are self-contained pages, so reviewers can read them on the
-      # deployed site without cloning: <site>/walkthroughs/<name>.html, listed
-      # at <site>/walkthroughs/
-      - name: Add walkthroughs to the site
+      # Walkthroughs and design prototypes are self-contained pages, so they can
+      # be read on the deployed site without cloning: <site>/walkthroughs/ and
+      # <site>/prototypes/ each list their pages.
+      - name: Add walkthroughs and prototypes to the site
         if: github.event_name != 'pull_request'
-        run: node docs/walkthroughs/site.js dist/walkthroughs
+        run: node docs/walkthroughs/site.js dist
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

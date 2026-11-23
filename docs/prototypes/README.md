@@ -1,6 +1,6 @@
 # Design prototypes
 
-Throwaway, self-contained HTML pages built to settle one design question each before any app code existed. Open one in a browser: no build, no dependencies. The decisions they led to are in the [spec](https://github.com/juanccastillog80/sticky-notes/issues/1) and in [`docs/adr/`](../adr/).
+Throwaway, self-contained HTML pages built to settle one design question each before any app code existed. Open one in a browser: no build, no dependencies. `main` also publishes them at <https://juanccastillog80.github.io/sticky-notes/prototypes/>. The decisions they led to are in the [spec](https://github.com/juanccastillog80/sticky-notes/issues/1) and in [`docs/adr/`](../adr/).
 
 | Prototype | Question it answered |
 |---|---|
