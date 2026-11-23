@@ -14,6 +14,35 @@ const PURE_CORE = [
   'src/commands.ts',
 ];
 
+// Which browsers the browser project runs in: a comma-separated BROWSERS list,
+// or Chromium and Firefox by default. `chrome` and `msedge` are the installed
+// branded builds, launched through Playwright's Chromium with a channel.
+const BROWSER_NAMES = ['chromium', 'firefox', 'chrome', 'msedge'] as const;
+type BrowserName = (typeof BROWSER_NAMES)[number];
+
+function isBrowserName(name: string): name is BrowserName {
+  return (BROWSER_NAMES as readonly string[]).includes(name);
+}
+
+function browserInstance(name: BrowserName) {
+  if (name === 'chromium' || name === 'firefox') return { browser: name };
+  return {
+    browser: 'chromium' as const,
+    name,
+    provider: playwright({ launchOptions: { channel: name } }),
+  };
+}
+
+function browserInstances(list = 'chromium,firefox') {
+  return list.split(',').map((raw) => {
+    const name = raw.trim();
+    if (!isBrowserName(name)) {
+      throw new Error(`BROWSERS: unknown browser "${name}" (expected ${BROWSER_NAMES.join(', ')})`);
+    }
+    return browserInstance(name);
+  });
+}
+
 export default defineConfig({
   // The same base for every command, dev included, so the service-worker
   // scope and URLs match the GitHub Pages deployment.
@@ -49,7 +78,7 @@ export default defineConfig({
             enabled: true,
             headless: true,
             provider: playwright(),
-            instances: [{ browser: 'chromium' }, { browser: 'firefox' }],
+            instances: browserInstances(process.env.BROWSERS),
           },
         },
       },
