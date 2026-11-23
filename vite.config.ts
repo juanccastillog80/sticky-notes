@@ -8,7 +8,7 @@ const PURE_CORE = [
   'src/store/**',
   'src/notes/**',
   'src/ui/**',
-  'src/gesture/**',
+  'src/drag/**',
   'src/persistence/**',
   'src/geometry.ts',
   'src/commands.ts',

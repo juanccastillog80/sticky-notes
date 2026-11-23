@@ -26,6 +26,6 @@
     inset 1px 0 0 var(--color-line),
     0 0 0 1px var(--color-line),
     var(--shadow-board);
-  /* Always, not only during a Gesture: double-click creates here and must not select text. */
+  /* Always, not only during a Drag: double-click creates here and must not select text. */
   user-select: none;
 }
