@@ -1,0 +1,47 @@
+{
+  "title": "Walkthroughs on GitHub Pages",
+  "lede": "Merged walkthroughs become readable in a browser, without cloning: the existing Pages deploy now copies them next to the app, at `walkthroughs/<name>.html`.",
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "question": "When do walkthroughs reach the site?",
+      "summary": "One step in `check`, after the build and before the Pages upload, on `main` only.",
+      "owns": "Copying the pages into `dist/walkthroughs/`.",
+      "never": "Builds or checks walkthroughs; the existing gate still does that.",
+      "tested": "Not run yet: the step runs only on a push to `main`, so the first merge is its test."
+    }
+  ],
+  "flow": [[".github/workflows/ci.yml"]],
+  "scenarios": [
+    {
+      "name": "A merge to main",
+      "steps": [
+        {
+          "title": "push to main: build, copy, upload",
+          "explain": "The app is built into `dist`, then the walkthroughs are copied in, so one Pages artifact holds both. The pages inline everything they need, so a plain copy is enough. The copy skips pull requests, like the upload it feeds: PR runs never deploy. Not run yet: the first push to `main` after this merge will prove it.",
+          "run": [
+            {
+              "file": ".github/workflows/ci.yml",
+              "from": "- name: Add walkthroughs to the site",
+              "to": "run: mkdir -p dist/walkthroughs"
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "from": "- name: Upload Pages artifact",
+              "to": "path: dist"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Only merged walkthroughs are published",
+      "detail": "PR walkthroughs still open through the `git show` command in the PR body. Publishing per-PR previews would need a second deploy target, which isn't worth it for this project."
+    }
+  ],
+  "omitted": {
+    "docs/agents/pr-walkthrough.md": "One sentence: the published URL to use for links that outlive the PR."
+  }
+}
