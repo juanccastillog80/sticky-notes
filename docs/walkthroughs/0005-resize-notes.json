@@ -1,0 +1,157 @@
+{
+  "issue": 5,
+  "title": "Resize a Note from any edge or corner",
+  "lede": "Resize adds no engine code. It is 8 new Drag kinds, one per Resize handle, plugged into the engine from #4. Each one is a pure function from the press rect and the delta to a rect. The Preview now writes `width`/`height` next to the `translate`, and the `resize` action saves the same rect the Preview showed.",
+  "files": [
+    {
+      "path": "src/components/ResizeHandles.tsx",
+      "question": "Which part of a Note starts a resize?",
+      "summary": "8 invisible hit zones. A press on one stops propagation and reports its handle.",
+      "owns": "The handle elements, their cursors, and the `se` tick (in the CSS module).",
+      "never": "Knows about Drags or Notes.",
+      "tested": "Browser test of every cursor and the single tick."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Which Drag does a press start?",
+      "summary": "A press on the body starts `moveKind`. A press on a handle starts `resizeKinds[handle]`. Both Raise first.",
+      "owns": "Choosing the Drag kind at press time.",
+      "never": "Does resize maths.",
+      "tested": "Browser tests with real mouse input."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "What does a resize show and save?",
+      "summary": "`resized` moves only the edges the handle names, clamped to the minimum Note size and the Board.",
+      "owns": "Per-handle maths. The Preview and the commit share it.",
+      "never": "Listens, times or touches the DOM.",
+      "tested": "Named examples and fast-check properties in Node."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "How is a resize drawn?",
+      "summary": "`writePreview` writes the `translate` plus `width`/`height`, never `scale`.",
+      "owns": "Inline styles during a Drag.",
+      "never": "Decides the rect.",
+      "tested": "Browser tests. Not in the coverage gate."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When does each thing happen?",
+      "summary": "Unchanged from #4. It runs a resize exactly like a move.",
+      "owns": "The Drag lifecycle.",
+      "never": "Knows which kind it runs.",
+      "tested": "Node tests from #4."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How does `resize` change the Notes?",
+      "summary": "Commits the rect through `toCommittedRect`. If nothing changed it returns the same state.",
+      "owns": "Committed size and position.",
+      "never": "Knows which handle was used.",
+      "tested": "Unit tests, including reference stability."
+    }
+  ],
+  "flow": [
+    ["src/components/ResizeHandles.tsx", "src/components/Note.tsx", "src/drag/useDrag.ts", "src/drag/controller.ts", "src/drag/kinds.ts"],
+    ["src/drag/controller.ts", "src/drag/useDrag.ts", "src/notes/notesReducer.ts", "src/components/Note.tsx"]
+  ],
+  "scenarios": [
+    {
+      "name": "Drag the nw corner and release",
+      "steps": [
+        {
+          "title": "pointerdown on the nw handle",
+          "explain": "The handle sits inside the Note, so without `stopPropagation` the Note's own `onPointerDown` would also run and start a move. The controller keeps only one session, so the second `start` would win. `pressHandle` then does what `press` does, Raise and then `start`, with a different kind. `resizeKinds` is built once at import, so the kind passed to `start` is the same object on every press.",
+          "run": [
+            { "file": "src/components/ResizeHandles.tsx", "from": "onPointerDown={(e) => {", "to": "onPress(e, handle);" },
+            { "file": "src/components/Note.tsx", "from": "function pressHandle(", "to": "start(e, resizeKinds[handle], note);" },
+            { "file": "src/drag/kinds.ts", "from": "export const resizeKinds", "to": ") as Record<ResizeHandle, DragKind<Note>>;" }
+          ]
+        },
+        {
+          "title": "pointermove past the Dead zone",
+          "explain": "The controller is the one from #4 and calls `preview` the same way. For `nw` both the `n` and `w` branches run. Each moves its edge and recomputes the size from the opposite edge (`right`, `bottom`), so the bottom-right stays fixed. The clamp's upper bound is `right - MIN_NOTE_SIZE.width`, so shrinking stops at 140 px without moving the right edge. The delta is rounded first, so the Preview is already in whole pixels.",
+          "run": [
+            { "file": "src/drag/controller.ts", "from": "io.writePreview(s.preview(" },
+            { "file": "src/drag/kinds.ts", "from": "function resized(", "to": "return { x, y, width, height };" }
+          ]
+        },
+        {
+          "title": "The Preview is written",
+          "explain": "The `translate` moves the top-left, and `width`/`height` change the box, so the text reflows instead of stretching as it would under `scale`. The browser test checks that `transform` never contains `scale`. A move goes through the same code and writes the size it already had.",
+          "run": [
+            { "file": "src/drag/useDrag.ts", "from": "function writePreview(", "to": "else element.dataset.dragging = '';" }
+          ]
+        },
+        {
+          "title": "pointerup",
+          "explain": "`commit` calls the same `resized` with the same delta, so the saved rect is the last Preview. The browser test checks that the box after release equals the box during the Drag. `end` resets the Preview to `base` before dispatching, then `resize` commits the rect. `toCommittedRect` changes nothing here because the rect is already legal, but it keeps the reducer safe on its own.",
+          "run": [
+            { "file": "src/drag/kinds.ts", "from": "return { type: 'resize', id: from.id" },
+            { "file": "src/notes/notesReducer.ts", "from": "function resize(", "to": "return withNote(state, { ...note, x, y, width, height });" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Shrink past the minimum (scenario 4)",
+      "steps": [
+        {
+          "title": "The se corner dragged far inward",
+          "explain": "`e` and `s` clamp from below at `MIN_NOTE_SIZE`, so the Note stops at 140×100 and its top-left stays put. The browser test drags 250×150 px inward and checks the one `resize` action, the store and the rendered box.",
+          "run": [
+            { "file": "src/drag/kinds.ts", "from": "if (handle.includes('e'))", "to": "width = clamp(from.width + dx, MIN_NOTE_SIZE.width, BOARD_SIZE.width - x);" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A resize that changes nothing",
+      "steps": [
+        {
+          "title": "Release inside the Dead zone, or back where it started",
+          "explain": "Inside the Dead zone the controller dispatches nothing, as in #4. Past it, a release at the starting size still dispatches `resize`, and the reducer returns the **same** state, so no Note re-renders. When a Note does change, `withNote` keeps the other Notes by reference. The browser test checks that resizing *b* re-renders only *b*.",
+          "run": [
+            { "file": "src/notes/notesReducer.ts", "from": "if (x === note.x && y === note.y && width === note.width" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Escape mid-resize",
+      "steps": [
+        {
+          "title": "end(false) resets to base",
+          "explain": "A reset writes `base`, the rect React rendered at press. `transform` is cleared and `width`/`height` go back to the rendered values. The inline size stays set afterwards, but it equals React's own `style` value, so nothing changes on screen. No browser test covers Escape during a resize. The controller tests from #4 cover the cancel path, which doesn't depend on the kind.",
+          "run": [
+            { "file": "src/drag/controller.ts", "from": "io.writePreview(null, s.from);" },
+            { "file": "src/drag/useDrag.ts", "from": "const { x, y, width, height } = rect ?? base;" }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Each edge is clamped in `kinds.ts`, not left to the reducer",
+      "detail": "`clampToBoard` in the reducer keeps the size and moves the Note to fit. That is right for a move and wrong for a resize, where the opposite edge must stay put. So `resized` clamps each moving edge itself, and the reducer's clamp never changes a rect that came from a Drag. The downside is that the bounds now live in two places. `clamp` is exported from `geometry.ts` so that both use the same helper."
+    },
+    {
+      "title": "`writePreview` leaves inline width/height set after a reset",
+      "detail": "They equal what React rendered, and React overwrites them when the size changes. If something else ever set the size outside React's `style`, this would hide it."
+    },
+    {
+      "title": "No Trash zone yet",
+      "detail": "The issue says a resize never reports being over the Trash zone. The Trash zone isn't in `io` yet (#6), so for now nothing reports it. #6 must keep resize kinds out of it."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "Defines **Resize handle**.",
+    "src/components/ResizeHandles.module.css": "Positions, depths (8 px edges, 14 px corners), cursors and the `se` tick.",
+    "src/geometry.ts": "Exports `clamp`.",
+    "src/drag/kinds.test.ts": "Named examples and fast-check properties for `resizeKinds`.",
+    "src/drag.browser.test.tsx": "Scenario 4, the nw Preview equals the commit, cursors and tick, render isolation.",
+    "src/notes/notesReducer.test.ts": "Tests for `resize`."
+  }
+}
