@@ -43,8 +43,14 @@
     }
   ],
   "notes": [
-    { "title": "Frozen files keep \"gesture\"", "detail": "The prototypes and merged walkthroughs are records of past decisions, and CI forbids changing a merged walkthrough. `docs/prototypes/README.md` says the term changed, and their filenames stay so links keep working." },
-    { "title": "Generic English kept", "detail": "The spec keeps \"gesture\" in three user stories where it means any pointer interaction (\"a direct pointer gesture\", \"touch and pen gestures\")." }
+    {
+      "title": "Frozen files keep \"gesture\"",
+      "detail": "The prototypes and merged walkthroughs are records of past decisions, and CI forbids changing a merged walkthrough. `docs/prototypes/README.md` says the term changed, and their filenames stay so links keep working."
+    },
+    {
+      "title": "Generic English kept",
+      "detail": "The spec keeps \"gesture\" in three user stories where it means any pointer interaction (\"a direct pointer gesture\", \"touch and pen gestures\")."
+    }
   ],
   "omitted": {
     "docs/adr/0001-fixed-scrolling-board.md": "Wording only: Gesture → Drag.",
