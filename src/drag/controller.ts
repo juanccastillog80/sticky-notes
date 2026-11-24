@@ -41,6 +41,8 @@ export interface DragIO {
   /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */
   writePreview: (rect: Rect | null, base: Rect) => void;
   dispatch: (action: NoteAction) => void;
+  /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */
+  click: (pointer: Point) => void;
 }
 
 interface Session {
@@ -58,8 +60,18 @@ interface Session {
   readonly detach: () => void;
 }
 
+export interface PressOptions {
+  /** The Press landed inside text being typed in: it Raises, but never becomes a Drag or a Click. */
+  readonly inText?: boolean;
+}
+
 export interface DragController {
-  press: <From extends Rect>(e: PointerSignal, kind: DragKind<From>, from: From) => void;
+  press: <From extends Rect>(
+    e: PointerSignal,
+    kind: DragKind<From>,
+    from: From,
+    options?: PressOptions,
+  ) => void;
   /** Cancels a running Drag. For unmount. */
   dispose: () => void;
 }
@@ -67,10 +79,10 @@ export interface DragController {
 /**
  * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`.
  *
- *   press → io.attachPointerListeners(sessionHandlers)
+ *   press → io.dispatch(kind.press), io.attachPointerListeners(sessionHandlers)
  *   move / scroll → Dead zone → Preview (io.writePreview)
- *   up / buttons === 0 → end(true);  cancel / Escape / dispose → end(false)
- *   end → detach, io.releaseCapture, reset Preview, io.dispatch the commit
+ *   up → end(true, released);  buttons === 0 → end(true);  cancel / Escape / dispose → end(false)
+ *   end → detach, io.releaseCapture, then a Click (io.click) or reset Preview + io.dispatch the commit
  *
  * The handlers exist for the whole controller, but are attached only while a press is live.
  */
@@ -94,14 +106,21 @@ export function createDragController(io: DragIO): DragController {
     io.writePreview(s.preview(d, { pointer: s.pointer }), s.from);
   }
 
-  /** Every exit comes through here, once. */
-  function end(commit: boolean) {
+  /**
+   * Every exit comes through here, once. `released`: a real `pointerup` we saw,
+   * the only end that turns a Press still inside the Dead zone into a Click.
+   */
+  function end(commit: boolean, released = false) {
     const s = session;
     if (!s) return;
     session = null;
     s.detach();
     io.releaseCapture(s.pointerId);
-    if (s.pending) return;
+    if (s.pending) {
+      // Last, so the Click's handler runs with the pointer already let go.
+      if (released) io.click(s.pointer);
+      return;
+    }
     const action = commit ? s.commit(delta(s), { pointer: s.pointer }) : null;
     // Reset before dispatching: the re-render then moves the Note to where the Preview was.
     io.writePreview(null, s.from);
@@ -123,7 +142,7 @@ export function createDragController(io: DragIO): DragController {
     up(e) {
       if (!session || !ownPointer(e)) return;
       session.pointer = { x: e.clientX, y: e.clientY };
-      end(true);
+      end(true, true);
     },
     cancel(e) {
       if (ownPointer(e)) end(false);
@@ -137,8 +156,11 @@ export function createDragController(io: DragIO): DragController {
   };
 
   return {
-    press(e, kind, from) {
+    press(e, kind, from, { inText = false } = {}) {
       end(false);
+      const pressed = kind.press?.(from);
+      if (pressed) io.dispatch(pressed);
+      if (inText) return;
       const pressPoint = { x: e.clientX, y: e.clientY };
       session = {
         preview: (d, ctx) => kind.preview(from, d, ctx),
