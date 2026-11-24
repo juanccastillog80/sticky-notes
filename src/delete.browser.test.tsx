@@ -5,14 +5,18 @@ import { makeNote, testId } from '../test/factories';
 import { press } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 import type { NoteAction } from './notes/notesReducer';
+import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
 import { UNDO_TOAST_MS } from './components/UndoToast';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
+  // A mouse delete ignores presses on Notes for a double-click interval; let it lapse
+  // so it can't swallow the next test's first press.
+  await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
 });
 
 const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1, text: 'keep me', colour: 'yellow' });
@@ -75,7 +79,9 @@ it('the toast hides after its time, and a newer delete restarts the timer', asyn
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 
   vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);
-  await press(deleteB);
+  // From the keyboard: a mouse click this soon would be taken for a double-click.
+  (deleteB.element() as HTMLElement).focus();
+  await userEvent.keyboard('{Enter}');
   vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 
@@ -83,13 +89,27 @@ it('the toast hides after its time, and a newer delete restarts the timer', asyn
   await expect.element(toast.getByText('Note deleted')).not.toBeInTheDocument();
 });
 
-it('the × works from the keyboard', async () => {
-  const { stores, noteA } = await setup();
+it('the × works from the keyboard, and focus moves to Undo', async () => {
+  const { stores, noteA, toast } = await setup();
   (deleteButton(noteA).element() as HTMLElement).focus();
 
   await userEvent.keyboard('{Enter}');
 
   expect(stores.notes.getSnapshot().notes[a.id]).toBeUndefined();
+  await expect.element(toast.getByRole('button', { name: 'Undo' })).toHaveFocus();
+});
+
+it('a double-click on the × deletes only that Note, even with another Note under it', async () => {
+  const { stores, notes } = await setup();
+  const front = makeNote({ id: testId('front'), z: 2 });
+  const under = makeNote({ id: testId('under'), z: 1 });
+  stores.notes.dispatch({ type: 'load', notes: [under, front] });
+  await expect.element(notes.nth(1)).toBeVisible();
+
+  await deleteButton(notes.nth(1)).dblClick();
+
+  expect(stores.notes.getSnapshot().ids).toEqual([under.id]);
+  expect(stores.notes.getSnapshot().notes[under.id]).toEqual(under);
 });
 
 it('deleting Note a does not re-render Note b', async () => {

@@ -16,6 +16,14 @@ _Avoid_: Item, card, sticky
 A fixed region of the screen, always visible however far the board is scrolled; releasing a note over it deletes the note.
 _Avoid_: Bin, delete area, papelera
 
+**Delete button**:
+The × at the right end of every note's grip strip, always visible. Clicking it deletes the note at once; it is not a Press, so it never Raises or drags.
+_Avoid_: Close button, remove
+
+**Undo toast**:
+The "Note deleted · Undo" message shown for 5 seconds after a delete. Undo brings the note back exactly as it was, stacking included. A newer delete replaces it.
+_Avoid_: Snackbar, notification
+
 **Press**:
 The pointer going down on a note. It Raises the note at once; it becomes a drag only if the pointer then leaves the Dead zone.
 _Avoid_: Click (that is a Press released inside the Dead zone), tap

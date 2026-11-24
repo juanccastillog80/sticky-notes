@@ -38,7 +38,7 @@ export function notesReducer(state: NotesState, action: NoteAction): NotesState 
     case 'setText':
       return setText(state, action.id, action.text);
     case 'delete':
-      return remove(state, action.id);
+      return withoutNote(state, action.id);
     case 'restore':
       return restore(state, action.note);
     case 'load':
@@ -94,7 +94,7 @@ function setText(state: NotesState, id: NoteId, text: string): NotesState {
 }
 
 /** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */
-function remove(state: NotesState, id: NoteId): NotesState {
+function withoutNote(state: NotesState, id: NoteId): NotesState {
   if (!state.notes[id]) return state;
   const ids = state.ids.filter((other) => other !== id);
   const notes = Object.fromEntries(

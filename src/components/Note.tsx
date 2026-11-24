@@ -6,6 +6,7 @@ import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
 import { useCommands, useIsEditing, useNotes, useStores } from '../StoresContext';
 import { caretOffsetAt } from './caret';
+import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';
 import styles from './Note.module.css';
 import { useStopEditing } from './useStopEditing';
 import { ResizeHandles } from './ResizeHandles';
@@ -88,8 +89,10 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
           e.stopPropagation();
           e.preventDefault();
         }}
-        onClick={() => {
+        onClick={(e) => {
           deleteNote(id);
+          // A mouse click (not Enter or Space) may be the first half of a double-click.
+          if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);
         }}
       >
         ×

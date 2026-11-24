@@ -1,4 +1,5 @@
 import {
+  memo,
   Profiler,
   useEffect,
   useRef,
@@ -6,7 +7,6 @@ import {
   type ProfilerOnRenderCallback,
   type RefObject,
 } from 'react';
-import { memo } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
 import { useCommands, useNotes } from '../StoresContext';
