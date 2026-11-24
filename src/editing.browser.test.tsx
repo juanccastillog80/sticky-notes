@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
-import { drag, press } from '../test/mouse';
+import { drag, press, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 
 beforeEach(async () => {
@@ -174,4 +174,29 @@ it('a change of Editing re-renders only the two Notes involved', async () => {
   await expect.poll(() => renders).toContain('b');
 
   expect(new Set(renders)).toEqual(new Set(['a', 'b']));
+});
+
+it("a press on another Note's resize handle ends Editing", async () => {
+  const { stores, noteA, noteB } = await setup();
+  await editABeforeWorld(noteA);
+  const se = noteB.element().querySelector('[data-handle="se"]');
+  if (!se) throw new Error('No se handle');
+
+  await drag(page.elementLocator(se), { dx: 20, dy: 20 });
+
+  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('Escape during a strip Drag cancels the Drag and keeps Editing', async () => {
+  const { stores, noteA } = await setup();
+  await editABeforeWorld(noteA);
+
+  await pressAndMove(noteA, { dx: 80, dy: 0, position: { x: 100, y: 10 } });
+  await userEvent.keyboard('{Escape}');
+  await release();
+
+  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({ x: 100, y: 100 });
+  expect(stores.ui.getSnapshot().editingId).toBe(a.id);
+  await expect.element(editor(noteA)).toHaveFocus();
 });

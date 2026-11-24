@@ -8,10 +8,11 @@ import {
 } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE } from '../notes/note';
-import { useCommands, useNotes, useStores } from '../StoresContext';
+import { useCommands, useNotes } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
 import styles from './Board.module.css';
+import { useStopEditing } from './useStopEditing';
 
 export function Board({
   scrollerRef,
@@ -22,7 +23,7 @@ export function Board({
 }) {
   const ids = useNotes((state) => state.ids);
   const { createNote } = useCommands();
-  const { ui } = useStores();
+  const stopEditing = useStopEditing();
 
   const boardRef = useRef<HTMLElement>(null);
   // A `dblclick` reports only where the second press landed, so the first is remembered:
@@ -65,7 +66,7 @@ export function Board({
           onDoubleClick={createAtPointer}
           onPointerDown={(event) => {
             // A press on empty Board ends Editing.
-            if (event.target === event.currentTarget) ui.dispatch({ type: 'stopEditing' });
+            if (event.target === event.currentTarget) stopEditing();
           }}
         >
           {ids.map((id) =>

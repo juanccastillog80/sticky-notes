@@ -6,7 +6,8 @@ import type { Point } from '../geometry';
  * to the end of the text.
  */
 export function caretOffsetAt(text: HTMLElement | null, { x, y }: Point): number | null {
-  const position = text ? document.caretPositionFromPoint(x, y) : null;
-  if (!position || position.offsetNode !== text?.firstChild) return null;
-  return position.offset;
+  // Older browsers lack the API: they fall back to the end too.
+  if (!text || !('caretPositionFromPoint' in document)) return null;
+  const position = document.caretPositionFromPoint(x, y);
+  return position?.offsetNode === text.firstChild ? position.offset : null;
 }

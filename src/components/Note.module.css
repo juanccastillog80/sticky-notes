@@ -51,9 +51,8 @@
   border-radius: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.4;
+  /* Size and line height come from `.text`. */
+  font-family: inherit;
   letter-spacing: inherit;
   resize: none;
   outline: none;

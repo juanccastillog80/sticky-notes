@@ -96,16 +96,21 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
  */
 function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): () => void {
   const options = { capture: true };
+  // Prevented, so the Escape that cancels a Drag does nothing else, such as end Editing.
+  const key = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') e.preventDefault();
+    handlers.key(e);
+  };
   window.addEventListener('pointermove', handlers.move, options);
   window.addEventListener('pointerup', handlers.up, options);
   window.addEventListener('pointercancel', handlers.cancel, options);
-  window.addEventListener('keydown', handlers.key, options);
+  window.addEventListener('keydown', key, options);
   scroller?.addEventListener('scroll', handlers.scroll, { passive: true });
   return () => {
     window.removeEventListener('pointermove', handlers.move, options);
     window.removeEventListener('pointerup', handlers.up, options);
     window.removeEventListener('pointercancel', handlers.cancel, options);
-    window.removeEventListener('keydown', handlers.key, options);
+    window.removeEventListener('keydown', key, options);
     scroller?.removeEventListener('scroll', handlers.scroll);
   };
 }
