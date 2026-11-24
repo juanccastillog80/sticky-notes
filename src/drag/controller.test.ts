@@ -10,7 +10,8 @@ type Call =
   | { readonly call: 'detach' }
   | { readonly call: 'releaseCapture'; readonly pointerId: number }
   | { readonly call: 'writePreview'; readonly rect: Rect | null }
-  | { readonly call: 'dispatch'; readonly action: NoteAction };
+  | { readonly call: 'dispatch'; readonly action: NoteAction }
+  | { readonly call: 'click'; readonly pointer: Point };
 
 /** A fake `io` that records every call, with a scroll position the test sets. */
 function setup() {
@@ -31,6 +32,7 @@ function setup() {
     releaseCapture: (pointerId) => calls.push({ call: 'releaseCapture', pointerId }),
     writePreview: (rect) => calls.push({ call: 'writePreview', rect }),
     dispatch: (action) => calls.push({ call: 'dispatch', action }),
+    click: (pointer) => calls.push({ call: 'click', pointer }),
   };
   const controller = createDragController(io);
   const note = makeNote({ x: 100, y: 100 });
@@ -43,6 +45,9 @@ function setup() {
   const signal = (fire: (handlers: DragHandlers) => void) => {
     if (attached) fire(attached);
   };
+
+  const of = <K extends Call['call']>(kind: K) =>
+    calls.filter((c): c is Extract<Call, { call: K }> => c.call === kind);
 
   return {
     calls,
@@ -69,10 +74,91 @@ function setup() {
         h.scroll();
       });
     },
-    of: <K extends Call['call']>(kind: K) =>
-      calls.filter((c): c is Extract<Call, { call: K }> => c.call === kind),
+    of,
+    /** What the Drags saved: every dispatch except the Raise each Press makes. */
+    commits: () => of('dispatch').filter(({ action }) => action.type !== 'raise'),
   };
 }
+
+describe('the Press', () => {
+  it('raises the Note before anything listens', () => {
+    const t = setup();
+    t.press();
+
+    expect(t.calls.slice(0, 2)).toEqual([
+      { call: 'dispatch', action: { type: 'raise', id: t.note.id } },
+      { call: 'attachPointerListeners' },
+    ]);
+  });
+
+  it('inside text it only raises: nothing listens, so the caret and selection are left alone', () => {
+    const t = setup();
+    t.controller.press({ pointerId: 1, clientX: 10, clientY: 10 }, moveKind, t.note, {
+      inText: true,
+    });
+
+    expect(t.calls).toEqual([{ call: 'dispatch', action: { type: 'raise', id: t.note.id } }]);
+  });
+
+  it('released inside the Dead zone is a Click at the release point, after everything is let go', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(12, 11);
+    t.up(12, 11);
+
+    expect(t.calls.slice(-3)).toEqual([
+      { call: 'detach' },
+      { call: 'releaseCapture', pointerId: 1 },
+      { call: 'click', pointer: { x: 12, y: 11 } },
+    ]);
+  });
+
+  it('a release after leaving the Dead zone is a Drag, not a Click', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(40, 10);
+    t.move(11, 10);
+    t.up(11, 10);
+
+    expect(t.of('click')).toEqual([]);
+  });
+
+  it.each([
+    [
+      'pointercancel',
+      (t: Setup) => {
+        t.on().cancel({ pointerId: 1 });
+      },
+    ],
+    [
+      'Escape',
+      (t: Setup) => {
+        t.on().key({ key: 'Escape' });
+      },
+    ],
+    [
+      'dispose',
+      (t: Setup) => {
+        t.controller.dispose();
+      },
+    ],
+    [
+      'a release we did not see (buttons === 0)',
+      (t: Setup) => {
+        t.move(11, 10, 0);
+      },
+    ],
+  ])('ending inside the Dead zone by %s is not a Click', (_, endIt) => {
+    const t = setup();
+    t.press(10, 10);
+    endIt(t);
+
+    expect(t.of('detach')).toHaveLength(1);
+    expect(t.of('click')).toEqual([]);
+  });
+});
+
+type Setup = ReturnType<typeof setup>;
 
 const lastPreview = (previews: readonly { rect: Rect | null }[]) => previews.at(-1)?.rect;
 
@@ -83,7 +169,7 @@ it('a drag moves the Note by the pointer delta, with exactly one move', () => {
   t.move(60, 50);
   t.up(60, 50);
 
-  expect(t.of('dispatch')).toEqual([
+  expect(t.commits()).toEqual([
     { call: 'dispatch', action: { type: 'move', id: t.note.id, x: 150, y: 140 } },
   ]);
 });
@@ -103,7 +189,7 @@ describe('the Dead zone', () => {
     t.move(12, 12);
     t.up(12, 12);
 
-    expect(t.of('dispatch')).toEqual([]);
+    expect(t.commits()).toEqual([]);
     expect(t.of('writePreview')).toEqual([]);
     expect(t.of('detach')).toHaveLength(1);
   });
@@ -125,7 +211,7 @@ describe('the Dead zone', () => {
     t.move(11, 10);
     t.up(11, 10);
 
-    expect(t.of('dispatch')).toEqual([
+    expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: 101, y: 100 } },
     ]);
   });
@@ -148,7 +234,7 @@ describe('scrolling mid-drag', () => {
     t.scrollTo({ x: 100, y: 60 });
     t.up(50, 10);
 
-    expect(t.of('dispatch')).toEqual([
+    expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: 240, y: 160 } },
     ]);
   });
@@ -163,7 +249,7 @@ describe('cancelling', () => {
     t.up(60, 60);
 
     expect(lastPreview(t.of('writePreview'))).toBeNull();
-    expect(t.of('dispatch')).toEqual([]);
+    expect(t.commits()).toEqual([]);
   });
 
   it('other keys do nothing', () => {
@@ -173,7 +259,7 @@ describe('cancelling', () => {
     t.on().key({ key: 'a' });
     t.up(60, 60);
 
-    expect(t.of('dispatch')).toHaveLength(1);
+    expect(t.commits()).toHaveLength(1);
   });
 
   it('pointercancel resets the Preview and dispatches nothing', () => {
@@ -183,7 +269,7 @@ describe('cancelling', () => {
     t.on().cancel({ pointerId: 1 });
 
     expect(lastPreview(t.of('writePreview'))).toBeNull();
-    expect(t.of('dispatch')).toEqual([]);
+    expect(t.commits()).toEqual([]);
   });
 
   it('dispose() mid-move detaches once and dispatches nothing', () => {
@@ -194,7 +280,7 @@ describe('cancelling', () => {
     t.controller.dispose();
 
     expect(t.of('detach')).toHaveLength(1);
-    expect(t.of('dispatch')).toEqual([]);
+    expect(t.commits()).toEqual([]);
   });
 
   it('dispose() with no Drag running does nothing', () => {
@@ -214,7 +300,7 @@ describe('ending', () => {
     t.up(60, 60);
     t.up(60, 60);
 
-    expect(t.of('dispatch')).toHaveLength(1);
+    expect(t.commits()).toHaveLength(1);
   });
 
   it('a move with no button down is a missed release, and commits where the pointer is', () => {
@@ -223,7 +309,7 @@ describe('ending', () => {
     t.move(60, 60);
     t.move(70, 80, 0);
 
-    expect(t.of('dispatch')).toEqual([
+    expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: 160, y: 170 } },
     ]);
     expect(t.of('detach')).toHaveLength(1);
@@ -243,7 +329,7 @@ describe('ending', () => {
 
     expect(t.of('detach')).toHaveLength(1);
     expect(t.of('releaseCapture')).toEqual([{ call: 'releaseCapture', pointerId: 1 }]);
-    expect(t.of('dispatch')).toHaveLength(1);
+    expect(t.commits()).toHaveLength(1);
   });
 
   it('on release, the Preview is reset before the one dispatch', () => {
@@ -266,7 +352,7 @@ describe('ending', () => {
     handlers.cancel({ pointerId: 2 });
     t.up(60, 60);
 
-    expect(t.of('dispatch')).toEqual([
+    expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: 150, y: 150 } },
     ]);
   });
@@ -279,7 +365,7 @@ describe('ending', () => {
 
     expect(t.of('detach')).toHaveLength(1);
     expect(t.of('attachPointerListeners')).toHaveLength(2);
-    expect(t.of('dispatch')).toEqual([]);
+    expect(t.commits()).toEqual([]);
   });
 });
 
@@ -292,7 +378,7 @@ describe('moveKind', () => {
     t.up(5000, -500);
 
     expect(shown).toMatchObject({ x: 1920 - t.note.width, y: 0 });
-    expect(t.of('dispatch')).toEqual([
+    expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: shown?.x, y: shown?.y } },
     ]);
   });

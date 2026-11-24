@@ -13,6 +13,8 @@ export interface DragContext {
  * Pure, so `preview` and `commit` agree by construction.
  */
 export interface DragKind<From extends Rect> {
+  /** What a Press saves at once, before it is known to be a Drag or a Click. */
+  press?: (from: From) => NoteAction | null;
   preview: (from: From, delta: Point, ctx: DragContext) => Rect;
   commit: (from: From, delta: Point, ctx: DragContext) => NoteAction | null;
 }
@@ -22,7 +24,11 @@ function moved(from: Rect, delta: Point): Rect {
   return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y });
 }
 
+/** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */
+const raise = (from: Note): NoteAction => ({ type: 'raise', id: from.id });
+
 export const moveKind: DragKind<Note> = {
+  press: raise,
   preview: moved,
   commit(from, delta) {
     const { x, y } = moved(from, delta);
@@ -45,6 +51,7 @@ export type ResizeHandle = (typeof RESIZE_HANDLES)[number];
 
 function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {
+    press: raise,
     preview: (from, delta) => resizeRect(from, delta, handle),
     commit(from, delta) {
       return { type: 'resize', id: from.id, ...resizeRect(from, delta, handle) };

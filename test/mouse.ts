@@ -1,5 +1,5 @@
 import { commands, type Locator } from 'vitest/browser';
-import type { MouseStep } from './mouseStep';
+import type { MouseButton, MouseStep } from './mouseStep';
 
 declare module 'vitest/browser' {
   interface BrowserCommands {
@@ -47,11 +47,15 @@ export async function drag(
   await release();
 }
 
-/** A real press and release in place: a click. */
-export async function press(locator: Locator, position?: { x: number; y: number }) {
+/** A real press and release in place: a click, with the left button unless told otherwise. */
+export async function press(
+  locator: Locator,
+  position?: { x: number; y: number },
+  button: MouseButton = 'left',
+) {
   await commands.mouse([
     { type: 'move', ...pointIn(locator, position) },
-    { type: 'down' },
-    { type: 'up' },
+    { type: 'down', button },
+    { type: 'up', button },
   ]);
 }

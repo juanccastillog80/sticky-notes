@@ -1,15 +1,17 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import type { Rect } from '../geometry';
+import type { Point, Rect } from '../geometry';
 import type { NoteAction } from '../notes/notesReducer';
 import { createDragController, type DragController, type DragHandlers } from './controller';
-import { isDragPress } from './isDragPress';
+import { isInText, isPress } from './press';
 import type { DragKind } from './kinds';
 
 export interface DragOptions {
   /** The Board's scroll container, which can scroll mid-drag. */
   readonly scrollerRef: RefObject<HTMLElement | null>;
-  /** Where the one action of a released Drag goes. */
+  /** Where a Press's Raise and a released Drag's one action go. */
   readonly commit: (action: NoteAction) => void;
+  /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */
+  readonly onClick?: (pointer: Point) => void;
 }
 
 /**
@@ -23,7 +25,8 @@ export interface DragOptions {
  *   Mount: the effect builds `io` and creates the controller, once. The `io`
  *     methods read refs when called, so they always see the current options.
  *     Nothing listens yet. `start` is returned for the Note's pointerdown.
- *   Session: start → isDragPress, setPointerCapture → controller.press
+ *   Session: start → isPress, then isInText: in text, controller.press only Raises.
+ *     Otherwise setPointerCapture → controller.press
  *     → io.attachPointerListeners → window listeners, until the session ends.
  *   Unmount (or StrictMode's remount): dispose → end(false), so a running Drag
  *     is cancelled and its listeners removed.
@@ -60,6 +63,9 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
       dispatch(action) {
         latest.current.commit(action);
       },
+      click(pointer) {
+        latest.current.onClick?.(pointer);
+      },
     });
     controller.current = drag;
     return () => {
@@ -69,7 +75,12 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
   }, [previewRef]);
 
   return function start<From extends Rect>(e: ReactPointerEvent, kind: DragKind<From>, from: From) {
-    if (!isDragPress(e)) return;
+    if (!isPress(e)) return;
+    if (isInText(e)) {
+      // No preventDefault and no capture: the caret and text selection keep working.
+      controller.current?.press(e, kind, from, { inText: true });
+      return;
+    }
     // No focus change, no text selection and no native drag.
     e.preventDefault();
     // So neighbours get no hover or double-click during the Drag.

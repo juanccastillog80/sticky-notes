@@ -18,7 +18,11 @@ _Avoid_: Bin, delete area, papelera
 
 **Press**:
 The pointer going down on a note. It Raises the note at once; it becomes a drag only if the pointer then leaves the Dead zone.
-_Avoid_: Click (a click is a press released inside the Dead zone), tap
+_Avoid_: Click (that is a Press released inside the Dead zone), tap
+
+**Click**:
+A Press released inside the Dead zone. It saves nothing; on an idle note it starts Editing. Only a real release counts: a Press that is cancelled, or whose release went unseen, is neither a click nor a drag.
+_Avoid_: Tap, select
 
 **Drag**:
 One complete press → move → release (or cancel) interaction by the user, such as moving or resizing a note. Chosen over "gesture", which in English suggests touch input such as pinch or swipe.

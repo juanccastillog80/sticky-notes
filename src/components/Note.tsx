@@ -17,14 +17,11 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 
   function press(e: PointerEvent<HTMLElement>) {
     if (!note) return;
-    // At once, and for the whole Drag: the Note being dragged never slides under others.
-    notes.dispatch({ type: 'raise', id });
     start(e, moveKind, note);
   }
 
   function pressHandle(e: PointerEvent<HTMLElement>, handle: ResizeHandle) {
     if (!note) return;
-    notes.dispatch({ type: 'raise', id });
     start(e, resizeKinds[handle], note);
   }
 

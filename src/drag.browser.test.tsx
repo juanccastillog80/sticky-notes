@@ -102,6 +102,15 @@ it('pressing a Note raises it, and DOM order never changes', async () => {
   expect(notes.elements()).toEqual(domOrder);
 });
 
+it('a right-button press does not raise the Note', async () => {
+  const { stores, actions, noteA } = await setup();
+
+  await press(noteA, { x: 30, y: 30 }, 'right');
+
+  expect(actions).toEqual([]);
+  expect(stores.notes.getSnapshot().notes[a.id]?.z).toBe(1);
+});
+
 it('a Note stays in front for the whole Drag', async () => {
   const { noteA } = await setup();
 
