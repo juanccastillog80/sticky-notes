@@ -4,7 +4,9 @@ import {
   clampToBoard,
   placeCentredAt,
   placeInVisibleBoard,
+  resizeRect,
   toBoardPoint,
+  type Edges,
   type Rect,
 } from './geometry';
 
@@ -220,5 +222,103 @@ describe('placeInVisibleBoard', () => {
     const cornerView = { x: 1700, y: 910, width: 220, height: 170 };
 
     expect(placeInVisibleBoard(cornerView, size, [rect(1700, 910)])).toEqual(rect(1700, 910));
+  });
+});
+
+// x 100..320, y 100..270.
+const from = rect(100, 100, 220, 170);
+const resize = (edges: Edges, dx: number, dy: number) => resizeRect(from, { x: dx, y: dy }, edges);
+
+describe('resizeRect', () => {
+  it('se grows the width and height, keeping the top-left', () => {
+    expect(resize('se', 30, 20)).toEqual({ x: 100, y: 100, width: 250, height: 190 });
+  });
+
+  it('nw moves the top-left, keeping the bottom-right', () => {
+    expect(resize('nw', -30, 20)).toEqual({ x: 70, y: 120, width: 250, height: 150 });
+  });
+
+  it('e ignores vertical movement', () => {
+    expect(resize('e', 30, 50)).toEqual({ x: 100, y: 100, width: 250, height: 170 });
+  });
+
+  it('n ignores horizontal movement', () => {
+    expect(resize('n', 50, -30)).toEqual({ x: 100, y: 70, width: 220, height: 200 });
+  });
+
+  it('se stops shrinking at the minimum Note size', () => {
+    expect(resize('se', -500, -500)).toEqual({ x: 100, y: 100, width: 140, height: 100 });
+  });
+
+  it('w stops shrinking at the minimum size with the right edge in place', () => {
+    expect(resize('w', 500, 0)).toEqual({ x: 180, y: 100, width: 140, height: 170 });
+  });
+
+  it('nw stops growing at the Board edges', () => {
+    expect(resize('nw', -500, -500)).toEqual({ x: 0, y: 0, width: 320, height: 270 });
+  });
+
+  it('se stops growing at the Board edges', () => {
+    expect(resize('se', 5000, 5000)).toEqual({ x: 100, y: 100, width: 1820, height: 980 });
+  });
+
+  it('rounds to whole pixels', () => {
+    expect(resize('sw', -10.4, 10.6)).toEqual({ x: 90, y: 100, width: 230, height: 181 });
+  });
+
+  describe('for any committed rect, edges and delta', () => {
+    const anyRect = fc
+      .record({
+        width: fc.integer({ min: 140, max: 1920 }),
+        height: fc.integer({ min: 100, max: 1080 }),
+      })
+      .chain(({ width, height }) =>
+        fc.record({
+          x: fc.integer({ min: 0, max: 1920 - width }),
+          y: fc.integer({ min: 0, max: 1080 - height }),
+          width: fc.constant(width),
+          height: fc.constant(height),
+        }),
+      );
+    const anyEdges = fc.constantFrom<Edges>('n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw');
+    const length = fc.double({ min: -5000, max: 5000, noNaN: true });
+    const anyDelta = fc.record({ x: length, y: length });
+
+    it('stays inside the Board, at least the minimum size, in whole pixels', () => {
+      fc.assert(
+        fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
+          const { x, y, width, height } = resizeRect(from, delta, edges);
+          expect(x).toBeGreaterThanOrEqual(0);
+          expect(y).toBeGreaterThanOrEqual(0);
+          expect(x + width).toBeLessThanOrEqual(1920);
+          expect(y + height).toBeLessThanOrEqual(1080);
+          expect(width).toBeGreaterThanOrEqual(140);
+          expect(height).toBeGreaterThanOrEqual(100);
+          expect([x, y, width, height].every(Number.isInteger)).toBe(true);
+        }),
+      );
+    });
+
+    it('never moves the opposite edges', () => {
+      fc.assert(
+        fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
+          const to = resizeRect(from, delta, edges);
+          if (!edges.includes('w')) expect(to.x).toBe(from.x);
+          if (!edges.includes('e')) expect(to.x + to.width).toBe(from.x + from.width);
+          if (!edges.includes('n')) expect(to.y).toBe(from.y);
+          if (!edges.includes('s')) expect(to.y + to.height).toBe(from.y + from.height);
+        }),
+      );
+    });
+
+    it('is idempotent: resizing the result by the same edges with no delta changes nothing', () => {
+      fc.assert(
+        fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
+          const once = resizeRect(from, delta, edges);
+          const again = resizeRect(once, { x: 0, y: 0 }, edges);
+          expect(again).toEqual(once);
+        }),
+      );
+    });
   });
 });

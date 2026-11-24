@@ -1,11 +1,4 @@
-import {
-  BOARD_SIZE,
-  clamp,
-  MIN_NOTE_SIZE,
-  toCommittedRect,
-  type Point,
-  type Rect,
-} from '../geometry';
+import { resizeRect, toCommittedRect, type Edges, type Point, type Rect } from '../geometry';
 import type { Note } from '../notes/note';
 import type { NoteAction } from '../notes/notesReducer';
 
@@ -38,41 +31,23 @@ export const moveKind: DragKind<Note> = {
 };
 
 /** The 8 resize handles, named by the edges they move. */
-export const RESIZE_HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
+export const RESIZE_HANDLES = [
+  'n',
+  's',
+  'e',
+  'w',
+  'ne',
+  'nw',
+  'se',
+  'sw',
+] as const satisfies readonly Edges[];
 export type ResizeHandle = (typeof RESIZE_HANDLES)[number];
-
-/**
- * The rect a resize shows, which is exactly the rect it saves. Each moving edge
- * stops at `MIN_NOTE_SIZE` from the opposite edge and at the Board's edge; the
- * opposite edge never moves. The delta is rounded first, so the result is whole pixels.
- */
-function resized(from: Rect, delta: Point, handle: ResizeHandle): Rect {
-  const dx = Math.round(delta.x);
-  const dy = Math.round(delta.y);
-  const right = from.x + from.width;
-  const bottom = from.y + from.height;
-  let { x, y, width, height } = from;
-  if (handle.includes('e'))
-    width = clamp(from.width + dx, MIN_NOTE_SIZE.width, BOARD_SIZE.width - x);
-  if (handle.includes('w')) {
-    x = clamp(from.x + dx, 0, right - MIN_NOTE_SIZE.width);
-    width = right - x;
-  }
-  if (handle.includes('s')) {
-    height = clamp(from.height + dy, MIN_NOTE_SIZE.height, BOARD_SIZE.height - y);
-  }
-  if (handle.includes('n')) {
-    y = clamp(from.y + dy, 0, bottom - MIN_NOTE_SIZE.height);
-    height = bottom - y;
-  }
-  return { x, y, width, height };
-}
 
 function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {
-    preview: (from, delta) => resized(from, delta, handle),
+    preview: (from, delta) => resizeRect(from, delta, handle),
     commit(from, delta) {
-      return { type: 'resize', id: from.id, ...resized(from, delta, handle) };
+      return { type: 'resize', id: from.id, ...resizeRect(from, delta, handle) };
     },
   };
 }
