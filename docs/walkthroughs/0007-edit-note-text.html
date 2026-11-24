@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"issue":7,"title":"Edit Note text","lede":"A Click on an idle Note starts **Editing**, with the caret where it landed; a new Note opens in Editing. While Editing the body is a real textarea laid out exactly like the idle text, so a press there only Raises and Drags start from the Grip strip and handles alone. Editing ends on Escape, a press on empty Board, or a press on another Note.","files":[{"path":"src/components/Note.tsx","question":"What does a press on this Note do, idle and while Editing?","summary":"Renders the idle text or the textarea, turns a Click into `startEditing` with a measured caret, and ends Editing elsewhere when pressed.","owns":"The textarea, caret placement on focus, Escape, and ending another Note's Editing on press.","never":"Decides Click versus Drag: the controller does.","tested":"Browser tests in `editing.browser.test.tsx`.","lines":["import { memo, useLayoutEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react';","import { useBoardDom } from '../BoardDomContext';","import type { Point } from '../geometry';","import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';","import { useDrag } from '../drag/useDrag';","import type { NoteId } from '../notes/note';","import { useIsEditing, useNotes, useStores } from '../StoresContext';","import { caretOffsetAt } from './caret';","import styles from './Note.module.css';","import { useStopEditing } from './useStopEditing';","import { ResizeHandles } from './ResizeHandles';","","/**"," * Idle, a press anywhere but a handle starts a move, and a Click starts Editing."," * While Editing, the body is a textarea, so a press there only Raises (see `isInText`)"," * and Drags start from the Grip strip and the handles alone."," */","export const Note = memo(function Note({ id }: { id: NoteId }) {","  const note = useNotes((state) => state.notes[id]);","  const editing = useIsEditing(id);","  const { notes, ui } = useStores();","  const stopEditing = useStopEditing();","  const { scrollerRef } = useBoardDom();","  const ref = useRef\u003cHTMLElement>(null);","  const textRef = useRef\u003cHTMLDivElement>(null);","  const editorRef = useRef\u003cHTMLTextAreaElement>(null);","  // Where the Click that starts Editing puts the caret; `null` is the end of the text.","  const pendingCaret = useRef\u003cnumber | null>(null);","  const start = useDrag(ref, { scrollerRef, commit: notes.dispatch, onClick: startEditingAt });","","  // Before paint, so the caret is in place on the first frame of Editing.","  useLayoutEffect(() => {","    const editor = editorRef.current;","    if (!editing || !editor) return;","    const offset = pendingCaret.current ?? editor.value.length;","    pendingCaret.current = null;","    editor.focus();","    editor.setSelectionRange(offset, offset);","  }, [editing]);","","  if (!note) return null;","","  function startEditingAt(pointer: Point) {","    if (editing) return;","    // Measured on the idle text, which the textarea lays out identically.","    pendingCaret.current = caretOffsetAt(textRef.current, pointer);","    ui.dispatch({ type: 'startEditing', id });","  }","","  function press(e: PointerEvent\u003cHTMLElement>) {","    if (!note) return;","    // A press on another Note, handles included, ends Editing wherever it is.","    if (!editing) stopEditing();","    start(e, moveKind, note);","  }","","  function pressHandle(e: PointerEvent\u003cHTMLElement>, handle: ResizeHandle) {","    if (!note) return;","    if (!editing) stopEditing();","    start(e, resizeKinds[handle], note);","  }","","  function keyDownInEditor(e: KeyboardEvent\u003cHTMLTextAreaElement>) {","    // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.","    if (e.key === 'Escape' && !e.defaultPrevented) stopEditing();","  }","","  const { x, y, width, height, z, colour, text } = note;","  return (","    \u003carticle","      ref={ref}","      aria-label=\"Note\"","      className={styles.note}","      data-colour={colour}","      data-editing={editing ? '' : undefined}","      // Geometry only. `transform` is left free for the Drag Preview.","      style={{ left: x, top: y, width, height, zIndex: z }}","      onPointerDown={press}","    >","      \u003cdiv className={styles.gripStrip} />","      {editing ? (","        \u003ctextarea","          ref={editorRef}","          aria-label=\"Note text\"","          className={styles.editor}","          value={text}","          onChange={(e) => {","            notes.dispatch({ type: 'setText', id, text: e.target.value });","          }}","          onKeyDown={keyDownInEditor}","        />","      ) : (","        \u003cdiv ref={textRef} className={styles.text} data-note-text=\"\">","          {text}","        \u003c/div>","      )}","      \u003cResizeHandles onPress={pressHandle} />","    \u003c/article>","  );","});"],"added":[0,2,6,7,9,12,13,14,15,16,19,20,21,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,42,43,44,45,46,47,48,51,52,58,62,63,64,65,66,74,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95]},{"path":"src/components/caret.ts","question":"Which text offset is under the Click?","summary":"`caretPositionFromPoint` on the idle text, or `null` (end of text) when it's missing or misses the text.","owns":"The single DOM call that maps a point to an offset.","never":"Touches state.","tested":"The scenario 2 browser test, in Chromium and Firefox.","lines":["import type { Point } from '../geometry';","","/**"," * The text offset under the client `point` inside `text`, an element holding at most"," * one text node, or `null` when the point isn't over its text. The caller falls back"," * to the end of the text."," */","export function caretOffsetAt(text: HTMLElement | null, { x, y }: Point): number | null {","  // Older browsers lack the API: they fall back to the end too.","  if (!text || !('caretPositionFromPoint' in document)) return null;","  const position = document.caretPositionFromPoint(x, y);","  return position?.offsetNode === text.firstChild ? position.offset : null;","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12]},{"path":"src/components/useStopEditing.ts","question":"How does Editing end?","summary":"Blurs the edited textarea explicitly, then dispatches `stopEditing`.","owns":"The one way the Board and Notes end Editing.","never":"Starts Editing.","tested":"Browser tests for empty Board, another Note and its handle.","lines":["import { useStores } from '../StoresContext';","","/**"," * Ends Editing, blurring the edited textarea explicitly: a press that starts a Drag"," * prevents its default, so focus would not move on its own."," */","export function useStopEditing() {","  const { ui } = useStores();","  return () => {","    const focused = document.activeElement;","    if (focused instanceof HTMLElement && focused.closest('[data-editing]')) focused.blur();","    ui.dispatch({ type: 'stopEditing' });","  };","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13]},{"path":"src/components/Board.tsx","question":"What does a press on empty Board do?","summary":"Ends Editing, through `useStopEditing`.","owns":"Presses and double-clicks on empty Board.","never":"Reacts to presses on Notes.","tested":"Browser test: a press on empty Board ends Editing.","lines":["import {","  Profiler,","  useEffect,","  useRef,","  type MouseEvent,","  type ProfilerOnRenderCallback,","  type RefObject,","} from 'react';","import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';","import { DEFAULT_NOTE_SIZE } from '../notes/note';","import { useCommands, useNotes } from '../StoresContext';","import { EmptyHint } from './EmptyHint';","import { Note } from './Note';","import styles from './Board.module.css';","import { useStopEditing } from './useStopEditing';","","export function Board({","  scrollerRef,","  onNoteRender,","}: {","  scrollerRef: RefObject\u003cHTMLDivElement | null>;","  onNoteRender?: ProfilerOnRenderCallback;","}) {","  const ids = useNotes((state) => state.ids);","  const { createNote } = useCommands();","  const stopEditing = useStopEditing();","","  const boardRef = useRef\u003cHTMLElement>(null);","  // A `dblclick` reports only where the second press landed, so the first is remembered:","  // the last two presses anywhere on the page, and whether each landed on empty Board.","  const lastTwoPresses = useRef({ previousWasOnEmptyBoard: false, lastWasOnEmptyBoard: false });","","  useEffect(() => {","    // On the document, as a double-click can start outside the Board.","    function rememberPress(event: PointerEvent) {","      lastTwoPresses.current = {","        previousWasOnEmptyBoard: lastTwoPresses.current.lastWasOnEmptyBoard,","        lastWasOnEmptyBoard: event.target === boardRef.current,","      };","    }","    document.addEventListener('pointerdown', rememberPress, { capture: true });","    return () => {","      document.removeEventListener('pointerdown', rememberPress, { capture: true });","    };","  }, []);","","  function createAtPointer(event: MouseEvent\u003cHTMLElement>) {","    // Both presses must be on empty Board: either one anywhere else creates nothing.","    const { previousWasOnEmptyBoard, lastWasOnEmptyBoard } = lastTwoPresses.current;","    if (!previousWasOnEmptyBoard || !lastWasOnEmptyBoard) return;","    const pointer = toBoardPoint(","      { x: event.clientX, y: event.clientY },","      event.currentTarget.getBoundingClientRect(),","    );","    createNote(placeCentredAt(pointer, DEFAULT_NOTE_SIZE));","  }","","  return (","    \u003cmain className={styles.viewport}>","      \u003cdiv ref={scrollerRef} className={styles.scroller}>","        \u003csection","          ref={boardRef}","          aria-label=\"Board\"","          className={styles.board}","          style={BOARD_SIZE}","          onDoubleClick={createAtPointer}","          onPointerDown={(event) => {","            // A press on empty Board ends Editing.","            if (event.target === event.currentTarget) stopEditing();","          }}","        >","          {ids.map((id) =>","            onNoteRender ? (","              \u003cProfiler key={id} id={id} onRender={onNoteRender}>","                \u003cNote id={id} />","              \u003c/Profiler>","            ) : (","              \u003cNote key={id} id={id} />","            ),","          )}","        \u003c/section>","      \u003c/div>","      \u003cEmptyHint />","    \u003c/main>","  );","}"],"added":[14,25,66,67,68,69]},{"path":"src/ui/uiReducer.ts","question":"Which Note is being edited?","summary":"`startEditing` replaces any other, `stopEditing` clears it; a no-op keeps the state.","owns":"At most one Note in Editing.","never":"Knows about the DOM.","tested":"Node tests in `uiReducer.test.ts`.","lines":["import type { Note, NoteColour, NoteId } from '../notes/note';","import { createStore, type Store } from '../store/createStore';","","export interface UiState {","  readonly editingId: NoteId | null;","  /** The colour the next new Note gets. */","  readonly currentColour: NoteColour;","  /** The Note that Undo would bring back. */","  readonly lastDeleted: Note | null;","}","","/** Each feature that changes UI state adds its action to this union. */","export type UiAction =","  { readonly type: 'startEditing'; readonly id: NoteId } | { readonly type: 'stopEditing' };","","export const INITIAL_UI: UiState = { editingId: null, currentColour: 'yellow', lastDeleted: null };","","/** At most one Note is in Editing: starting it on one Note ends it on any other. A no-op keeps the state. */","export function uiReducer(state: UiState, action: UiAction): UiState {","  switch (action.type) {","    case 'startEditing':","      return withEditing(state, action.id);","    case 'stopEditing':","      return withEditing(state, null);","    default:","      return assertNever(action);","  }","}","","function withEditing(state: UiState, editingId: NoteId | null): UiState {","  return editingId === state.editingId ? state : { ...state, editingId };","}","","/** Stops compiling when an action has no case. */","function assertNever(action: never): never {","  throw new Error(`Unknown action: ${JSON.stringify(action)}`);","}","","export type UiStore = Store\u003cUiState, UiAction>;","","export function createUiStore(initial: UiState = INITIAL_UI): UiStore {","  return createStore(uiReducer, initial);","}"],"added":[11,12,13,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,41]},{"path":"src/StoresContext.ts","question":"Which Notes re-render when Editing changes?","summary":"`useIsEditing(id)` selects a boolean, so only the two Notes whose answer flips re-render.","owns":"UI store selectors.","never":"Returns a new object from a selector.","tested":"Profiler browser test.","lines":["import { createContext, use, useMemo } from 'react';","import { createCommands } from './commands';","import type { NotesState, NotesStore } from './notes/notesReducer';","import { useStore } from './store/createStore';","import type { NoteId } from './notes/note';","import type { UiState, UiStore } from './ui/uiReducer';","","export interface Stores {","  readonly notes: NotesStore;","  readonly ui: UiStore;","}","","/** Its value never changes, so reading it never causes a render. Subscriptions do. */","export const StoresContext = createContext\u003cStores | null>(null);","","export function useStores(): Stores {","  const stores = use(StoresContext);","  if (!stores) throw new Error('useStores needs a StoresContext provider');","  return stores;","}","","export function useNotes\u003cT>(selector: (state: NotesState) => T): T {","  return useStore(useStores().notes, selector);","}","","export function useUi\u003cT>(selector: (state: UiState) => T): T {","  return useStore(useStores().ui, selector);","}","","/** A boolean per Note, so a change of Editing re-renders only the two Notes involved. */","export function useIsEditing(id: NoteId): boolean {","  return useUi((state) => state.editingId === id);","}","","export function useCommands() {","  const stores = useStores();","  return useMemo(() => createCommands(stores), [stores]);","}"],"added":[4,5,25,26,27,28,29,30,31,32,33]},{"path":"src/notes/notesReducer.ts","question":"How is typed text saved?","summary":"`setText` keeps the text exactly as typed and keeps every other Note by reference.","owns":"The text of a Note.","never":"Trims or normalises.","tested":"Node tests and a profiler browser test.","lines":["import { toCommittedRect, type Point, type Rect } from '../geometry';","import { createStore, type Store } from '../store/createStore';","import type { Note, NoteId } from './note';","","export interface NotesState {","  readonly notes: Readonly\u003cRecord\u003cNoteId, Note>>;","  /** Creation order, which is also DOM order. The Stacking order is each Note's `z`. */","  readonly ids: readonly NoteId[];","  readonly topZ: number;","}","","export type NoteAction =","  | { readonly type: 'create'; readonly note: Omit\u003cNote, 'z'> }","  | { readonly type: 'move'; readonly id: NoteId; readonly x: number; readonly y: number }","  | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)","  | { readonly type: 'raise'; readonly id: NoteId }","  | { readonly type: 'setText'; readonly id: NoteId; readonly text: string }","  | { readonly type: 'load'; readonly notes: readonly Note[] };","","const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };","","/**"," * An unchanged Note, unchanged `ids` and a no-op all keep their reference. That"," * is what lets a change re-render only the Notes it touched."," */","export function notesReducer(state: NotesState, action: NoteAction): NotesState {","  switch (action.type) {","    case 'create':","      return create(state, action.note);","    case 'move':","      return move(state, action.id, action);","    case 'resize':","      return resize(state, action.id, action);","    case 'raise':","      return raise(state, action.id);","    case 'setText':","      return setText(state, action.id, action.text);","    case 'load':","      return load(state, action.notes);","    default:","      return assertNever(action);","  }","}","","function create(state: NotesState, note: Omit\u003cNote, 'z'>): NotesState {","  if (state.notes[note.id]) return state;","  const z = state.topZ + 1;","  return {","    notes: { ...state.notes, [note.id]: { ...note, ...toCommittedRect(note), z } },","    ids: [...state.ids, note.id],","    topZ: z,","  };","}","","function move(state: NotesState, id: NoteId, to: Point): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y } = toCommittedRect({ ...note, x: to.x, y: to.y });","  if (x === note.x && y === note.y) return state;","  return withNote(state, { ...note, x, y });","}","","function resize(state: NotesState, id: NoteId, to: Rect): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y, width, height } = toCommittedRect(to);","  if (x === note.x && y === note.y && width === note.width && height === note.height) return state;","  return withNote(state, { ...note, x, y, width, height });","}","","/** Sets `z = ++topZ`. A Note already alone at the front stays as it is. */","function raise(state: NotesState, id: NoteId): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const alreadyInFront =","    note.z === state.topZ &&","    state.ids.every((other) => other === id || state.notes[other]?.z !== note.z);","  if (alreadyInFront) return state;","  const z = state.topZ + 1;","  return { ...withNote(state, { ...note, z }), topZ: z };","}","","/** Keeps the text exactly as typed, whitespace and line breaks included. */","function setText(state: NotesState, id: NoteId, text: string): NotesState {","  const note = state.notes[id];","  if (!note || note.text === text) return state;","  return withNote(state, { ...note, text });","}","","/** Replaces one Note. `ids` and every other Note keep their reference. */","function withNote(state: NotesState, note: Note): NotesState {","  return { ...state, notes: { ...state.notes, [note.id]: note } };","}","","function load(state: NotesState, incoming: readonly Note[]): NotesState {","  // A Map, so an id that arrives twice is listed once.","  const byId = new Map\u003cNoteId, Note>();","  for (const raw of incoming) {","    const note = { ...raw, ...toCommittedRect(raw) };","    const current = state.notes[note.id];","    byId.set(note.id, current && sameNote(current, note) ? current : note);","  }","","  const loadedIds = [...byId.keys()];","  const sameIds =","    loadedIds.length === state.ids.length && loadedIds.every((id, i) => id === state.ids[i]);","  if (sameIds && loadedIds.every((id) => byId.get(id) === state.notes[id])) return state;","","  return {","    notes: Object.fromEntries(byId),","    ids: sameIds ? state.ids : loadedIds,","    topZ: Math.max(0, ...Array.from(byId.values(), (note) => note.z)),","  };","}","","function sameNote(a: Note, b: Note): boolean {","  return (Object.keys(b) as (keyof Note)[]).every((key) => a[key] === b[key]);","}","","/** Stops compiling when an action has no case. */","function assertNever(action: never): never {","  throw new Error(`Unknown action: ${JSON.stringify(action)}`);","}","","export type NotesStore = Store\u003cNotesState, NoteAction>;","","export function createNotesStore(): NotesStore {","  return createStore(notesReducer, EMPTY_NOTES);","}"],"added":[16,35,36,82,83,84,85,86,87,88]},{"path":"src/commands.ts","question":"What happens on create?","summary":"`createNote` creates the Note, then starts Editing it.","owns":"Rules that span both stores.","never":"Touches the DOM.","tested":"Node test, and the scenario 5 browser test.","lines":["import type { Rect } from './geometry';","import { newNoteId } from './notes/note';","import type { NotesStore } from './notes/notesReducer';","import type { UiStore } from './ui/uiReducer';","","/** The rules that span stores, so that each reducer knows only its own store. */","export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }) {","  return {","    createNote: ({ x, y, width, height }: Rect) => {","      const colour = ui.getSnapshot().currentColour;","      const id = newNoteId();","      notes.dispatch({ type: 'create', note: { id, x, y, width, height, text: '', colour } });","      // A new Note opens straight into Editing.","      ui.dispatch({ type: 'startEditing', id });","    },","  };","}"],"added":[10,11,12,13]},{"path":"src/drag/useDrag.ts","question":"Why doesn't the Escape that cancels a Drag also end Editing?","summary":"Its window `keydown` listener prevents Escape's default during a Drag; the textarea ignores a prevented Escape.","owns":"DOM listeners for a Drag session.","never":"Knows about Editing.","tested":"Browser test: Escape during a strip Drag.","lines":["import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';","import type { Point, Rect } from '../geometry';","import type { NoteAction } from '../notes/notesReducer';","import { createDragController, type DragController, type DragHandlers } from './controller';","import { isInText, isPress } from './press';","import type { DragKind } from './kinds';","","export interface DragOptions {","  /** The Board's scroll container, which can scroll mid-drag. */","  readonly scrollerRef: RefObject\u003cHTMLElement | null>;","  /** Where a Press's Raise and a released Drag's one action go. */","  readonly commit: (action: NoteAction) => void;","  /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */","  readonly onClick?: (pointer: Point) => void;","}","","/**"," * The DOM side of the Drag engine: filters presses, captures the pointer and"," * builds the real `io`. The decisions are all in the controller."," *"," * `previewRef` is the element the Preview is drawn on: the Note."," *"," * Lifecycle (the session phase is documented on `createDragController`):"," *"," *   Mount: the effect builds `io` and creates the controller, once. The `io`"," *     methods read refs when called, so they always see the current options."," *     Nothing listens yet. `start` is returned for the Note's pointerdown."," *   Session: start → isPress, then isInText: in text, controller.press only Raises."," *     Otherwise setPointerCapture → controller.press"," *     → io.attachPointerListeners → window listeners, until the session ends."," *   Unmount (or StrictMode's remount): dispose → end(false), so a running Drag"," *     is cancelled and its listeners removed."," */","export function useDrag(previewRef: RefObject\u003cHTMLElement | null>, options: DragOptions) {","  // The latest options, read only inside handlers, so the controller is created once.","  const latest = useRef(options);","  useEffect(() => {","    latest.current = options;","  });","  const captured = useRef\u003cElement | null>(null);","  const controller = useRef\u003cDragController | null>(null);","","  // Created in an effect, so StrictMode's remount gets a fresh controller and every","  // unmount cancels a running Drag.","  useEffect(() => {","    const drag = createDragController({","      scrollPosition() {","        const scroller = latest.current.scrollerRef.current;","        return { x: scroller?.scrollLeft ?? 0, y: scroller?.scrollTop ?? 0 };","      },","      attachPointerListeners(handlers) {","        return listenForDrag(handlers, latest.current.scrollerRef.current);","      },","      releaseCapture(pointerId) {","        const element = captured.current;","        captured.current = null;","        if (element?.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId);","      },","      writePreview(rect, base) {","        const element = previewRef.current;","        if (element) writePreview(element, rect, base);","      },","      dispatch(action) {","        latest.current.commit(action);","      },","      click(pointer) {","        latest.current.onClick?.(pointer);","      },","    });","    controller.current = drag;","    return () => {","      drag.dispose();","      controller.current = null;","    };","  }, [previewRef]);","","  return function start\u003cFrom extends Rect>(e: ReactPointerEvent, kind: DragKind\u003cFrom>, from: From) {","    if (!isPress(e)) return;","    if (isInText(e)) {","      // No preventDefault and no capture: the caret and text selection keep working.","      controller.current?.press(e, kind, from, { inText: true });","      return;","    }","    // No focus change, no text selection and no native drag.","    e.preventDefault();","    // So neighbours get no hover or double-click during the Drag.","    captured.current = e.currentTarget;","    e.currentTarget.setPointerCapture(e.pointerId);","    controller.current?.press(e, kind, from);","  };","}","","/**"," * End signals listen on `window`, so they arrive whatever has the capture."," * `lostpointercapture` isn't listened to: Chrome can fire it before a valid `pointerup`."," */","function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): () => void {","  const options = { capture: true };","  // Prevented, so the Escape that cancels a Drag does nothing else, such as end Editing.","  const key = (e: KeyboardEvent) => {","    if (e.key === 'Escape') e.preventDefault();","    handlers.key(e);","  };","  window.addEventListener('pointermove', handlers.move, options);","  window.addEventListener('pointerup', handlers.up, options);","  window.addEventListener('pointercancel', handlers.cancel, options);","  window.addEventListener('keydown', key, options);","  scroller?.addEventListener('scroll', handlers.scroll, { passive: true });","  return () => {","    window.removeEventListener('pointermove', handlers.move, options);","    window.removeEventListener('pointerup', handlers.up, options);","    window.removeEventListener('pointercancel', handlers.cancel, options);","    window.removeEventListener('keydown', key, options);","    scroller?.removeEventListener('scroll', handlers.scroll);","  };","}","","/**"," * The Preview is a `translate` from the committed rect, plus `width`/`height` for"," * a resize, never `scale`, so text reflows and is never distorted. A move writes"," * the same size back, so it only composites. `data-dragging` gives the lifted"," * shadow. A reset writes `base`, the rect React rendered at press."," */","function writePreview(element: HTMLElement, rect: Rect | null, base: Rect) {","  const { x, y, width, height } = rect ?? base;","  element.style.transform =","    rect === null ? '' : `translate(${String(x - base.x)}px, ${String(y - base.y)}px)`;","  element.style.width = `${String(width)}px`;","  element.style.height = `${String(height)}px`;","  if (rect === null) delete element.dataset.dragging;","  else element.dataset.dragging = '';","}"],"added":[98,99,100,101,102,106,112]},{"path":"src/drag/controller.ts","question":"When is a press a Click?","summary":"Unchanged: a real release inside the Dead zone calls `io.click`, last.","owns":"Click versus Drag.","never":"Knows about Editing.","tested":"Node tests in `controller.test.ts`.","lines":["import type { Point, Rect } from '../geometry';","import type { NoteAction } from '../notes/notesReducer';","import type { DragContext, DragKind } from './kinds';","","/** How far a press must travel before it becomes a Drag. Inside it, a release is a click. */","export const DEAD_ZONE_PX = 3;","","export interface PointerSignal {","  readonly pointerId: number;","  readonly clientX: number;","  readonly clientY: number;","}","","export interface MoveSignal extends PointerSignal {","  /** 0 when no button is down: the release happened where we couldn't see it. */","  readonly buttons: number;","}","","/**"," * DOM → controller. The controller's session handlers: the DOM side attaches them"," * in `attachPointerListeners` on press, and removes them when the session ends."," */","export interface DragHandlers {","  move: (e: MoveSignal) => void;","  up: (e: PointerSignal) => void;","  cancel: (e: Pick\u003cPointerSignal, 'pointerId'>) => void;","  scroll: () => void;","  key: (e: { readonly key: string }) => void;","}","","/**"," * Controller → DOM. Everything outside the controller. The hook passes the real DOM;"," * tests pass a recording fake."," */","export interface DragIO {","  /** The scroll container's offset, so a scroll mid-drag moves the Preview with the Board. */","  scrollPosition: () => Point;","  /** Called on press. Attaches every session handler; returns the one function that detaches them all. */","  attachPointerListeners: (handlers: DragHandlers) => () => void;","  releaseCapture: (pointerId: number) => void;","  /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */","  writePreview: (rect: Rect | null, base: Rect) => void;","  dispatch: (action: NoteAction) => void;","  /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */","  click: (pointer: Point) => void;","}","","interface Session {","  /** The Drag kind, bound to the rect it started from. */","  readonly preview: (delta: Point, ctx: DragContext) => Rect;","  readonly commit: (delta: Point, ctx: DragContext) => NoteAction | null;","  readonly from: Rect;","  readonly pointerId: number;","  /** Client coordinates. */","  readonly pressPoint: Point;","  readonly pressScroll: Point;","  pointer: Point;","  /** Still inside the Dead zone. */","  pending: boolean;","  readonly detach: () => void;","}","","export interface PressOptions {","  /** The Press landed inside text being typed in: it Raises, but never becomes a Drag or a Click. */","  readonly inText?: boolean;","}","","export interface DragController {","  press: \u003cFrom extends Rect>(","    e: PointerSignal,","    kind: DragKind\u003cFrom>,","    from: From,","    options?: PressOptions,","  ) => void;","  /** Cancels a running Drag. For unmount. */","  dispose: () => void;","}","","/**"," * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`."," *"," *   press → io.dispatch(kind.press), io.attachPointerListeners(sessionHandlers)"," *   move / scroll → Dead zone → Preview (io.writePreview)"," *   up → end(true, released);  buttons === 0 → end(true);  cancel / Escape / dispose → end(false)"," *   end → detach, io.releaseCapture, then a Click (io.click) or reset Preview + io.dispatch the commit"," *"," * The handlers exist for the whole controller, but are attached only while a Press is live."," */","export function createDragController(io: DragIO): DragController {","  let session: Session | null = null;","","  function delta(s: Session): Point {","    // The Board moves under a still pointer when the container scrolls.","    const scroll = io.scrollPosition();","    return {","      x: s.pointer.x - s.pressPoint.x + scroll.x - s.pressScroll.x,","      y: s.pointer.y - s.pressPoint.y + scroll.y - s.pressScroll.y,","    };","  }","","  function update(s: Session) {","    const d = delta(s);","    if (s.pending && Math.hypot(d.x, d.y) \u003c= DEAD_ZONE_PX) return;","    s.pending = false;","    // Synchronously, from the event: no rAF, so the Preview is never a frame behind.","    io.writePreview(s.preview(d, { pointer: s.pointer }), s.from);","  }","","  /**","   * Every exit comes through here, once. `released`: a real `pointerup` we saw,","   * the only end that turns a Press still inside the Dead zone into a Click.","   */","  function end(commit: boolean, released = false) {","    const s = session;","    if (!s) return;","    session = null;","    s.detach();","    io.releaseCapture(s.pointerId);","    if (s.pending) {","      // Last, so the Click's handler runs with the pointer already let go.","      if (released) io.click(s.pointer);","      return;","    }","    const action = commit ? s.commit(delta(s), { pointer: s.pointer }) : null;","    // Reset before dispatching: the re-render then moves the Note to where the Preview was.","    io.writePreview(null, s.from);","    if (action) io.dispatch(action);","  }","","  const ownPointer = (e: Pick\u003cPointerSignal, 'pointerId'>) => e.pointerId === session?.pointerId;","","  const sessionHandlers: DragHandlers = {","    move(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      if (e.buttons === 0) {","        end(true);","        return;","      }","      update(session);","    },","    up(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      end(true, true);","    },","    cancel(e) {","      if (ownPointer(e)) end(false);","    },","    scroll() {","      if (session) update(session);","    },","    key(e) {","      if (e.key === 'Escape') end(false);","    },","  };","","  return {","    press(e, kind, from, { inText = false } = {}) {","      end(false);","      const pressed = kind.press?.(from);","      if (pressed) io.dispatch(pressed);","      if (inText) return;","      const pressPoint = { x: e.clientX, y: e.clientY };","      session = {","        preview: (d, ctx) => kind.preview(from, d, ctx),","        commit: (d, ctx) => kind.commit(from, d, ctx),","        from,","        pointerId: e.pointerId,","        pressPoint,","        pressScroll: io.scrollPosition(),","        pointer: pressPoint,","        pending: true,","        detach: io.attachPointerListeners(sessionHandlers),","      };","    },","    dispose() {","      end(false);","    },","  };","}"],"added":[]}],"flow":[["src/components/Note.tsx","src/drag/useDrag.ts","src/drag/controller.ts","src/components/caret.ts","src/ui/uiReducer.ts"],["src/components/Board.tsx","src/components/useStopEditing.ts","src/ui/uiReducer.ts"],["src/commands.ts","src/notes/notesReducer.ts","src/ui/uiReducer.ts"]],"scenarios":[{"name":"A Click on an idle Note starts Editing","steps":[{"title":"pointerdown on the idle body","explain":"Nobody else is being edited, so `stopEditing` is a no-op that notifies nobody. The body isn't text yet, so `start` captures the pointer and the controller begins a session.","run":[{"file":"src/components/Note.tsx","start":49,"end":53}]},{"title":"pointerup inside the Dead zone: a Click","explain":"The controller reports the Click last, after letting go of the pointer. The offset is measured on the idle text, which is still in the DOM, before the store changes.","run":[{"file":"src/drag/controller.ts","start":120,"end":120},{"file":"src/components/Note.tsx","start":42,"end":46},{"file":"src/components/caret.ts","start":7,"end":11}]},{"title":"The Note re-renders as a textarea and focuses before paint","explain":"Only this Note's `useIsEditing` answer flipped. A layout effect focuses and places the caret before the first frame, so there's no flash at the end of the text. The textarea composes `.text`, so the text doesn't shift (tested by comparing rects and computed styles).","run":[{"file":"src/StoresContext.ts","start":30,"end":32},{"file":"src/components/Note.tsx","start":31,"end":38}]},{"title":"Typing","explain":"Each change dispatches `setText`, which keeps the text exactly as typed. Only this Note's object is replaced.","run":[{"file":"src/components/Note.tsx","start":87,"end":87},{"file":"src/notes/notesReducer.ts","start":83,"end":86}]}]},{"name":"While Editing: a strip Drag, and an Escape that cancels it","steps":[{"title":"pointerdown in the textarea","explain":"`isInText` sees the textarea: the press only Raises, with no `preventDefault` and no capture, so selecting by dragging and double-clicking a word work natively.","run":[{"file":"src/drag/useDrag.ts","start":78,"end":81}]},{"title":"pointerdown on the Grip strip","explain":"Not text, so `preventDefault` stops focus from moving: the textarea keeps focus and caret while the Note moves.","run":[{"file":"src/drag/useDrag.ts","start":83,"end":88}]},{"title":"Escape mid-Drag","explain":"The window capture listener runs first and prevents Escape's default; the textarea's handler then sees `defaultPrevented` and keeps Editing. Without it one Escape would both cancel the Drag and end Editing.","run":[{"file":"src/drag/useDrag.ts","start":99,"end":102},{"file":"src/components/Note.tsx","start":62,"end":65}]}]},{"name":"Editing ends","steps":[{"title":"pointerdown on empty Board, or on another Note or its handle","explain":"Both go through `useStopEditing`, which blurs explicitly: the other Note's press calls `preventDefault`, so focus would otherwise stay put until the textarea unmounted.","run":[{"file":"src/components/Board.tsx","start":68,"end":68},{"file":"src/components/Note.tsx","start":51,"end":52},{"file":"src/components/useStopEditing.ts","start":8,"end":11},{"file":"src/ui/uiReducer.ts","start":22,"end":23}]},{"title":"Nothing to end","explain":"With no Note in Editing, `withEditing` returns the same state, so the store notifies nobody and nothing re-renders.","run":[{"file":"src/ui/uiReducer.ts","start":29,"end":30}]}]},{"name":"A new Note opens in Editing","steps":[{"title":"Double-click on empty Board","explain":"`createNote` creates, then starts Editing; the Note mounts with no pending caret, so the layout effect puts it at the end of the (empty) text.","run":[{"file":"src/commands.ts","start":10,"end":13}]}]}],"notes":[{"title":"The toolbar doesn't re-render on Editing yet","detail":"The spec expects the toolbar among the re-renders, but nothing in it reads Editing until the colour and delete issues. The profiler test checks only Notes."},{"title":"Caret measured on the idle text","detail":"The offset comes from the div before the textarea replaces it; this relies on both laying out identically, which the no-shift test guards. Counter-argument: a long Note that scrolls inside the textarea would measure differently, but idle text never scrolls."},{"title":"Any press on another Note ends Editing","detail":"Including a right-button press, which isn't a Press. Simpler, and harmless."}],"omitted":{"src/components/Note.module.css":"The editor composes `.text`; outline and darker strip.","src/editing.browser.test.tsx":"Browser tests named in each file's `tested`.","src/ui/uiReducer.test.ts":"Node tests for the UI reducer.","src/notes/notesReducer.test.ts":"Node tests for `setText`.","src/commands.test.ts":"Node test that a new Note opens in Editing."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
