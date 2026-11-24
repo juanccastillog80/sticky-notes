@@ -4,7 +4,7 @@ import type { Point } from '../geometry';
 import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
 import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
-import { useIsEditing, useNotes, useStores } from '../StoresContext';
+import { useCommands, useIsEditing, useNotes, useStores } from '../StoresContext';
 import { caretOffsetAt } from './caret';
 import styles from './Note.module.css';
 import { useStopEditing } from './useStopEditing';
@@ -20,6 +20,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
   const stopEditing = useStopEditing();
+  const { deleteNote } = useCommands();
   const { scrollerRef } = useBoardDom();
   const ref = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -78,6 +79,21 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
       onPointerDown={press}
     >
       <div className={styles.gripStrip} />
+      <button
+        type="button"
+        aria-label="Delete note"
+        className={styles.delete}
+        onPointerDown={(e) => {
+          // Not a Press: no Raise, no Drag, and focus stays where it is until the delete.
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        onClick={() => {
+          deleteNote(id);
+        }}
+      >
+        ×
+      </button>
       {editing ? (
         <textarea
           ref={editorRef}

@@ -268,3 +268,44 @@ describe('setText', () => {
     expect(notesReducer(state, { type: 'setText', id: testId('gone'), text: 'x' })).toBe(state);
   });
 });
+
+describe('delete', () => {
+  it('removes the Note, keeping the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = notesReducer(state, { type: 'delete', id: a.id });
+
+    expect(next.ids).toEqual(['b']);
+    expect(next.notes[a.id]).toBeUndefined();
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the Note is missing', () => {
+    const state = makeState(a);
+
+    expect(notesReducer(state, { type: 'delete', id: testId('gone') })).toBe(state);
+  });
+});
+
+describe('restore', () => {
+  it('brings a deleted Note back with the same id, rect, text, colour and z', () => {
+    const deleted = notesReducer(makeState(a, b), { type: 'delete', id: a.id });
+    const next = notesReducer(deleted, { type: 'restore', note: a });
+
+    expect(next.notes[a.id]).toBe(a);
+    expect(next.ids).toEqual(['b', 'a']);
+    expect(next.notes[b.id]).toBe(b);
+    expect(next.topZ).toBe(2);
+  });
+
+  it('raises topZ when the restored Note was in front', () => {
+    const front = makeNote({ id: testId('front'), z: 9 });
+
+    expect(notesReducer(makeState(a), { type: 'restore', note: front }).topZ).toBe(9);
+  });
+
+  it('returns the same state when the id is already on the Board', () => {
+    const state = makeState(a);
+
+    expect(notesReducer(state, { type: 'restore', note: a })).toBe(state);
+  });
+});
