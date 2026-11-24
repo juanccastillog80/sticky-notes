@@ -96,9 +96,11 @@ function setText(state: NotesState, id: NoteId, text: string): NotesState {
 /** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */
 function remove(state: NotesState, id: NoteId): NotesState {
   if (!state.notes[id]) return state;
-  const notes = { ...state.notes };
-  delete notes[id];
-  return { ...state, notes, ids: state.ids.filter((other) => other !== id) };
+  const ids = state.ids.filter((other) => other !== id);
+  const notes = Object.fromEntries(
+    Object.entries(state.notes).filter(([other]) => other !== id),
+  ) as NotesState['notes'];
+  return { ...state, notes, ids };
 }
 
 /** Brings a deleted Note back exactly as it was, `z` included. It is listed last. */
