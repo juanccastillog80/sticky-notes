@@ -1,4 +1,4 @@
-import { toCommittedRect, type Point, type Rect } from '../geometry';
+import { resizeRect, toCommittedRect, type Edges, type Point, type Rect } from '../geometry';
 import type { Note } from '../notes/note';
 import type { NoteAction } from '../notes/notesReducer';
 
@@ -29,3 +29,30 @@ export const moveKind: DragKind<Note> = {
     return { type: 'move', id: from.id, x, y };
   },
 };
+
+/** The 8 resize handles, named by the edges they move. */
+export const RESIZE_HANDLES = [
+  'n',
+  's',
+  'e',
+  'w',
+  'ne',
+  'nw',
+  'se',
+  'sw',
+] as const satisfies readonly Edges[];
+export type ResizeHandle = (typeof RESIZE_HANDLES)[number];
+
+function resizeKind(handle: ResizeHandle): DragKind<Note> {
+  return {
+    preview: (from, delta) => resizeRect(from, delta, handle),
+    commit(from, delta) {
+      return { type: 'resize', id: from.id, ...resizeRect(from, delta, handle) };
+    },
+  };
+}
+
+/** One kind per handle, built once. */
+export const resizeKinds = Object.fromEntries(
+  RESIZE_HANDLES.map((handle) => [handle, resizeKind(handle)]),
+) as Record<ResizeHandle, DragKind<Note>>;

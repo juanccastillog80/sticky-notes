@@ -32,6 +32,10 @@ _Avoid_: Drag type, drag mode, handler
 What the user sees of a note while a drag is still running. Only releasing turns it into the note's saved position or size; a cancelled drag discards it.
 _Avoid_: Ghost, draft, live state
 
+**Resize handle**:
+One of 8 invisible zones along a note's edges and corners, named by the edges it moves (`n`, `se`, …). Pressing one starts a resize instead of a move. Only `se` draws a visible tick.
+_Avoid_: Grip, resizer
+
 **Dead zone**:
 The small distance the pointer must travel after a press before it becomes a drag. A press released inside it is a click and saves nothing.
 _Avoid_: Drag threshold, slop, tolerance

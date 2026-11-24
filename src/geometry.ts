@@ -39,6 +39,36 @@ export function toCommittedRect({ x, y, width, height }: Rect): Rect {
   });
 }
 
+/** The edges a resize moves: one side, or two for a corner. */
+export type Edges = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+/**
+ * `from` with the named edges moved by `delta`, as it will be stored. Each moving edge
+ * stops at `MIN_NOTE_SIZE` from the opposite edge and at the Board's edge; the
+ * opposite edge never moves. The delta is rounded first, so the result is whole pixels.
+ */
+export function resizeRect(from: Rect, delta: Point, edges: Edges): Rect {
+  const dx = Math.round(delta.x);
+  const dy = Math.round(delta.y);
+  const right = from.x + from.width;
+  const bottom = from.y + from.height;
+  let { x, y, width, height } = from;
+  if (edges.includes('e'))
+    width = clamp(from.width + dx, MIN_NOTE_SIZE.width, BOARD_SIZE.width - x);
+  if (edges.includes('w')) {
+    x = clamp(from.x + dx, 0, right - MIN_NOTE_SIZE.width);
+    width = right - x;
+  }
+  if (edges.includes('s')) {
+    height = clamp(from.height + dy, MIN_NOTE_SIZE.height, BOARD_SIZE.height - y);
+  }
+  if (edges.includes('n')) {
+    y = clamp(from.y + dy, 0, bottom - MIN_NOTE_SIZE.height);
+    height = bottom - y;
+  }
+  return { x, y, width, height };
+}
+
 /** A client point in Board coordinates. `boardRect` already reflects scrolling. */
 export function toBoardPoint(client: Point, boardRect: Point): Point {
   return { x: client.x - boardRect.x, y: client.y - boardRect.y };
