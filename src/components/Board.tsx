@@ -12,6 +12,7 @@ import { useCommands, useNotes } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
 import styles from './Board.module.css';
+import { useStopEditing } from './useStopEditing';
 
 export function Board({
   scrollerRef,
@@ -22,6 +23,7 @@ export function Board({
 }) {
   const ids = useNotes((state) => state.ids);
   const { createNote } = useCommands();
+  const stopEditing = useStopEditing();
 
   const boardRef = useRef<HTMLElement>(null);
   // A `dblclick` reports only where the second press landed, so the first is remembered:
@@ -62,6 +64,10 @@ export function Board({
           className={styles.board}
           style={BOARD_SIZE}
           onDoubleClick={createAtPointer}
+          onPointerDown={(event) => {
+            // A press on empty Board ends Editing.
+            if (event.target === event.currentTarget) stopEditing();
+          }}
         >
           {ids.map((id) =>
             onNoteRender ? (

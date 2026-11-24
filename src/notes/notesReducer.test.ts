@@ -245,3 +245,26 @@ describe('raise', () => {
     expect(raise(state, testId('gone'))).toBe(state);
   });
 });
+
+describe('setText', () => {
+  it('keeps the text exactly as typed, line breaks included', () => {
+    const next = notesReducer(makeState(a, b), { type: 'setText', id: a.id, text: ' one\n\ntwo ' });
+
+    expect(next.notes[a.id]).toEqual({ ...a, text: ' one\n\ntwo ' });
+  });
+
+  it('keeps ids and the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = notesReducer(state, { type: 'setText', id: a.id, text: 'hi' });
+
+    expect(next.ids).toBe(state.ids);
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the text does not change, or the Note is missing', () => {
+    const state = makeState(a, b);
+
+    expect(notesReducer(state, { type: 'setText', id: a.id, text: a.text })).toBe(state);
+    expect(notesReducer(state, { type: 'setText', id: testId('gone'), text: 'x' })).toBe(state);
+  });
+});

@@ -40,3 +40,29 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
 }
+
+/* Same box and type as `.text`, so nothing shifts when Editing starts or ends. */
+.editor {
+  composes: text;
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  /* Size and line height come from `.text`. */
+  font-family: inherit;
+  letter-spacing: inherit;
+  resize: none;
+  outline: none;
+  user-select: text;
+}
+
+.note[data-editing] {
+  outline: 2px solid var(--color-accent);
+}
+
+.note[data-editing] .gripStrip {
+  background: color-mix(in srgb, var(--note-strip), black 10%);
+}

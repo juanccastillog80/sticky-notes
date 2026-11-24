@@ -8,10 +8,10 @@ export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }
   return {
     createNote: ({ x, y, width, height }: Rect) => {
       const colour = ui.getSnapshot().currentColour;
-      notes.dispatch({
-        type: 'create',
-        note: { id: newNoteId(), x, y, width, height, text: '', colour },
-      });
+      const id = newNoteId();
+      notes.dispatch({ type: 'create', note: { id, x, y, width, height, text: '', colour } });
+      // A new Note opens straight into Editing.
+      ui.dispatch({ type: 'startEditing', id });
     },
   };
 }

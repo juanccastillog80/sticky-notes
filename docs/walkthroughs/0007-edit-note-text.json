@@ -1,0 +1,288 @@
+{
+  "issue": 7,
+  "title": "Edit Note text",
+  "lede": "A Click on an idle Note starts **Editing**, with the caret where it landed; a new Note opens in Editing. While Editing the body is a real textarea laid out exactly like the idle text, so a press there only Raises and Drags start from the Grip strip and handles alone. Editing ends on Escape, a press on empty Board, or a press on another Note.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What does a press on this Note do, idle and while Editing?",
+      "summary": "Renders the idle text or the textarea, turns a Click into `startEditing` with a measured caret, and ends Editing elsewhere when pressed.",
+      "owns": "The textarea, caret placement on focus, Escape, and ending another Note's Editing on press.",
+      "never": "Decides Click versus Drag: the controller does.",
+      "tested": "Browser tests in `editing.browser.test.tsx`."
+    },
+    {
+      "path": "src/components/caret.ts",
+      "question": "Which text offset is under the Click?",
+      "summary": "`caretPositionFromPoint` on the idle text, or `null` (end of text) when it's missing or misses the text.",
+      "owns": "The single DOM call that maps a point to an offset.",
+      "never": "Touches state.",
+      "tested": "The scenario 2 browser test, in Chromium and Firefox."
+    },
+    {
+      "path": "src/components/useStopEditing.ts",
+      "question": "How does Editing end?",
+      "summary": "Blurs the edited textarea explicitly, then dispatches `stopEditing`.",
+      "owns": "The one way the Board and Notes end Editing.",
+      "never": "Starts Editing.",
+      "tested": "Browser tests for empty Board, another Note and its handle."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "What does a press on empty Board do?",
+      "summary": "Ends Editing, through `useStopEditing`.",
+      "owns": "Presses and double-clicks on empty Board.",
+      "never": "Reacts to presses on Notes.",
+      "tested": "Browser test: a press on empty Board ends Editing."
+    },
+    {
+      "path": "src/ui/uiReducer.ts",
+      "question": "Which Note is being edited?",
+      "summary": "`startEditing` replaces any other, `stopEditing` clears it; a no-op keeps the state.",
+      "owns": "At most one Note in Editing.",
+      "never": "Knows about the DOM.",
+      "tested": "Node tests in `uiReducer.test.ts`."
+    },
+    {
+      "path": "src/StoresContext.ts",
+      "question": "Which Notes re-render when Editing changes?",
+      "summary": "`useIsEditing(id)` selects a boolean, so only the two Notes whose answer flips re-render.",
+      "owns": "UI store selectors.",
+      "never": "Returns a new object from a selector.",
+      "tested": "Profiler browser test."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How is typed text saved?",
+      "summary": "`setText` keeps the text exactly as typed and keeps every other Note by reference.",
+      "owns": "The text of a Note.",
+      "never": "Trims or normalises.",
+      "tested": "Node tests and a profiler browser test."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "What happens on create?",
+      "summary": "`createNote` creates the Note, then starts Editing it.",
+      "owns": "Rules that span both stores.",
+      "never": "Touches the DOM.",
+      "tested": "Node test, and the scenario 5 browser test."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "Why doesn't the Escape that cancels a Drag also end Editing?",
+      "summary": "Its window `keydown` listener prevents Escape's default during a Drag; the textarea ignores a prevented Escape.",
+      "owns": "DOM listeners for a Drag session.",
+      "never": "Knows about Editing.",
+      "tested": "Browser test: Escape during a strip Drag."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When is a press a Click?",
+      "summary": "Unchanged: a real release inside the Dead zone calls `io.click`, last.",
+      "owns": "Click versus Drag.",
+      "never": "Knows about Editing.",
+      "tested": "Node tests in `controller.test.ts`."
+    }
+  ],
+  "flow": [
+    [
+      "src/components/Note.tsx",
+      "src/drag/useDrag.ts",
+      "src/drag/controller.ts",
+      "src/components/caret.ts",
+      "src/ui/uiReducer.ts"
+    ],
+    ["src/components/Board.tsx", "src/components/useStopEditing.ts", "src/ui/uiReducer.ts"],
+    ["src/commands.ts", "src/notes/notesReducer.ts", "src/ui/uiReducer.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "A Click on an idle Note starts Editing",
+      "steps": [
+        {
+          "title": "pointerdown on the idle body",
+          "explain": "Nobody else is being edited, so `stopEditing` is a no-op that notifies nobody. The body isn't text yet, so `start` captures the pointer and the controller begins a session.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function press(e: PointerEvent<HTMLElement>) {",
+              "to": "start(e, moveKind, note);"
+            }
+          ]
+        },
+        {
+          "title": "pointerup inside the Dead zone: a Click",
+          "explain": "The controller reports the Click last, after letting go of the pointer. The offset is measured on the idle text, which is still in the DOM, before the store changes.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (released) io.click(s.pointer);"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function startEditingAt(pointer: Point) {",
+              "to": "ui.dispatch({ type: 'startEditing', id });"
+            },
+            {
+              "file": "src/components/caret.ts",
+              "from": "export function caretOffsetAt",
+              "to": "return position?.offsetNode"
+            }
+          ]
+        },
+        {
+          "title": "The Note re-renders as a textarea and focuses before paint",
+          "explain": "Only this Note's `useIsEditing` answer flipped. A layout effect focuses and places the caret before the first frame, so there's no flash at the end of the text. The textarea composes `.text`, so the text doesn't shift (tested by comparing rects and computed styles).",
+          "run": [
+            {
+              "file": "src/StoresContext.ts",
+              "from": "export function useIsEditing(id: NoteId): boolean {",
+              "to": "}"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "useLayoutEffect(() => {",
+              "to": "}, [editing]);"
+            }
+          ]
+        },
+        {
+          "title": "Typing",
+          "explain": "Each change dispatches `setText`, which keeps the text exactly as typed. Only this Note's object is replaced.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "notes.dispatch({ type: 'setText', id, text: e.target.value });"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function setText(",
+              "to": "return withNote(state, { ...note, text });"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "While Editing: a strip Drag, and an Escape that cancels it",
+      "steps": [
+        {
+          "title": "pointerdown in the textarea",
+          "explain": "`isInText` sees the textarea: the press only Raises, with no `preventDefault` and no capture, so selecting by dragging and double-clicking a word work natively.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "if (isInText(e)) {",
+              "to": "return;"
+            }
+          ]
+        },
+        {
+          "title": "pointerdown on the Grip strip",
+          "explain": "Not text, so `preventDefault` stops focus from moving: the textarea keeps focus and caret while the Note moves.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "// No focus change, no text selection and no native drag.",
+              "to": "controller.current?.press(e, kind, from);"
+            }
+          ]
+        },
+        {
+          "title": "Escape mid-Drag",
+          "explain": "The window capture listener runs first and prevents Escape's default; the textarea's handler then sees `defaultPrevented` and keeps Editing. Without it one Escape would both cancel the Drag and end Editing.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "const key = (e: KeyboardEvent) => {",
+              "to": "};"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function keyDownInEditor(",
+              "to": "}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Editing ends",
+      "steps": [
+        {
+          "title": "pointerdown on empty Board, or on another Note or its handle",
+          "explain": "Both go through `useStopEditing`, which blurs explicitly: the other Note's press calls `preventDefault`, so focus would otherwise stay put until the textarea unmounted.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "if (event.target === event.currentTarget) stopEditing();"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "// A press on another Note, handles included, ends Editing wherever it is.",
+              "to": "if (!editing) stopEditing();"
+            },
+            {
+              "file": "src/components/useStopEditing.ts",
+              "from": "return () => {",
+              "to": "ui.dispatch({ type: 'stopEditing' });"
+            },
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "case 'stopEditing':",
+              "to": "return withEditing(state, null);"
+            }
+          ]
+        },
+        {
+          "title": "Nothing to end",
+          "explain": "With no Note in Editing, `withEditing` returns the same state, so the store notifies nobody and nothing re-renders.",
+          "run": [
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "function withEditing(",
+              "to": "}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A new Note opens in Editing",
+      "steps": [
+        {
+          "title": "Double-click on empty Board",
+          "explain": "`createNote` creates, then starts Editing; the Note mounts with no pending caret, so the layout effect puts it at the end of the (empty) text.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "const id = newNoteId();",
+              "to": "ui.dispatch({ type: 'startEditing', id });"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The toolbar doesn't re-render on Editing yet",
+      "detail": "The spec expects the toolbar among the re-renders, but nothing in it reads Editing until the colour and delete issues. The profiler test checks only Notes."
+    },
+    {
+      "title": "Caret measured on the idle text",
+      "detail": "The offset comes from the div before the textarea replaces it; this relies on both laying out identically, which the no-shift test guards. Counter-argument: a long Note that scrolls inside the textarea would measure differently, but idle text never scrolls."
+    },
+    {
+      "title": "Any press on another Note ends Editing",
+      "detail": "Including a right-button press, which isn't a Press. Simpler, and harmless."
+    }
+  ],
+  "omitted": {
+    "src/components/Note.module.css": "The editor composes `.text`; outline and darker strip.",
+    "src/editing.browser.test.tsx": "Browser tests named in each file's `tested`.",
+    "src/ui/uiReducer.test.ts": "Node tests for the UI reducer.",
+    "src/notes/notesReducer.test.ts": "Node tests for `setText`.",
+    "src/commands.test.ts": "Node test that a new Note opens in Editing."
+  }
+}
