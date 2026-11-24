@@ -10,6 +10,7 @@ Run on the live app in the latest Chrome, Edge and Firefox, once with the window
 | 5–7   | Dot grid, empty-Board hint, opens scrolled to the top-left                 |        |      |         |
 | 8     | Double-click empty Board creates a Note centred on the pointer             |        |      |         |
 | 9–11  | S/M/L create in the visible middle, with a cascade when repeated           |        |      |         |
+| 12    | A new Note opens in Editing, ready to type                                 |        |      |         |
 | 14–15 | A Note near the edge is pushed inside; double-click on a Note does nothing |        |      |         |
 | 16–18 | Drag from anywhere on the Note; a click inside the Dead zone doesn't move  |        |      |         |
 | 19–20 | Stops at the Board's edges; drops exactly where it's shown                 |        |      |         |
@@ -20,6 +21,11 @@ Run on the live app in the latest Chrome, Edge and Firefox, once with the window
 | 27–29 | Resize from all 8 edges and corners; correct cursors; `se` tick shown      |        |      |         |
 | 30–31 | Stops at 140×100 with the opposite edge fixed; stops at the Board's edges  |        |      |         |
 | 32–33 | Text reflows live and never distorts                                       |        |      |         |
+| 45    | A click on an idle Note starts Editing, caret where clicked                |        |      |         |
+| 46    | Drag-select, double-click a word, normal text shortcuts while Editing      |        |      |         |
+| 47–48 | Grip strip moves the edited Note, keeps focus and caret; text never jumps  |        |      |         |
+| 49–51 | Accent outline and darker strip; one Note at most; Escape or a press ends  |        |      |         |
+| 52    | Text kept exactly as typed, line breaks included                           |        |      |         |
 | 53    | Pressing a Note Raises it at once, for the whole Drag                      |        |      |         |
 
 ## Findings
