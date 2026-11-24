@@ -84,7 +84,7 @@ export interface DragController {
  *   up → end(true, released);  buttons === 0 → end(true);  cancel / Escape / dispose → end(false)
  *   end → detach, io.releaseCapture, then a Click (io.click) or reset Preview + io.dispatch the commit
  *
- * The handlers exist for the whole controller, but are attached only while a press is live.
+ * The handlers exist for the whole controller, but are attached only while a Press is live.
  */
 export function createDragController(io: DragIO): DragController {
   let session: Session | null = null;

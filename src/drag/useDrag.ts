@@ -8,7 +8,7 @@ import type { DragKind } from './kinds';
 export interface DragOptions {
   /** The Board's scroll container, which can scroll mid-drag. */
   readonly scrollerRef: RefObject<HTMLElement | null>;
-  /** Where the one action of a released Drag goes. */
+  /** Where a Press's Raise and a released Drag's one action go. */
   readonly commit: (action: NoteAction) => void;
   /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */
   readonly onClick?: (pointer: Point) => void;
