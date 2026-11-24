@@ -14,6 +14,7 @@ export type NoteAction =
   | { readonly type: 'move'; readonly id: NoteId; readonly x: number; readonly y: number }
   | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)
   | { readonly type: 'raise'; readonly id: NoteId }
+  | { readonly type: 'setText'; readonly id: NoteId; readonly text: string }
   | { readonly type: 'load'; readonly notes: readonly Note[] };
 
 const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };
@@ -32,6 +33,8 @@ export function notesReducer(state: NotesState, action: NoteAction): NotesState 
       return resize(state, action.id, action);
     case 'raise':
       return raise(state, action.id);
+    case 'setText':
+      return setText(state, action.id, action.text);
     case 'load':
       return load(state, action.notes);
     default:
@@ -75,6 +78,13 @@ function raise(state: NotesState, id: NoteId): NotesState {
   if (alreadyInFront) return state;
   const z = state.topZ + 1;
   return { ...withNote(state, { ...note, z }), topZ: z };
+}
+
+/** Keeps the text exactly as typed, whitespace and line breaks included. */
+function setText(state: NotesState, id: NoteId, text: string): NotesState {
+  const note = state.notes[id];
+  if (!note || note.text === text) return state;
+  return withNote(state, { ...note, text });
 }
 
 /** Replaces one Note. `ids` and every other Note keep their reference. */

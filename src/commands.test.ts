@@ -10,7 +10,7 @@ describe('createNote', () => {
     const notes = createNotesStore();
     const { createNote } = createCommands({ notes, ui });
     const created = () => Object.values(notes.getSnapshot().notes);
-    return { createNote, created };
+    return { createNote, created, ui };
   }
 
   it('creates an empty Note at the rect, yellow to start with', () => {
@@ -38,5 +38,13 @@ describe('createNote', () => {
     createNote(rect);
 
     expect(new Set(created().map((note) => note.id)).size).toBe(2);
+  });
+
+  it('opens the new Note straight into Editing', () => {
+    const { createNote, created, ui } = setup();
+
+    createNote(rect);
+
+    expect(ui.getSnapshot().editingId).toBe(created()[0]?.id);
   });
 });
