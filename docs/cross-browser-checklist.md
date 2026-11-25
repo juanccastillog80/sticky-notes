@@ -30,6 +30,16 @@ Run on the live app in the latest Chrome, Edge and Firefox, once with the window
 | 34–36 | Pointer-on-zone drop deletes; zone pinned bottom-right; brushing moves     |        |      |         |
 | 37–39 | Zone hints during a move, red with Note dimmed when over; resize: never    |        |      |         |
 | 40–42 | "Note deleted" toast with Undo after a drop; Undo restores it exactly      |        |      |         |
+| #33   | Tab: Note, ×, next Note; dashed ring and Raise; Enter, Escape, Delete      |        |      |         |
+
+## Safari (keyboard only)
+
+Safari's Tab skips buttons by default, so the toolbar and every × are passed over while Notes are still reached. Turn on Safari → Settings → Advanced → "Press Tab to highlight each item on a webpage" (or use Option+Tab), then check:
+
+- [ ] Tab reaches the toolbar buttons, the colour swatches, each Note and its ×
+- [ ] A Note focused with Tab shows the dashed ring and is Raised
+- [ ] Escape while Editing leaves the dashed ring on that Note, and it is Raised
+- [ ] Delete on a focused Note moves the ring to the next Note
 
 ## Findings
 
