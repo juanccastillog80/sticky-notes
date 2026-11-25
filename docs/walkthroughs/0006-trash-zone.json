@@ -241,6 +241,7 @@
     "src/drag/kinds.test.ts": "Hit rule tests.",
     "src/trash.browser.test.tsx": "Real-mouse tests: pinned position, states, drop and Undo, brushing, double-click.",
     "test/mouse.ts": "Exports `pointIn` for the new browser test.",
-    "src/components/Board.module.css": "The 24 px backdrop gap becomes `--board-end-gap`, which the Trash zone reads."
+    "src/components/Board.module.css": "The 24 px backdrop gap becomes `--board-end-gap`, which the Trash zone reads.",
+    "src/editing.browser.test.tsx": "A press on empty Board moved off the Trash zone, which now covers the old spot and takes presses."
   }
 }
