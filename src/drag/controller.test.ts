@@ -113,6 +113,27 @@ describe('the Press', () => {
     ]);
   });
 
+  it('a button-less move just before the release, still inside the Dead zone, leaves it a Click', () => {
+    // Chrome: a pointer that wobbles as the button comes up sends a move with
+    // `buttons === 0`, then the `pointerup` in the same millisecond.
+    const t = setup();
+    t.press(10, 10);
+    t.move(10.1, 10, 0);
+    t.up(10.1, 10);
+
+    expect(t.of('click')).toEqual([{ call: 'click', pointer: { x: 10.1, y: 10 } }]);
+    expect(t.of('detach')).toHaveLength(1);
+  });
+
+  it('a button-less move inside the Dead zone never moves the Note', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(12, 10, 0);
+
+    expect(t.of('writePreview')).toEqual([]);
+    expect(t.commits()).toEqual([]);
+  });
+
   it('a release after leaving the Dead zone is a Drag, not a Click', () => {
     const t = setup();
     t.press(10, 10);
@@ -143,9 +164,9 @@ describe('the Press', () => {
       },
     ],
     [
-      'a release we did not see (buttons === 0)',
+      'a release we did not see (buttons === 0, the pointer since moved off)',
       (t: Setup) => {
-        t.move(11, 10, 0);
+        t.move(20, 10, 0);
       },
     ],
   ])('ending inside the Dead zone by %s is not a Click', (_, endIt) => {
