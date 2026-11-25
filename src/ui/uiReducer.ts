@@ -34,9 +34,7 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
     case 'hideUndo':
       return withLastDeleted(state, null);
     case 'setCurrentColour':
-      return action.colour === state.currentColour
-        ? state
-        : { ...state, currentColour: action.colour };
+      return withCurrentColour(state, action.colour);
     default:
       return assertNever(action);
   }
@@ -48,6 +46,10 @@ function withEditing(state: UiState, editingId: NoteId | null): UiState {
 
 function withLastDeleted(state: UiState, lastDeleted: Note | null): UiState {
   return lastDeleted === state.lastDeleted ? state : { ...state, lastDeleted };
+}
+
+function withCurrentColour(state: UiState, currentColour: NoteColour): UiState {
+  return currentColour === state.currentColour ? state : { ...state, currentColour };
 }
 
 /** Stops compiling when an action has no case. */

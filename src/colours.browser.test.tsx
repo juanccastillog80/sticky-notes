@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
-import { NOTE_COLOURS, type NoteColour } from './notes/note';
+import { COLOUR_NAMES, NOTE_COLOURS, type NoteColour } from './notes/note';
 import { makeNote, testId } from '../test/factories';
 import { press } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
@@ -19,15 +19,16 @@ async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const colours = screen.getByRole('group', { name: 'Colour' });
-  const swatch = (colour: NoteColour) => colours.getByRole('button', { name: capitalise(colour) });
+  const swatch = (colour: NoteColour) =>
+    colours.getByRole('button', { name: COLOUR_NAMES[colour] });
   return { screen, stores, noteA: notes.nth(0), colours, swatch };
 }
 
-function capitalise(colour: NoteColour) {
-  return colour.charAt(0).toUpperCase() + colour.slice(1);
-}
-
-const strip = (note: Locator) => note.element().firstElementChild as HTMLElement;
+const strip = (note: Locator) => {
+  const element = note.element().querySelector('[data-grip-strip]');
+  if (!element) throw new Error('The Note has no Grip strip');
+  return element;
+};
 const background = (element: Element) => getComputedStyle(element).backgroundColor;
 
 it('each colour has its own background, strip and Editing-strip shade', async () => {
