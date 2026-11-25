@@ -1,0 +1,40 @@
+/* Bottom-centre of the window, over the Board, whatever its scroll. */
+.region {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 8px;
+  background: var(--color-text);
+  box-shadow: var(--shadow-note-dragging);
+  color: var(--color-surface);
+  font-size: 13px;
+}
+
+.undo {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-accent-on-dark);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.undo:hover {
+  background: rgb(255 255 255 / 12%);
+}
+
+.undo:focus-visible {
+  outline: 2px solid var(--color-accent-on-dark);
+  outline-offset: 1px;
+}

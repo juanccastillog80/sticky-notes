@@ -11,17 +11,27 @@ export interface UiState {
 
 /** Each feature that changes UI state adds its action to this union. */
 export type UiAction =
-  { readonly type: 'startEditing'; readonly id: NoteId } | { readonly type: 'stopEditing' };
+  | { readonly type: 'startEditing'; readonly id: NoteId }
+  | { readonly type: 'stopEditing' }
+  | { readonly type: 'showUndo'; readonly note: Note }
+  | { readonly type: 'hideUndo' };
 
 export const INITIAL_UI: UiState = { editingId: null, currentColour: 'yellow', lastDeleted: null };
 
-/** At most one Note is in Editing: starting it on one Note ends it on any other. A no-op keeps the state. */
+/**
+ * At most one Note is in Editing: starting it on one Note ends it on any other.
+ * `lastDeleted` is the Note the Undo toast would bring back. A no-op keeps the state.
+ */
 export function uiReducer(state: UiState, action: UiAction): UiState {
   switch (action.type) {
     case 'startEditing':
       return withEditing(state, action.id);
     case 'stopEditing':
       return withEditing(state, null);
+    case 'showUndo':
+      return withLastDeleted(state, action.note);
+    case 'hideUndo':
+      return withLastDeleted(state, null);
     default:
       return assertNever(action);
   }
@@ -29,6 +39,10 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
 
 function withEditing(state: UiState, editingId: NoteId | null): UiState {
   return editingId === state.editingId ? state : { ...state, editingId };
+}
+
+function withLastDeleted(state: UiState, lastDeleted: Note | null): UiState {
+  return lastDeleted === state.lastDeleted ? state : { ...state, lastDeleted };
 }
 
 /** Stops compiling when an action has no case. */

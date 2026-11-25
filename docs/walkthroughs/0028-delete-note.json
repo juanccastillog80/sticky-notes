@@ -1,0 +1,198 @@
+{
+  "issue": 28,
+  "title": "Delete a Note with the × on its Grip strip, with Undo",
+  "lede": "Every Note shows a **Delete button** (×) at the right end of its Grip strip. A click deletes the Note at once and shows the **Undo toast** for 5 s; Undo brings the Note back exactly as it was, `z` included. The × is not a Press: it never Raises or drags, and it leaves focus where it was.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What does a press and a click on the × do?",
+      "summary": "The × stops its pointerdown from reaching the Note, then its click calls `deleteNote`.",
+      "owns": "The × button and when to guard against a double-click.",
+      "never": "Knows about Undo.",
+      "tested": "Browser tests in `delete.browser.test.tsx`."
+    },
+    {
+      "path": "src/components/ignorePressesFor.ts",
+      "question": "Why doesn't a double-click on the × delete a second Note?",
+      "summary": "For 500 ms after a mouse delete, presses and clicks on Notes are swallowed in the capture phase.",
+      "owns": "The double-click guard.",
+      "never": "Swallows presses outside Notes, such as on the Undo toast.",
+      "tested": "Browser test: a double-click on a × over another Note."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "In what order does a delete touch the two stores?",
+      "summary": "`deleteNote` ends Editing if it was that Note, records the Note for Undo, then deletes. `undoDelete` restores, then hides the toast.",
+      "owns": "Rules that span both stores.",
+      "never": "Touches the DOM.",
+      "tested": "Node tests in `commands.test.ts`."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How does a deleted Note come back unchanged?",
+      "summary": "`delete` keeps `topZ`; `restore` puts the same object back with its own `z`.",
+      "owns": "The Notes and their Stacking order.",
+      "never": "Remembers what was deleted.",
+      "tested": "Node tests for reference stability."
+    },
+    {
+      "path": "src/ui/uiReducer.ts",
+      "question": "Where is the Note that Undo would bring back?",
+      "summary": "`lastDeleted`, set by `showUndo` and cleared by `hideUndo`.",
+      "owns": "UI state.",
+      "never": "Runs a timer.",
+      "tested": "Node tests in `uiReducer.test.ts`."
+    },
+    {
+      "path": "src/components/UndoToast.tsx",
+      "question": "When does the toast show, take focus and hide?",
+      "summary": "Shows while `lastDeleted` is set; its effect hides it after 5 s and restarts on a newer delete.",
+      "owns": "The toast, its timer, and focus after a keyboard delete.",
+      "never": "Changes Notes except through `undoDelete`.",
+      "tested": "Browser tests with fake timers."
+    }
+  ],
+  "flow": [
+    [
+      "src/components/Note.tsx",
+      "src/commands.ts",
+      "src/notes/notesReducer.ts",
+      "src/ui/uiReducer.ts",
+      "src/components/UndoToast.tsx"
+    ],
+    ["src/components/Note.tsx", "src/components/ignorePressesFor.ts"],
+    ["src/components/UndoToast.tsx", "src/commands.ts", "src/notes/notesReducer.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Click × and then Undo",
+      "steps": [
+        {
+          "title": "pointerdown on the ×",
+          "explain": "`stopPropagation` keeps it from the Note's own handler, so there's no Raise and no Drag. `preventDefault` keeps focus where it was, for example in another Note being edited.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "onPointerDown={(e) => {",
+              "to": "e.preventDefault();"
+            }
+          ]
+        },
+        {
+          "title": "click on the ×",
+          "explain": "The Note is recorded for Undo before it's deleted, and Editing ends first if it was this Note, so no phantom Editing is left. A mouse click (`detail > 0`) also starts the double-click guard.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "onClick={(e) => {",
+              "to": "if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "deleteNote: (id: NoteId) => {",
+              "to": "notes.dispatch({ type: 'delete', id });"
+            },
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "case 'showUndo':",
+              "to": "return withLastDeleted(state, action.note);"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function withoutNote(",
+              "to": "return { ...state, notes, ids };"
+            }
+          ]
+        },
+        {
+          "title": "The toast shows and its timer starts",
+          "explain": "The effect is keyed on the `lastDeleted` object, so a newer delete clears the old timer and starts a new one. The inner element is keyed by the Note's id, so a newer delete is announced again.",
+          "run": [
+            {
+              "file": "src/components/UndoToast.tsx",
+              "from": "if (!lastDeleted) return;",
+              "to": "}, [lastDeleted, ui]);"
+            }
+          ]
+        },
+        {
+          "title": "click Undo",
+          "explain": "The same object comes back, with its own `z`. `topZ` was kept on delete, so the restored Note's place in the Stacking order is still valid.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "undoDelete: () => {",
+              "to": "ui.dispatch({ type: 'hideUndo' });"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function restore(",
+              "to": "topZ: Math.max(state.topZ, note.z),"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A double-click on the ×",
+      "steps": [
+        {
+          "title": "The second press lands where the deleted Note was",
+          "explain": "The guard runs in the capture phase on `document`, before any Note sees the press. It swallows only presses on Notes, so the toast still works, and it removes itself after 500 ms.",
+          "run": [
+            {
+              "file": "src/components/ignorePressesFor.ts",
+              "from": "function swallow(e: Event) {",
+              "to": "e.stopPropagation();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Delete from the keyboard",
+      "steps": [
+        {
+          "title": "Enter on a focused ×",
+          "explain": "The focused × is removed, so focus falls to the body. The toast moves it to Undo, so the user keeps their place. A mouse delete leaves focus alone, because `activeElement` isn't the body. No double-click guard runs, because `detail` is 0.",
+          "run": [
+            {
+              "file": "src/components/UndoToast.tsx",
+              "from": "if (lastDeleted && document.activeElement === document.body)"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The × covers most of the `ne` resize corner",
+      "detail": "It sits 2 px from the top and right for looks, so only a 2 px sliver of the `ne` corner still resizes. The other edges and corners all work. Chosen by the owner after trying it."
+    },
+    {
+      "title": "× on another Note doesn't end Editing",
+      "detail": "Clicking × on Note B while editing A keeps A in Editing and its caret. The issue only requires ending Editing when the deleted Note is the edited one."
+    },
+    {
+      "title": "The double-click guard leaks between tests",
+      "detail": "It is a document listener that outlives the deleted Note, so `delete.browser.test.tsx` waits 500 ms after each test. Users can't hit this; the alternative, owning the guard in a component, was more code for no user-visible gain."
+    },
+    {
+      "title": "Deleting replaces the Trash zone",
+      "detail": "#6 stays skipped. Its delete and restore half is built here, so a Trash zone would only need the drop target."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "Adds Delete button and Undo toast.",
+    "README.md": "Feature 4 row and the not-included note.",
+    "src/components/Note.module.css": "The × style.",
+    "src/components/UndoToast.module.css": "The toast style.",
+    "src/tokens.css": "`--color-accent-on-dark` for Undo on the dark toast.",
+    "src/delete.browser.test.tsx": "Browser tests named in each file's `tested`.",
+    "src/commands.test.ts": "Node tests for `deleteNote` and `undoDelete`.",
+    "src/notes/notesReducer.test.ts": "Node tests for `delete` and `restore`.",
+    "src/ui/uiReducer.test.ts": "Node tests for `showUndo` and `hideUndo`.",
+    "src/components/Board.tsx": "Mounts the toast; the test-only `ProfiledNote` is memoised so a Board render no longer makes every Note's Profiler report."
+  }
+}

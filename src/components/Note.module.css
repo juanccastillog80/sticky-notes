@@ -66,3 +66,39 @@
 .note[data-editing] .gripStrip {
   background: color-mix(in srgb, var(--note-strip), black 10%);
 }
+
+/*
+ * Centred in the strip's right end, inset as much from the right as from the top.
+ * Drawn above the `n` edge and most of the `ne` corner handle: the Note still resizes
+ * from its other edges and corners.
+ */
+.delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-note-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.delete:hover {
+  background: rgb(0 0 0 / 8%);
+  opacity: 1;
+}
+
+.delete:focus-visible {
+  outline: 2px solid var(--color-accent);
+  opacity: 1;
+}

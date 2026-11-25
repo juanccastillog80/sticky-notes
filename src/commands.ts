@@ -1,5 +1,5 @@
 import type { Rect } from './geometry';
-import { newNoteId } from './notes/note';
+import { newNoteId, type NoteId } from './notes/note';
 import type { NotesStore } from './notes/notesReducer';
 import type { UiStore } from './ui/uiReducer';
 
@@ -12,6 +12,20 @@ export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }
       notes.dispatch({ type: 'create', note: { id, x, y, width, height, text: '', colour } });
       // A new Note opens straight into Editing.
       ui.dispatch({ type: 'startEditing', id });
+    },
+    /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */
+    deleteNote: (id: NoteId) => {
+      const note = notes.getSnapshot().notes[id];
+      if (!note) return;
+      if (ui.getSnapshot().editingId === id) ui.dispatch({ type: 'stopEditing' });
+      ui.dispatch({ type: 'showUndo', note });
+      notes.dispatch({ type: 'delete', id });
+    },
+    undoDelete: () => {
+      const note = ui.getSnapshot().lastDeleted;
+      if (!note) return;
+      notes.dispatch({ type: 'restore', note });
+      ui.dispatch({ type: 'hideUndo' });
     },
   };
 }

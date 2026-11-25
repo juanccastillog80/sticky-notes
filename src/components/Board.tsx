@@ -1,4 +1,5 @@
 import {
+  memo,
   Profiler,
   useEffect,
   useRef,
@@ -7,10 +8,11 @@ import {
   type RefObject,
 } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
-import { DEFAULT_NOTE_SIZE } from '../notes/note';
+import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
 import { useCommands, useNotes } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
+import { UndoToast } from './UndoToast';
 import styles from './Board.module.css';
 import { useStopEditing } from './useStopEditing';
 
@@ -71,9 +73,7 @@ export function Board({
         >
           {ids.map((id) =>
             onNoteRender ? (
-              <Profiler key={id} id={id} onRender={onNoteRender}>
-                <Note id={id} />
-              </Profiler>
+              <ProfiledNote key={id} id={id} onRender={onNoteRender} />
             ) : (
               <Note key={id} id={id} />
             ),
@@ -81,6 +81,25 @@ export function Board({
         </section>
       </div>
       <EmptyHint />
+      <UndoToast />
     </main>
   );
 }
+
+/**
+ * Tests only. Memoised, so a Board render (create, delete) doesn't re-render the
+ * `<Profiler>` itself: it then reports only when its own Note renders.
+ */
+const ProfiledNote = memo(function ProfiledNote({
+  id,
+  onRender,
+}: {
+  id: NoteId;
+  onRender: ProfilerOnRenderCallback;
+}) {
+  return (
+    <Profiler id={id} onRender={onRender}>
+      <Note id={id} />
+    </Profiler>
+  );
+});

@@ -15,6 +15,8 @@ export type NoteAction =
   | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)
   | { readonly type: 'raise'; readonly id: NoteId }
   | { readonly type: 'setText'; readonly id: NoteId; readonly text: string }
+  | { readonly type: 'delete'; readonly id: NoteId }
+  | { readonly type: 'restore'; readonly note: Note }
   | { readonly type: 'load'; readonly notes: readonly Note[] };
 
 const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };
@@ -35,6 +37,10 @@ export function notesReducer(state: NotesState, action: NoteAction): NotesState 
       return raise(state, action.id);
     case 'setText':
       return setText(state, action.id, action.text);
+    case 'delete':
+      return withoutNote(state, action.id);
+    case 'restore':
+      return restore(state, action.note);
     case 'load':
       return load(state, action.notes);
     default:
@@ -85,6 +91,26 @@ function setText(state: NotesState, id: NoteId, text: string): NotesState {
   const note = state.notes[id];
   if (!note || note.text === text) return state;
   return withNote(state, { ...note, text });
+}
+
+/** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */
+function withoutNote(state: NotesState, id: NoteId): NotesState {
+  if (!state.notes[id]) return state;
+  const ids = state.ids.filter((other) => other !== id);
+  const notes = Object.fromEntries(
+    Object.entries(state.notes).filter(([other]) => other !== id),
+  ) as NotesState['notes'];
+  return { ...state, notes, ids };
+}
+
+/** Brings a deleted Note back exactly as it was, `z` included. It is listed last. */
+function restore(state: NotesState, note: Note): NotesState {
+  if (state.notes[note.id]) return state;
+  return {
+    notes: { ...state.notes, [note.id]: note },
+    ids: [...state.ids, note.id],
+    topZ: Math.max(state.topZ, note.z),
+  };
 }
 
 /** Replaces one Note. `ids` and every other Note keep their reference. */
