@@ -1,0 +1,40 @@
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 14%);
+  border-radius: 50%;
+  background: var(--note-bg);
+  /* The strip shade as a lower half, so the swatch reads as the Note's two tones. */
+  background-image: linear-gradient(to bottom, var(--note-bg) 50%, var(--note-strip) 50%);
+  cursor: pointer;
+}
+
+.swatch:hover {
+  border-color: rgb(0 0 0 / 30%);
+}
+
+.swatch[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 3.5px var(--color-text);
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+.label {
+  /* Wide enough for either label, so the toolbar doesn't shift. */
+  min-width: 64px;
+  margin-left: 4px;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+}

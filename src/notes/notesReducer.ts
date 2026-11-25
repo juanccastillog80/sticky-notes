@@ -1,6 +1,6 @@
 import { toCommittedRect, type Point, type Rect } from '../geometry';
 import { createStore, type Store } from '../store/createStore';
-import type { Note, NoteId } from './note';
+import type { Note, NoteColour, NoteId } from './note';
 
 export interface NotesState {
   readonly notes: Readonly<Record<NoteId, Note>>;
@@ -15,6 +15,7 @@ export type NoteAction =
   | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)
   | { readonly type: 'raise'; readonly id: NoteId }
   | { readonly type: 'setText'; readonly id: NoteId; readonly text: string }
+  | { readonly type: 'setColour'; readonly id: NoteId; readonly colour: NoteColour }
   | { readonly type: 'delete'; readonly id: NoteId }
   | { readonly type: 'restore'; readonly note: Note }
   | { readonly type: 'load'; readonly notes: readonly Note[] };
@@ -37,6 +38,8 @@ export function notesReducer(state: NotesState, action: NoteAction): NotesState 
       return raise(state, action.id);
     case 'setText':
       return setText(state, action.id, action.text);
+    case 'setColour':
+      return setColour(state, action.id, action.colour);
     case 'delete':
       return withoutNote(state, action.id);
     case 'restore':
@@ -91,6 +94,12 @@ function setText(state: NotesState, id: NoteId, text: string): NotesState {
   const note = state.notes[id];
   if (!note || note.text === text) return state;
   return withNote(state, { ...note, text });
+}
+
+function setColour(state: NotesState, id: NoteId, colour: NoteColour): NotesState {
+  const note = state.notes[id];
+  if (!note || note.colour === colour) return state;
+  return withNote(state, { ...note, colour });
 }
 
 /** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */

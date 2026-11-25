@@ -26,11 +26,6 @@
   outline-offset: 2px;
 }
 
-.note[data-colour='yellow'] {
-  --note-bg: var(--color-note-yellow);
-  --note-strip: var(--color-note-yellow-strip);
-}
-
 .gripStrip {
   flex: none;
   height: 22px;
@@ -71,7 +66,7 @@
 }
 
 .note[data-editing] .gripStrip {
-  background: color-mix(in srgb, var(--note-strip), black 10%);
+  background: var(--note-strip-editing);
 }
 
 /*

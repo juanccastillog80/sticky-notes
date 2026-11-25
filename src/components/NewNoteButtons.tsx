@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { placeInVisibleBoard, type Size } from '../geometry';
 import { NOTE_SIZE_PRESETS } from '../notes/note';
-import { useCommands, useStores } from '../StoresContext';
+import { useCommands, useStores, useUi } from '../StoresContext';
 import styles from './NewNoteButtons.module.css';
 
 const BUTTONS = [
@@ -13,6 +13,7 @@ const BUTTONS = [
 export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement | null> }) {
   const { notes } = useStores();
   const { createNote } = useCommands();
+  const currentColour = useUi((state) => state.currentColour);
 
   function createInView(size: Size) {
     const scroller = scrollerRef.current;
@@ -39,6 +40,7 @@ export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDiv
             createInView(size);
           }}
         >
+          <span aria-hidden="true" className={styles.glyph} data-colour={currentColour} />
           {label}
         </button>
       ))}
