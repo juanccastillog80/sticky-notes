@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"README: architecture brought up to date, with a diagram","lede":"No runtime code changes. The README's Architecture section hadn't changed since #12. It now covers `commands.ts` and the ui store, the Trash zone in the move kind, a Click starting Editing, the keyboard, and the re-render tests. The prose is now key ideas with bullets under a Mermaid overview. This walkthrough checks the new claims against the code.","files":[{"path":"README.md","question":"How is the app put together?","summary":"A diagram of the UI layer and the pure core, then four key ideas and Testing.","owns":"The reviewer's first view of the architecture.","never":"Describes code that isn't on `main`.","tested":"Prettier only. The diagram is drawn by GitHub, not checked in CI.","lines":["# Sticky Notes","","A single-page desktop app for placing, arranging and resizing sticky notes on a board. It is written in React and TypeScript, with no component libraries.","","**Live app:** https://juanccastillog80.github.io/sticky-notes/ (deployed from `main` on every merge)","","## What it does","","| Feature                                              | Status                                                                                                 |","| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |","| 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons    |","| 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges              |","| 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                  |","| 4. Remove a note on a trash zone                     | Done: drop a Note with the pointer on the bottom-right Trash zone, or click its ×; both offer Undo     |","| Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                    |","| Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                        |","| Bonus III: note colours                              | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note |","","**Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Moving and resizing from the keyboard aren't built. In Safari, Tab skips buttons unless \"Press Tab to highlight each item on a webpage\" is on (Settings → Advanced), or use Option+Tab.","","The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead zone, Raise…) are defined in [`GLOSSARY.md`](GLOSSARY.md).","","### Not included","","The brief asks for 3 of the 4 features; all 4 are built. The bonuses are being added one at a time, to the same standard, since they make the UI better.","","- **localStorage and REST saving (bonuses IV, V)** are not built yet. The persistence design is recorded in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md). The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup. It doesn't save anything yet, so notes are lost on reload. The planned `?fail=&latency=` URL parameters for demoing failed and slow saves belong to that work and don't exist yet.","","## Setup","","Requires Node 26 (see `.nvmrc`).","","```sh","npm ci","npx playwright install chromium firefox   # for the browser tests","npm run dev                                # http://localhost:5173/sticky-notes/","```","","| Script                 | What it does                                                                  |","| ---------------------- | ----------------------------------------------------------------------------- |","| `npm run dev`          | Vite dev server                                                               |","| `npm run build`        | Typecheck, then production build into `dist/`                                 |","| `npm run preview`      | Serve the production build                                                    |","| `npm run typecheck`    | `tsc -b`                                                                      |","| `npm run lint`         | ESLint and Prettier check                                                     |","| `npm test`             | All tests: unit (Node) and browser (Chromium and Firefox, through Playwright) |","| `npm run test:unit`    | Unit tests only, including type-level tests                                   |","| `npm run test:browser` | Browser tests only. `BROWSERS=chrome,msedge,firefox` picks the browsers       |","| `npm run coverage`     | Unit coverage, with a 90% gate on the pure core                               |","","CI runs every check on each PR, and runs the browser tests again in Chrome, Edge and Firefox on Windows and in Chrome and Firefox on macOS. A merge to `main` deploys to GitHub Pages.","","## Architecture","","The UI layer is thin. The decisions are made in a pure core that never touches the DOM, and that core holds them all: how a Drag behaves, the geometry, and the state changes.","","```mermaid","flowchart LR","  subgraph UI[\"React components (thin)\"]","    Note[\"Note\u003cbr/>(useDrag)\"]","    Bar[\"Toolbar · swatches · Undo toast\"]","  end","  subgraph Core[\"Pure core: unit-tested, 90% coverage gate\"]","    Ctrl[\"Drag controller\"]","    Kinds[\"Drag kinds\u003cbr/>move · resize\"]","    Geo[\"geometry\"]","    Cmd[\"commands\"]","    NS[(\"notes store\")]","    US[(\"ui store\")]","  end","  Note -- \"DragHandlers\u003cbr/>pointer events\" --> Ctrl","  Ctrl -- \"DragIO\u003cbr/>Preview, Trash zone look\" --> Note","  Ctrl --> Kinds --> Geo","  Ctrl -- \"one action on release\" --> Cmd","  Bar --> Cmd","  Cmd --> NS & US","  NS -. \"notes[id]\" .-> Note","  US -. \"editingId === id\" .-> Note","```","","Solid arrows are calls. Dotted arrows are selector subscriptions, which decide what re-renders.","","### 1. One Drag engine, specialised by pure Drag kinds","","Moving and resizing share everything except what they show and what they save.","","- **Lifecycle.** _Mount_: `useDrag` creates one controller per Note. _Session_: a Press Raises the Note and attaches the listeners. The Dead zone then decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled.","- **No DOM in the controller.** `createDragController` (`src/drag/controller.ts`) talks to the DOM through two narrow interfaces, one for each direction. `DragIO` goes from the controller to the DOM: read scroll, attach listeners, write the Preview, draw the Trash zone, dispatch, report a Click. `DragHandlers` goes from the DOM to the controller: move, up, cancel, scroll, key. `useDrag` passes the real DOM. The unit tests pass a recording fake.","- **Kinds are pure functions** (`src/drag/kinds.ts`): `press` (the Raise), `preview` and `commit`, over the same geometry. What you release is therefore exactly what you saw. Resize was added as a second kind without changing the controller. The Trash zone belongs to the move kind: its `commit` returns a delete when the pointer is inside the zone.","- **React stays out of the hot path.** During a Drag the Preview is written straight to the Note's style. After the Raise, React renders nothing until release, when one action is dispatched.","- **A Click starts Editing.** A Press released inside the Dead zone is a Click, which puts the caret where you clicked. A Press inside text only Raises, so typing and selecting work normally. The Grip strip always moves the Note.","","### 2. Two small stores, read through selectors","","- **`createStore`** (`src/store/createStore.ts`) is a pure reducer behind `useSyncExternalStore`. The **notes** store holds each Note's position, size, text, colour and place in the Stacking order. The **ui** store holds the Note being edited, the Current colour and the Note that Undo would bring back.","- **Re-render only what changed.** The reducers keep every unchanged Note and the `ids` array at the same reference, and a no-op returns the same state and notifies nobody. The Board subscribes to `ids` and each Note to `notes[id]`, so moving one Note re-renders only that Note. `useIsEditing(id)` is a boolean per Note, so a change of Editing re-renders only the two Notes involved.","- **Rules that span both stores live in `commands.ts`**, so each reducer knows only its own store. Creating a Note gives it the Current colour and opens it in Editing. Deleting one ends its Editing and records it for Undo. Recolouring a Note also sets the Current colour. A Drag's commit goes through commands too, so a drop on the Trash zone gets the same Undo as the ×.","- The stores and commands reach components through a context whose value never changes. Reading it never causes a render, only subscriptions do.","- **Geometry is pure** (`src/geometry.ts`): clamping to the Board, the minimum size and resize maths. The reducer and the Drag kinds share it.","","### 3. Keyboard and focus","","- Each Note's `\u003carticle>` can be focused, followed in the Tab order by its ×. Keyboard focus (`:focus-visible`) Raises the Note, but a right-button press, which also focuses it, does not.","- Enter starts Editing, and Escape returns focus to the Note. Delete deletes the Note and moves focus to the next one, so the user keeps their place.","- The × is not a Press: it never Raises or drags. After it deletes a Note, `ignorePressesFor` swallows the second half of a double-click, so it can't land on the Note that was underneath.","","### 4. A fixed Board; persistence planned as local-first","","- The Board is a fixed 1920×1080 surface that scrolls under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can never become invalid when the window shrinks. A Drag adds the scroll delta, so the Note stays under the pointer while the wheel scrolls.","- `main.tsx` is the composition root. It builds the stores, renders, and only then starts the MSW worker. The worker is loaded as a separate chunk, so the first paint never waits on the network.","- The planned persistence ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in state rather than living inside the UI. The Local copy shows first, and a real HTTP client talks to a mocked backend (`src/mocks/`) that can be deleted without touching the client.","","### Testing","","The pure core (controller, kinds, reducers, commands, geometry) is unit-tested in Node, with property-based tests for the geometry, and is held to the coverage gate. Components are tested in real browsers through Playwright, including `\u003cProfiler>` tests that check moving, resizing, typing in, recolouring or deleting one Note re-renders no other.","","Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html), the Trash zone in [trash zone](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0006-trash-zone.html), and the keyboard in [keyboard navigation](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0033-keyboard-navigation.html).","","## Known limits","","- Notes are kept in memory only: a reload starts from an empty Board (see \"Not included\").","- Once persistence exists, syncing several tabs won't be handled: across tabs, the last save wins.","- Browser tests run in Chromium and Firefox on every PR, and also in Chrome and Edge on real Windows and macOS runners. None are skipped or retried. Any Firefox flakiness found will be recorded here rather than silenced.","- Desktop pointer input only. Touch and pen aren't targeted, per the brief.","","## Cross-browser sign-off","","Manual pass at 1024×768 and on a large monitor, in the latest Chrome, Edge and Firefox: see [`docs/cross-browser-checklist.md`](docs/cross-browser-checklist.md)."],"added":[54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,112,114,116]},{"path":"src/commands.ts","question":"Where do the rules that span both stores live?","summary":"Unchanged. Create, delete, recolour, pick a colour, commit a Drag, Undo.","owns":"Rules that touch both the notes and the ui store.","never":"Holds state of its own.","tested":"`src/commands.test.ts`.","lines":["import type { Rect } from './geometry';","import { newNoteId, type NoteColour, type NoteId } from './notes/note';","import type { NoteAction, NotesStore } from './notes/notesReducer';","import type { UiStore } from './ui/uiReducer';","","/** The rules that span stores, so that each reducer knows only its own store. */","export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }) {","  /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */","  function deleteNote(id: NoteId) {","    const note = notes.getSnapshot().notes[id];","    if (!note) return;","    if (ui.getSnapshot().editingId === id) ui.dispatch({ type: 'stopEditing' });","    ui.dispatch({ type: 'showUndo', note });","    notes.dispatch({ type: 'delete', id });","  }","","  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */","  function recolour(id: NoteId, colour: NoteColour) {","    if (!notes.getSnapshot().notes[id]) return;","    notes.dispatch({ type: 'setColour', id, colour });","    ui.dispatch({ type: 'setCurrentColour', colour });","  }","","  return {","    createNote: ({ x, y, width, height }: Rect) => {","      const colour = ui.getSnapshot().currentColour;","      const id = newNoteId();","      notes.dispatch({ type: 'create', note: { id, x, y, width, height, text: '', colour } });","      // A new Note opens straight into Editing.","      ui.dispatch({ type: 'startEditing', id });","    },","    deleteNote,","    recolour,","    /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */","    pickColour: (colour: NoteColour) => {","      const { editingId } = ui.getSnapshot();","      if (editingId) recolour(editingId, colour);","      else ui.dispatch({ type: 'setCurrentColour', colour });","    },","    /** Where a Drag saves. A delete (a drop on the Trash zone) goes through `deleteNote`, for Undo. */","    commit: (action: NoteAction) => {","      if (action.type === 'delete') deleteNote(action.id);","      else notes.dispatch(action);","    },","    undoDelete: () => {","      const note = ui.getSnapshot().lastDeleted;","      if (!note) return;","      notes.dispatch({ type: 'restore', note });","      ui.dispatch({ type: 'hideUndo' });","    },","  };","}"],"added":[]},{"path":"src/drag/kinds.ts","question":"How does a drop on the Trash zone become a delete?","summary":"Unchanged. The move kind's `commit` returns a delete when the pointer is inside the zone.","owns":"What each Drag kind shows and saves.","never":"Touches the DOM.","tested":"`src/drag/kinds.test.ts`.","lines":["import {","  contains,","  resizeRect,","  toCommittedRect,","  type Edges,","  type Point,","  type Rect,","} from '../geometry';","import type { Note } from '../notes/note';","import type { NoteAction } from '../notes/notesReducer';","","/** What a Drag kind may read besides its own rect and the Board delta. */","export interface DragContext {","  /** The pointer, in client coordinates. */","  readonly pointer: Point;","  /** The Trash zone's rect in client coordinates, measured at press, or `null` if it isn't on screen. */","  readonly trash: Rect | null;","}","","/**"," * What a Drag does: what it shows while it runs and what it saves at release."," * Pure, so `preview` and `commit` agree by construction."," */","export interface DragKind\u003cFrom extends Rect> {","  /** What a Press saves at once, before it is known to be a Drag or a Click. */","  press?: (from: From) => NoteAction | null;","  preview: (from: From, delta: Point, ctx: DragContext) => Rect;","  commit: (from: From, delta: Point, ctx: DragContext) => NoteAction | null;","  /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */","  overTrash?: (ctx: DragContext) => boolean;","}","","/** The rect a move shows, which is exactly the rect it saves. */","function moved(from: Rect, delta: Point): Rect {","  return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y });","}","","/** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */","const raise = (from: Note): NoteAction => ({ type: 'raise', id: from.id });","","/**"," * The pointer itself must be inside the zone, edges included: a large Note that only"," * brushes the zone is moved, not deleted."," */","function pointerInTrash({ pointer, trash }: DragContext): boolean {","  return trash !== null && contains(trash, pointer);","}","","export const moveKind: DragKind\u003cNote> = {","  press: raise,","  preview: moved,","  overTrash: pointerInTrash,","  commit(from, delta, ctx) {","    if (pointerInTrash(ctx)) return { type: 'delete', id: from.id };","    const { x, y } = moved(from, delta);","    return { type: 'move', id: from.id, x, y };","  },","};","","/** The 8 resize handles, named by the edges they move. */","export const RESIZE_HANDLES = [","  'n',","  's',","  'e',","  'w',","  'ne',","  'nw',","  'se',","  'sw',","] as const satisfies readonly Edges[];","export type ResizeHandle = (typeof RESIZE_HANDLES)[number];","","function resizeKind(handle: ResizeHandle): DragKind\u003cNote> {","  return {","    press: raise,","    preview: (from, delta) => resizeRect(from, delta, handle),","    commit(from, delta) {","      return { type: 'resize', id: from.id, ...resizeRect(from, delta, handle) };","    },","  };","}","","/** One kind per handle, built once. */","export const resizeKinds = Object.fromEntries(","  RESIZE_HANDLES.map((handle) => [handle, resizeKind(handle)]),",") as Record\u003cResizeHandle, DragKind\u003cNote>>;"],"added":[]},{"path":"src/StoresContext.ts","question":"Why does a change of Editing re-render only two Notes?","summary":"Unchanged. `useIsEditing` gives each Note a boolean.","owns":"The hooks components read the stores through.","never":"Changes value, so reading it never renders.","tested":"`src/editing.browser.test.tsx`.","lines":["import { createContext, use, useMemo } from 'react';","import { createCommands } from './commands';","import type { NotesState, NotesStore } from './notes/notesReducer';","import { useStore } from './store/createStore';","import type { NoteId } from './notes/note';","import type { UiState, UiStore } from './ui/uiReducer';","","export interface Stores {","  readonly notes: NotesStore;","  readonly ui: UiStore;","}","","/** Its value never changes, so reading it never causes a render. Subscriptions do. */","export const StoresContext = createContext\u003cStores | null>(null);","","export function useStores(): Stores {","  const stores = use(StoresContext);","  if (!stores) throw new Error('useStores needs a StoresContext provider');","  return stores;","}","","export function useNotes\u003cT>(selector: (state: NotesState) => T): T {","  return useStore(useStores().notes, selector);","}","","export function useUi\u003cT>(selector: (state: UiState) => T): T {","  return useStore(useStores().ui, selector);","}","","/** A boolean per Note, so a change of Editing re-renders only the two Notes involved. */","export function useIsEditing(id: NoteId): boolean {","  return useUi((state) => state.editingId === id);","}","","export function useCommands() {","  const stores = useStores();","  return useMemo(() => createCommands(stores), [stores]);","}"],"added":[]}],"flow":[["README.md","src/drag/kinds.ts","src/commands.ts","src/StoresContext.ts"]],"scenarios":[{"name":"A reviewer reads the Architecture section","steps":[{"title":"The diagram gives the overview","explain":"React components on one side, the pure core on the other. Solid arrows are calls, dotted arrows are selector subscriptions. It wasn't previewed locally: check that it draws on the PR's file view.","run":[{"file":"README.md","start":56,"end":77}]},{"title":"A drop on the Trash zone is a delete from the move kind","explain":"The README says the Trash zone belongs to the move kind. The pointer, not the Note's rect, must be inside the zone.","run":[{"file":"src/drag/kinds.ts","start":53,"end":53}]},{"title":"That delete goes through commands, so it gets Undo","explain":"A Drag's commit passes through `commit`, which sends a delete to `deleteNote`. That ends Editing and records the Note for Undo, the same as the ×.","run":[{"file":"src/commands.ts","start":40,"end":42},{"file":"src/commands.ts","start":8,"end":13}]},{"title":"A change of Editing re-renders only two Notes","explain":"Each Note subscribes to a boolean, not to `editingId`, so only the Notes whose boolean flips re-render.","run":[{"file":"src/StoresContext.ts","start":31,"end":31}]}]}],"notes":[{"title":"Claims checked against the tests","detail":"The Testing paragraph lists the `\u003cProfiler>` tests found in the browser tests: move, resize, setText, setColour, delete and the change of Editing."}],"omitted":{}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
