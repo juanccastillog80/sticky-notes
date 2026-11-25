@@ -1,7 +1,15 @@
-import { memo, useLayoutEffect, useRef, type KeyboardEvent, type PointerEvent } from 'react';
+import {
+  memo,
+  useLayoutEffect,
+  useRef,
+  type FocusEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react';
 import { useBoardDom } from '../BoardDomContext';
 import type { Point } from '../geometry';
 import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
+import { isInText } from '../drag/press';
 import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
 import { useCommands, useIsEditing, useNotes, useStores } from '../StoresContext';
@@ -15,6 +23,9 @@ import { ResizeHandles } from './ResizeHandles';
  * Idle, a press anywhere but a handle starts a move, and a Click starts Editing.
  * While Editing, the body is a textarea, so a press there only Raises (see `isInText`)
  * and Drags start from the Grip strip and the handles alone.
+ *
+ * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or
+ * Backspace deletes. A press prevents its default, so the pointer never focuses it.
  */
 export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
@@ -28,6 +39,8 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   // Where the Click that starts Editing puts the caret; `null` is the end of the text.
   const pendingCaret = useRef<number | null>(null);
+  // Escape ended Editing: the article takes focus once the textarea is gone.
+  const refocusWhenIdle = useRef(false);
   const start = useDrag(ref, { scrollerRef, trashRef, commit, onClick: startEditingAt });
 
   // Before paint, so the caret is in place on the first frame of Editing.
@@ -40,13 +53,25 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     editor.setSelectionRange(offset, offset);
   }, [editing]);
 
+  // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.
+  useLayoutEffect(() => {
+    if (editing || !refocusWhenIdle.current) return;
+    refocusWhenIdle.current = false;
+    ref.current?.focus();
+  }, [editing]);
+
   if (!note) return null;
 
-  function startEditingAt(pointer: Point) {
+  /** `caret` is a text offset, or `null` for the end of the text. */
+  function startEditing(caret: number | null) {
     if (editing) return;
-    // Measured on the idle text, which the textarea lays out identically.
-    pendingCaret.current = caretOffsetAt(textRef.current, pointer);
+    pendingCaret.current = caret;
     ui.dispatch({ type: 'startEditing', id });
+  }
+
+  function startEditingAt(pointer: Point) {
+    // Measured on the idle text, which the textarea lays out identically.
+    startEditing(caretOffsetAt(textRef.current, pointer));
   }
 
   function press(e: PointerEvent<HTMLElement>) {
@@ -64,7 +89,41 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 
   function keyDownInEditor(e: KeyboardEvent<HTMLTextAreaElement>) {
     // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.
-    if (e.key === 'Escape' && !e.defaultPrevented) stopEditing();
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    // So Tab carries on from this Note.
+    refocusWhenIdle.current = true;
+    stopEditing();
+  }
+
+  /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */
+  function keyDownOnNote(e: KeyboardEvent<HTMLElement>) {
+    if (e.target !== e.currentTarget || editing) return;
+    if (e.key === 'Enter') {
+      // Or the textarea, focused before the key's default runs, would get a line break.
+      e.preventDefault();
+      startEditing(null);
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteAndFocusNeighbour(e.currentTarget);
+    }
+  }
+
+  /** Focus goes to the next Note in DOM order, else the previous one, else the Board. */
+  function deleteAndFocusNeighbour(article: HTMLElement) {
+    const board = article.parentElement;
+    const siblings = board ? [...board.querySelectorAll<HTMLElement>(':scope > article')] : [];
+    const index = siblings.indexOf(article);
+    const next = siblings[index + 1] ?? siblings[index - 1] ?? board;
+    deleteNote(id);
+    // Before the Undo toast's effect runs, so it sees focus taken and leaves it here.
+    next?.focus();
+  }
+
+  function focusNote(e: FocusEvent<HTMLElement>) {
+    // Raised, so the focus ring is never under another Note. Only keyboard focus: a
+    // right-button press focuses the article too, and must not Raise. The textarea is
+    // focused only by Editing, which a Press or Enter already Raised.
+    if (e.target.matches(':focus-visible') && !isInText(e)) commit({ type: 'raise', id });
   }
 
   const { x, y, width, height, z, colour, text } = note;
@@ -72,12 +131,15 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     <article
       ref={ref}
       aria-label="Note"
+      tabIndex={0}
       className={styles.note}
       data-colour={colour}
       data-editing={editing ? '' : undefined}
       // Geometry only. `transform` is left free for the Drag Preview.
       style={{ left: x, top: y, width, height, zIndex: z }}
       onPointerDown={press}
+      onKeyDown={keyDownOnNote}
+      onFocus={focusNote}
     >
       <div className={styles.gripStrip} data-grip-strip="" />
       <button

@@ -61,6 +61,12 @@
   user-select: text;
 }
 
+/* Keyboard focus only: a press never focuses the article. Outset, so it reads on every colour. */
+.note:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .note[data-editing] {
   outline: 2px solid var(--color-accent);
 }

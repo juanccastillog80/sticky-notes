@@ -64,6 +64,8 @@ export function Board({
         <section
           ref={boardRef}
           aria-label="Board"
+          // Focusable by script only: where focus goes when the last Note is deleted.
+          tabIndex={-1}
           className={styles.board}
           style={BOARD_SIZE}
           onDoubleClick={createAtPointer}

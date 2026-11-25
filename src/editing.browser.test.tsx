@@ -120,7 +120,7 @@ it('dragging inside the text while Editing selects text and moves nothing', asyn
   expect(focused()?.selectionEnd).toBeGreaterThan(focused()?.selectionStart ?? 0);
 });
 
-it('Escape ends Editing', async () => {
+it('Escape ends Editing and focuses the Note', async () => {
   const { stores, noteA } = await setup();
   await editABeforeWorld(noteA);
 
@@ -128,7 +128,7 @@ it('Escape ends Editing', async () => {
 
   expect(stores.ui.getSnapshot().editingId).toBeNull();
   await expect.element(editor(noteA)).not.toBeInTheDocument();
-  expect(document.activeElement).toBe(document.body);
+  await expect.element(noteA).toHaveFocus();
 });
 
 it('a press on empty Board ends Editing', async () => {
@@ -138,7 +138,8 @@ it('a press on empty Board ends Editing', async () => {
   await press(board, { x: 500, y: 500 });
 
   expect(stores.ui.getSnapshot().editingId).toBeNull();
-  expect(document.activeElement).toBe(document.body);
+  // The Board is focusable, for when the last Note is deleted from the keyboard.
+  expect(document.activeElement).toBe(board.element());
 });
 
 it('a press on another Note ends Editing', async () => {
