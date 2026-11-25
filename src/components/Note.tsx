@@ -25,7 +25,8 @@ import { ResizeHandles } from './ResizeHandles';
  * and Drags start from the Grip strip and the handles alone.
  *
  * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or
- * Backspace deletes. A press prevents its default, so the pointer never focuses it.
+ * Backspace deletes. A left press prevents its default, so it never focuses the article;
+ * a right or middle press can, which is why only keyboard focus (`:focus-visible`) Raises.
  */
 export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
@@ -97,7 +98,8 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 
   /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */
   function keyDownOnNote(e: KeyboardEvent<HTMLElement>) {
-    if (e.target !== e.currentTarget || editing) return;
+    // With a modifier, the key belongs to the browser or the system (Cmd+Backspace and the like).
+    if (e.target !== e.currentTarget || editing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Enter') {
       // Or the textarea, focused before the key's default runs, would get a line break.
       e.preventDefault();
@@ -108,7 +110,10 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     }
   }
 
-  /** Focus goes to the next Note in DOM order, else the previous one, else the Board. */
+  /**
+   * Keeps the user's place for the next Tab: focus left on the removed article would
+   * fall to the body, and Tab would start again from the toolbar.
+   */
   function deleteAndFocusNeighbour(article: HTMLElement) {
     const board = article.parentElement;
     const siblings = board ? [...board.querySelectorAll<HTMLElement>(':scope > article')] : [];

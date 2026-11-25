@@ -61,7 +61,7 @@
   user-select: text;
 }
 
-/* Keyboard focus only: a press never focuses the article. Outset, so it reads on every colour. */
+/* Keyboard focus only: a left press never focuses the article. Outset, so it reads on every colour. */
 .note:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
