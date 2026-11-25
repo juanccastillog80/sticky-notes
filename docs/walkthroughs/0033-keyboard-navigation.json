@@ -1,0 +1,299 @@
+{
+  "issue": 33,
+  "title": "Keyboard navigation: focus, edit and delete Notes",
+  "lede": "Each Note's `<article>` can now take focus. Tab moves through Notes in DOM order, each followed by its ×. Keyboard focus **Raises** the Note and shows a ring. **Enter** starts **Editing** with the caret at the end. **Escape** ends it and gives focus back to the Note. **Delete** or **Backspace** deletes the Note through `deleteNote`, so the **Undo toast** shows, and moves focus to a neighbour. Nothing new happens on a pointer **Press**.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What does each key do on a focused Note, and when does focus move?",
+      "summary": "The article gets `tabIndex={0}`, a key handler that only reacts to keys aimed at the article itself, and a focus handler that Raises on keyboard focus.",
+      "owns": "Enter, Delete, Backspace and Escape on a Note, and where focus goes after each.",
+      "never": "Reacts to keys typed in the textarea or pressed on the ×.",
+      "tested": "Browser tests in `keyboard.browser.test.tsx` and `editing.browser.test.tsx`."
+    },
+    {
+      "path": "src/components/Note.module.css",
+      "question": "What does a focused Note look like?",
+      "summary": "An accent outline, outset 2 px, only on `:focus-visible`.",
+      "owns": "The Note's focus ring.",
+      "never": "Shows for a pointer focus.",
+      "tested": "Browser test: a focused Note shows a solid outline at least 2 px wide."
+    },
+    {
+      "path": "src/components/useStopEditing.ts",
+      "question": "Why does Escape need a second step to put focus on the Note?",
+      "summary": "It blurs the textarea and ends Editing. Focus lands on the body until the Note takes it back.",
+      "owns": "Ending Editing from anywhere.",
+      "never": "Decides where focus goes next.",
+      "tested": "Unchanged. Covered by the editing browser tests."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "What does a keyboard delete share with the ×?",
+      "summary": "The same `deleteNote`: Editing ends if it was this Note, the Note is kept for Undo, then deleted.",
+      "owns": "Rules that span both stores.",
+      "never": "Touches the DOM or focus.",
+      "tested": "Unchanged. Node tests in `commands.test.ts`."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "What does a focus Raise cost when the Note is already in front?",
+      "summary": "Nothing: `raise` returns the same state, so no Note re-renders.",
+      "owns": "The Stacking order.",
+      "never": "Knows about focus.",
+      "tested": "Unchanged. Node tests for `raise`."
+    },
+    {
+      "path": "src/components/UndoToast.tsx",
+      "question": "Why doesn't the Undo button take focus after a keyboard delete from a Note?",
+      "summary": "It only takes focus when focus fell to the body. The Note has already handed focus to a neighbour by the time the toast's effect runs.",
+      "owns": "The toast and focus after a × delete.",
+      "never": "Moves focus away from a Note.",
+      "tested": "Unchanged. Its × keyboard test still passes."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "Where does focus go when the last Note is deleted?",
+      "summary": "To the Board, which is now focusable from script with `tabIndex={-1}`.",
+      "owns": "The Board's focusability.",
+      "never": "Handles keys.",
+      "tested": "Browser test: Backspace on the only Note focuses the Board."
+    },
+    {
+      "path": "src/components/Board.module.css",
+      "question": "What does a focused Board look like?",
+      "summary": "An accent outline, inset 2 px, only on `:focus-visible`.",
+      "owns": "The Board's focus ring.",
+      "never": "Changes the Board's edge line or size.",
+      "tested": "Not checked by a test; seen only after the last Note is deleted from the keyboard."
+    },
+    {
+      "path": "src/keyboard.browser.test.tsx",
+      "question": "How do the tests prove each acceptance criterion?",
+      "summary": "Real key presses in Chromium and Firefox, checked against the stores and `document.activeElement`.",
+      "owns": "The keyboard model's tests.",
+      "never": "Fakes focus events: it focuses elements and presses keys.",
+      "tested": "Runs in CI's browser project."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/notes/notesReducer.ts"],
+    ["src/components/Note.tsx", "src/components/useStopEditing.ts"],
+    [
+      "src/components/Note.tsx",
+      "src/commands.ts",
+      "src/components/Board.tsx",
+      "src/components/UndoToast.tsx"
+    ]
+  ],
+  "scenarios": [
+    {
+      "name": "Tab to a Note, edit it, and Escape back",
+      "steps": [
+        {
+          "title": "Tab lands on the Note's article",
+          "explain": "`tabIndex={0}` puts every article in the Tab order in DOM order, which is creation order, with its × right after it. Stacking order would change with every Raise, so the Tab order would keep jumping. The focus handler Raises the Note so its ring is never under another Note. It checks `:focus-visible` because a right-button press focuses the article too (only a left Press prevents its default), and that must not Raise.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "tabIndex={0}"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function focusNote(e: FocusEvent<HTMLElement>) {",
+              "to": "if (e.target.matches(':focus-visible') && !isInText(e)) commit({ type: 'raise', id });"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function raise(state: NotesState, id: NoteId): NotesState {",
+              "to": "return { ...withNote(state, { ...note, z }), topZ: z };"
+            }
+          ]
+        },
+        {
+          "title": "The ring",
+          "explain": "Outset by 2 px, so it is drawn on the Board around the Note, not on the Note's own colour. It reads the same on all six colours. Only `:focus-visible`, so it shows for keyboard focus and not after a right-click.",
+          "run": [
+            {
+              "file": "src/components/Note.module.css",
+              "from": ".note:focus-visible {",
+              "to": "outline-offset: 2px;"
+            }
+          ]
+        },
+        {
+          "title": "keydown Enter on the article",
+          "explain": "The handler is on the article, so keys from the textarea and the × bubble up to it. `e.target !== e.currentTarget` drops them. Keys with Cmd, Ctrl or Alt belong to the browser. `preventDefault` matters: the textarea mounts and takes focus before the key's default action runs, and would otherwise get a line break.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function keyDownOnNote(e: KeyboardEvent<HTMLElement>) {",
+              "to": "startEditing(null);"
+            }
+          ]
+        },
+        {
+          "title": "Editing starts with the caret at the end",
+          "explain": "The same `startEditing` a Click uses, with `null` for the caret instead of an offset measured under the pointer. The layout effect then focuses the textarea and puts the caret at `value.length`, before paint.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function startEditing(caret: number | null) {",
+              "to": "ui.dispatch({ type: 'startEditing', id });"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const offset = pendingCaret.current ?? editor.value.length;",
+              "to": "editor.setSelectionRange(offset, offset);"
+            }
+          ]
+        },
+        {
+          "title": "keydown Escape in the textarea",
+          "explain": "An Escape that cancelled a Drag was prevented by the Drag engine and still leaves Editing on. Otherwise the flag is set and Editing ends, which blurs the textarea, so focus is briefly on the body.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "if (e.key !== 'Escape' || e.defaultPrevented) return;",
+              "to": "stopEditing();"
+            },
+            {
+              "file": "src/components/useStopEditing.ts",
+              "from": "const focused = document.activeElement;",
+              "to": "ui.dispatch({ type: 'stopEditing' });"
+            }
+          ]
+        },
+        {
+          "title": "The textarea unmounts, then the article takes focus",
+          "explain": "This waits for the render that removes the textarea. When the article was focused straight from the key handler, while the textarea was still mounted, the next Tab in Firefox skipped the × and went to the next Note. The Escape test failed in Firefox that way and passes with this effect.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "if (editing || !refocusWhenIdle.current) return;",
+              "to": "ref.current?.focus();"
+            }
+          ]
+        },
+        {
+          "title": "The test",
+          "explain": "Enter, then typing, gives `hello there`. With a line break typed by the Enter, it would be `hello\\n there`. The caret check runs before typing.",
+          "run": [
+            {
+              "file": "src/keyboard.browser.test.tsx",
+              "from": "it('Enter on a focused Note starts Editing with the caret at the end, and typing changes the text', async () => {",
+              "to": "expect(stores.notes.getSnapshot().notes[a.id]?.text).toBe('hello there');"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Delete a focused Note",
+      "steps": [
+        {
+          "title": "keydown Delete (or Backspace) on the article",
+          "explain": "The same guard as Enter: only keys aimed at the article itself, not while Editing, no modifier. So Backspace in the textarea only edits text.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "if (e.target !== e.currentTarget || editing || e.metaKey || e.ctrlKey || e.altKey) return;"
+            },
+            {
+              "file": "src/components/Note.tsx",
+              "from": "} else if (e.key === 'Delete' || e.key === 'Backspace') {",
+              "to": "deleteAndFocusNeighbour(e.currentTarget);"
+            }
+          ]
+        },
+        {
+          "title": "Pick the neighbour, delete, then focus it",
+          "explain": "The neighbour is picked from the DOM before the delete, while this article is still among its siblings: the next one, else the previous one, else the Board. The delete goes through `deleteNote`, so Undo works as it does for the ×. Focus moves in the same event, before the Undo toast's effect runs.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function deleteAndFocusNeighbour(article: HTMLElement) {",
+              "to": "next?.focus();"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "function deleteNote(id: NoteId) {",
+              "to": "notes.dispatch({ type: 'delete', id });"
+            }
+          ]
+        },
+        {
+          "title": "The Undo toast shows but leaves focus alone",
+          "explain": "Its effect takes focus only when focus fell to the body, which is what happens when a focused × removes itself. Here a Note or the Board already has focus, so the user carries on tabbing from where they were.",
+          "run": [
+            {
+              "file": "src/components/UndoToast.tsx",
+              "from": "if (lastDeleted && document.activeElement === document.body) undoRef.current?.focus();"
+            }
+          ]
+        },
+        {
+          "title": "The last Note: focus goes to the Board",
+          "explain": "`tabIndex={-1}` makes the Board focusable from script without adding it to the Tab order. The side effect is that a press on empty Board now focuses the Board instead of leaving focus on the body. Its ring is inset, because the scroller would clip an outset one.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "tabIndex={-1}"
+            },
+            {
+              "file": "src/components/Board.module.css",
+              "from": ".board:focus-visible {",
+              "to": "outline-offset: -2px;"
+            }
+          ]
+        },
+        {
+          "title": "The test",
+          "explain": "Backspace on the last of two Notes focuses the previous one. Backspace again on the only Note focuses the Board.",
+          "run": [
+            {
+              "file": "src/keyboard.browser.test.tsx",
+              "from": "it('Backspace on the last Note focuses the previous one, and on the only Note focuses the Board', async () => {",
+              "to": "await expect.element(board).toHaveFocus();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "When nothing should happen",
+      "steps": [
+        {
+          "title": "A right-button press on a Note",
+          "explain": "`useDrag` ignores it and doesn't prevent its default, so the browser focuses the article. Mouse focus doesn't match `:focus-visible`, so the focus handler doesn't Raise, and nothing starts Editing. The test records every Notes action and expects none.",
+          "run": [
+            {
+              "file": "src/keyboard.browser.test.tsx",
+              "from": "it('a right-button press may focus a Note, but neither Raises it nor starts Editing', async () => {",
+              "to": "expect(stores.ui.getSnapshot().editingId).toBeNull();"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Two existing assertions changed",
+      "detail": "`editing.browser.test.tsx` expected focus on the body after Escape and after a press on empty Board. Escape now focuses the Note, as the issue asks. A press on empty Board now focuses the Board, a side effect of `tabIndex={-1}`. The alternative, preventing the default of a press on empty Board, risks double-click-to-create for no visible gain."
+    },
+    {
+      "title": "Raise only on `:focus-visible`",
+      "detail": "The issue says focusing a Note Raises it. A right or middle press focuses the article too, and Raising then would change pointer behaviour. Focus set from script (after Escape, after a delete) matches `:focus-visible` in Chromium and Firefox. Safari isn't tested, so it belongs on the cross-browser checklist."
+    },
+    {
+      "title": "Neighbour order is read from the DOM",
+      "detail": "`deleteAndFocusNeighbour` reads the article's siblings, not the store's `ids`. Both are in the same order because the Board renders `ids` in order. The DOM was used because it hands over the elements to focus directly. The cost is that the Note assumes its parent is the Board."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "Editing also starts with Enter on a focused Note.",
+    "README.md": "A Keyboard paragraph under What it does.",
+    "src/editing.browser.test.tsx": "Two focus assertions updated; see notes."
+  }
+}
