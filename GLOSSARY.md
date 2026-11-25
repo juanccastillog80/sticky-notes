@@ -53,7 +53,7 @@ The small distance the pointer must travel after a press before it becomes a dra
 _Avoid_: Drag threshold, slop, tolerance
 
 **Editing**:
-The state of the one note whose text is being typed into. A click on a note enters it; Escape or pressing anywhere else ends it. While editing, the note's body works as text and only its grip strip moves it.
+The state of the one note whose text is being typed into. A click on a note, or Enter on a focused note, enters it; Escape or pressing anywhere else ends it. While editing, the note's body works as text and only its grip strip moves it.
 _Avoid_: Edit mode, focus, active note
 
 **Grip strip**:

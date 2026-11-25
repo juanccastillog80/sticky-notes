@@ -61,6 +61,15 @@
   user-select: text;
 }
 
+/*
+ * Keyboard focus only: a left press never focuses the article. Outset, so it reads on
+ * every colour, and dashed, so it never reads as the solid Editing outline.
+ */
+.note:focus-visible {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 3px;
+}
+
 .note[data-editing] {
   outline: 2px solid var(--color-accent);
 }
