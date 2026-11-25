@@ -269,6 +269,26 @@ describe('setText', () => {
   });
 });
 
+describe('setColour', () => {
+  it('recolours that Note only, keeping ids and the other Notes by reference', () => {
+    const state = makeState(a, b);
+    const next = notesReducer(state, { type: 'setColour', id: a.id, colour: 'green' });
+
+    expect(next.notes[a.id]).toEqual({ ...a, colour: 'green' });
+    expect(next.ids).toBe(state.ids);
+    expect(next.notes[b.id]).toBe(b);
+  });
+
+  it('returns the same state when the colour does not change, or the Note is missing', () => {
+    const state = makeState(a, b);
+
+    expect(notesReducer(state, { type: 'setColour', id: a.id, colour: a.colour })).toBe(state);
+    expect(notesReducer(state, { type: 'setColour', id: testId('gone'), colour: 'blue' })).toBe(
+      state,
+    );
+  });
+});
+
 describe('delete', () => {
   it('removes the Note, keeping the other Notes by reference', () => {
     const state = makeState(a, b);

@@ -14,7 +14,8 @@ export type UiAction =
   | { readonly type: 'startEditing'; readonly id: NoteId }
   | { readonly type: 'stopEditing' }
   | { readonly type: 'showUndo'; readonly note: Note }
-  | { readonly type: 'hideUndo' };
+  | { readonly type: 'hideUndo' }
+  | { readonly type: 'setCurrentColour'; readonly colour: NoteColour };
 
 export const INITIAL_UI: UiState = { editingId: null, currentColour: 'yellow', lastDeleted: null };
 
@@ -32,6 +33,8 @@ export function uiReducer(state: UiState, action: UiAction): UiState {
       return withLastDeleted(state, action.note);
     case 'hideUndo':
       return withLastDeleted(state, null);
+    case 'setCurrentColour':
+      return withCurrentColour(state, action.colour);
     default:
       return assertNever(action);
   }
@@ -43,6 +46,10 @@ function withEditing(state: UiState, editingId: NoteId | null): UiState {
 
 function withLastDeleted(state: UiState, lastDeleted: Note | null): UiState {
   return lastDeleted === state.lastDeleted ? state : { ...state, lastDeleted };
+}
+
+function withCurrentColour(state: UiState, currentColour: NoteColour): UiState {
+  return currentColour === state.currentColour ? state : { ...state, currentColour };
 }
 
 /** Stops compiling when an action has no case. */

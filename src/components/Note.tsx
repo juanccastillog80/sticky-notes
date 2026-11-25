@@ -79,7 +79,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
       style={{ left: x, top: y, width, height, zIndex: z }}
       onPointerDown={press}
     >
-      <div className={styles.gripStrip} />
+      <div className={styles.gripStrip} data-grip-strip="" />
       <button
         type="button"
         aria-label="Delete note"

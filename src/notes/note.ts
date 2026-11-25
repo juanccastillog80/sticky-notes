@@ -15,6 +15,16 @@ export function parseNoteId(raw: unknown): NoteId | null {
 export const NOTE_COLOURS = ['yellow', 'orange', 'pink', 'purple', 'blue', 'green'] as const;
 export type NoteColour = (typeof NOTE_COLOURS)[number];
 
+/** What a swatch is called, to people and to assistive tech. */
+export const COLOUR_NAMES: Record<NoteColour, string> = {
+  yellow: 'Yellow',
+  orange: 'Orange',
+  pink: 'Pink',
+  purple: 'Purple',
+  blue: 'Blue',
+  green: 'Green',
+};
+
 export interface Note extends Rect {
   readonly id: NoteId;
   readonly text: string;

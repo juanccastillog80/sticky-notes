@@ -142,3 +142,66 @@ describe('commit, where a Drag saves', () => {
     expect(ui.getSnapshot().lastDeleted).toBeNull();
   });
 });
+
+describe('recolour', () => {
+  const a = makeNote({ id: testId('a'), colour: 'yellow', z: 1 });
+  const b = makeNote({ id: testId('b'), x: 500, colour: 'yellow', z: 2 });
+
+  function setup() {
+    const notes = createNotesStore();
+    notes.dispatch({ type: 'load', notes: [a, b] });
+    const ui = createUiStore();
+    return { notes, ui, ...createCommands({ notes, ui }) };
+  }
+
+  it("sets the Note's colour and the Current colour", () => {
+    const { notes, ui, recolour } = setup();
+
+    recolour(a.id, 'pink');
+
+    expect(notes.getSnapshot().notes[a.id]?.colour).toBe('pink');
+    expect(notes.getSnapshot().notes[b.id]?.colour).toBe('yellow');
+    expect(ui.getSnapshot().currentColour).toBe('pink');
+  });
+
+  it('a missing Note changes nothing, not even the Current colour', () => {
+    const { notes, ui, recolour } = setup();
+    const before = notes.getSnapshot();
+
+    recolour(testId('gone'), 'pink');
+
+    expect(notes.getSnapshot()).toBe(before);
+    expect(ui.getSnapshot()).toBe(INITIAL_UI);
+  });
+});
+
+describe('pickColour, what a swatch does', () => {
+  const a = makeNote({ id: testId('a'), colour: 'yellow', z: 1 });
+
+  function setup() {
+    const notes = createNotesStore();
+    notes.dispatch({ type: 'load', notes: [a] });
+    const ui = createUiStore();
+    return { notes, ui, ...createCommands({ notes, ui }) };
+  }
+
+  it('while Editing, recolours the edited Note and sets the Current colour', () => {
+    const { notes, ui, pickColour } = setup();
+    ui.dispatch({ type: 'startEditing', id: a.id });
+
+    pickColour('blue');
+
+    expect(notes.getSnapshot().notes[a.id]?.colour).toBe('blue');
+    expect(ui.getSnapshot().currentColour).toBe('blue');
+  });
+
+  it('while not Editing, sets only the Current colour', () => {
+    const { notes, ui, pickColour } = setup();
+    const before = notes.getSnapshot();
+
+    pickColour('blue');
+
+    expect(notes.getSnapshot()).toBe(before);
+    expect(ui.getSnapshot().currentColour).toBe('blue');
+  });
+});

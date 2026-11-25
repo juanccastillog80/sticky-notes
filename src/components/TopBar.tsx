@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { ColourSwatches } from './ColourSwatches';
 import { NewNoteButtons } from './NewNoteButtons';
 import styles from './TopBar.module.css';
 
@@ -7,6 +8,7 @@ export function TopBar({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement 
     <header className={styles.topBar}>
       <h1 className={styles.name}>Sticky Notes</h1>
       <NewNoteButtons scrollerRef={scrollerRef} />
+      <ColourSwatches />
     </header>
   );
 }

@@ -11,6 +11,9 @@
 }
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-width: 30px;
   height: 30px;
   padding: 0 9px;
@@ -21,6 +24,15 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* A small Note in the Current colour: background with its strip on top. */
+.glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 1.5px;
+  background: linear-gradient(to bottom, var(--note-strip) 3px, var(--note-bg) 3px);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 14%);
 }
 
 .button:hover {

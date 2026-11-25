@@ -44,3 +44,12 @@ describe('Undo', () => {
     expect(uiReducer(INITIAL_UI, { type: 'hideUndo' })).toBe(INITIAL_UI);
   });
 });
+
+describe('Current colour', () => {
+  it('setCurrentColour sets it, and returns the same state when it does not change', () => {
+    const blue = uiReducer(INITIAL_UI, { type: 'setCurrentColour', colour: 'blue' });
+
+    expect(blue.currentColour).toBe('blue');
+    expect(uiReducer(blue, { type: 'setCurrentColour', colour: 'blue' })).toBe(blue);
+  });
+});

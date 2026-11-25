@@ -1,5 +1,5 @@
 import type { Rect } from './geometry';
-import { newNoteId, type NoteId } from './notes/note';
+import { newNoteId, type NoteColour, type NoteId } from './notes/note';
 import type { NoteAction, NotesStore } from './notes/notesReducer';
 import type { UiStore } from './ui/uiReducer';
 
@@ -14,6 +14,13 @@ export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }
     notes.dispatch({ type: 'delete', id });
   }
 
+  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */
+  function recolour(id: NoteId, colour: NoteColour) {
+    if (!notes.getSnapshot().notes[id]) return;
+    notes.dispatch({ type: 'setColour', id, colour });
+    ui.dispatch({ type: 'setCurrentColour', colour });
+  }
+
   return {
     createNote: ({ x, y, width, height }: Rect) => {
       const colour = ui.getSnapshot().currentColour;
@@ -23,6 +30,13 @@ export function createCommands({ notes, ui }: { notes: NotesStore; ui: UiStore }
       ui.dispatch({ type: 'startEditing', id });
     },
     deleteNote,
+    recolour,
+    /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */
+    pickColour: (colour: NoteColour) => {
+      const { editingId } = ui.getSnapshot();
+      if (editingId) recolour(editingId, colour);
+      else ui.dispatch({ type: 'setCurrentColour', colour });
+    },
     /** Where a Drag saves. A delete (a drop on the Trash zone) goes through `deleteNote`, for Undo. */
     commit: (action: NoteAction) => {
       if (action.type === 'delete') deleteNote(action.id);

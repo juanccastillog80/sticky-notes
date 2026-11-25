@@ -1,4 +1,4 @@
-/* Global CSS: the reset and the design tokens only. */
+/* Global CSS: the reset, the design tokens and the Note colours. */
 *,
 *::before,
 *::after {
@@ -27,8 +27,25 @@ body {
   --color-board: #fbfaf7;
   --color-board-dot: #dcd8cf;
   --color-note-text: #2b2a26;
+  /* Similar lightness; each background keeps --color-note-text above 12:1. */
   --color-note-yellow: #fdf0a6;
   --color-note-yellow-strip: #f6e27e;
+  --color-note-yellow-strip-editing: #e9d164;
+  --color-note-orange: #fee8d1;
+  --color-note-orange-strip: #fbd3aa;
+  --color-note-orange-strip-editing: #f2bf8c;
+  --color-note-pink: #fde6ee;
+  --color-note-pink-strip: #f8cbdb;
+  --color-note-pink-strip-editing: #efb3c8;
+  --color-note-purple: #f0e9fd;
+  --color-note-purple-strip: #ddd0f7;
+  --color-note-purple-strip-editing: #cbbbf0;
+  --color-note-blue: #e0eefc;
+  --color-note-blue-strip: #c6ddf7;
+  --color-note-blue-strip-editing: #adcdf1;
+  --color-note-green: #e1f3da;
+  --color-note-green-strip: #c8e7bc;
+  --color-note-green-strip-editing: #b0daa1;
 
   --shadow-board: 0 6px 24px rgb(0 0 0 / 8%);
   --shadow-note: 0 1px 2px rgb(0 0 0 / 10%), 0 3px 8px rgb(0 0 0 / 7%);
@@ -37,4 +54,45 @@ body {
   font-family: var(--font-family);
   color: var(--color-text);
   background: var(--color-backdrop);
+}
+
+/*
+ * Anything with a `data-colour` (a Note, a swatch, a New-button glyph) gets that colour's
+ * three shades, so a recolour is one attribute change.
+ */
+
+[data-colour='yellow'] {
+  --note-bg: var(--color-note-yellow);
+  --note-strip: var(--color-note-yellow-strip);
+  --note-strip-editing: var(--color-note-yellow-strip-editing);
+}
+
+[data-colour='orange'] {
+  --note-bg: var(--color-note-orange);
+  --note-strip: var(--color-note-orange-strip);
+  --note-strip-editing: var(--color-note-orange-strip-editing);
+}
+
+[data-colour='pink'] {
+  --note-bg: var(--color-note-pink);
+  --note-strip: var(--color-note-pink-strip);
+  --note-strip-editing: var(--color-note-pink-strip-editing);
+}
+
+[data-colour='purple'] {
+  --note-bg: var(--color-note-purple);
+  --note-strip: var(--color-note-purple-strip);
+  --note-strip-editing: var(--color-note-purple-strip-editing);
+}
+
+[data-colour='blue'] {
+  --note-bg: var(--color-note-blue);
+  --note-strip: var(--color-note-blue-strip);
+  --note-strip-editing: var(--color-note-blue-strip-editing);
+}
+
+[data-colour='green'] {
+  --note-bg: var(--color-note-green);
+  --note-strip: var(--color-note-green-strip);
+  --note-strip-editing: var(--color-note-green-strip-editing);
 }
