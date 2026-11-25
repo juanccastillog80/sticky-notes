@@ -104,3 +104,21 @@ it('a double-click on the zone creates nothing', async () => {
 
   expect(stores.notes.getSnapshot().ids).toEqual([a.id, b.id]);
 });
+
+it.each([
+  ['scrolled all the way to the bottom-right', 1024, 768],
+  ['in a window larger than the Board', 2400, 1400],
+])('stays over the Board when %s', async (_, width, height) => {
+  await page.viewport(width, height);
+  const { zone, scroller } = await setup();
+  const board = scroller.firstElementChild;
+  if (!board) throw new Error('No Board');
+
+  scroller.scrollTo(99999, 99999);
+  await new Promise(requestAnimationFrame);
+
+  const z = zone.getBoundingClientRect();
+  const b = board.getBoundingClientRect();
+  expect(z.right).toBeLessThanOrEqual(b.right - 14);
+  expect(z.bottom).toBeLessThanOrEqual(b.bottom - 14);
+});

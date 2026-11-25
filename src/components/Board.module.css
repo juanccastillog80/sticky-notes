@@ -1,4 +1,6 @@
 .viewport {
+  /* The backdrop past the Board's right and bottom edges. The Trash zone keeps clear of it. */
+  --board-end-gap: 24px;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -9,7 +11,7 @@
   inset: 0;
   overflow: auto;
   /* Room to see the Board's edge when scrolled all the way. None at the top-left, so scroll offsets are Board coordinates. */
-  padding: 0 24px 24px 0;
+  padding: 0 var(--board-end-gap) var(--board-end-gap) 0;
   background: var(--color-backdrop);
 }
 

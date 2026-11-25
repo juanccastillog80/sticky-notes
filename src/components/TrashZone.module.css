@@ -1,8 +1,22 @@
-/* The bottom-right of the visible Board, inset from the scrollbars. Set in TrashZone. */
+/*
+ * 14 px inside the bottom-right of the visible Board: the window's corner, less the
+ * scrollbars and the backdrop past the Board's edge, or the Board's own corner in a
+ * window larger than the Board. The Board starts at the viewport's top-left, so `100%`
+ * minus the visible Board's width is the distance from the right. The scrollbar sizes
+ * and the Board size are set in TrashZone.
+ */
 .zone {
+  --visible-board-width: min(
+    100% - var(--scrollbar-x, 0px) - var(--board-end-gap),
+    var(--board-width)
+  );
+  --visible-board-height: min(
+    100% - var(--scrollbar-y, 0px) - var(--board-end-gap),
+    var(--board-height)
+  );
   position: absolute;
-  right: calc(14px + var(--scrollbar-x, 0px));
-  bottom: calc(14px + var(--scrollbar-y, 0px));
+  right: calc(100% - var(--visible-board-width) + 14px);
+  bottom: calc(100% - var(--visible-board-height) + 14px);
   z-index: 1;
   display: grid;
   place-content: center;

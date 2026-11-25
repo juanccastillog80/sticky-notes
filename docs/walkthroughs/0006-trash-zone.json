@@ -68,12 +68,17 @@
       "steps": [
         {
           "title": "The scroll container changes size",
-          "explain": "The zone sits outside the scroll container, so it never scrolls, but the container's scrollbars come and go with the window size. The effect measures them and moves the zone inside them. On macOS with overlay scrollbars both are 0. I checked only at 1024×768 in the browser tests; please try a narrow window.",
+          "explain": "The zone sits outside the scroll container, so it never scrolls, but the container's scrollbars come and go with the window size. The effect measures them; the CSS then puts the zone 14 px inside the visible Board's corner: the window's corner less the scrollbars and the 24 px backdrop past the Board's edge, or the Board's own corner in a window larger than the Board. So when scrolled all the way, the zone is still over the Board. Browser tests check 1024×768 scrolled to the end and a 2400×1400 window.",
           "run": [
             {
               "file": "src/components/TrashZone.tsx",
               "from": "const inset = () => {",
               "to": "observer.observe(scroller);"
+            },
+            {
+              "file": "src/components/TrashZone.tsx",
+              "from": "'--board-width': `${String(BOARD_SIZE.width)}px`,",
+              "to": "'--board-height': `${String(BOARD_SIZE.height)}px`,"
             }
           ]
         }
@@ -227,7 +232,7 @@
     "src/App.tsx": "Creates `trashRef` and adds it to the `BoardDom` value.",
     "src/BoardDomContext.ts": "Adds `trashRef`.",
     "src/components/Board.tsx": "Renders `<TrashZone />` in the viewport, before the toast.",
-    "src/components/TrashZone.module.css": "Quiet, armed and over looks; the scrollbar inset.",
+    "src/components/TrashZone.module.css": "Quiet, armed and over looks; the inset inside the visible Board's corner.",
     "src/components/Note.module.css": "The Note's `data-over-trash` look.",
     "src/tokens.css": "`--color-danger` and `--color-danger-soft`.",
     "src/geometry.ts": "`contains(rect, point)`, edges included.",
@@ -235,6 +240,7 @@
     "src/drag/controller.test.ts": "Edge-triggered `writeTrash` tests.",
     "src/drag/kinds.test.ts": "Hit rule tests.",
     "src/trash.browser.test.tsx": "Real-mouse tests: pinned position, states, drop and Undo, brushing, double-click.",
-    "test/mouse.ts": "Exports `pointIn` for the new browser test."
+    "test/mouse.ts": "Exports `pointIn` for the new browser test.",
+    "src/components/Board.module.css": "The 24 px backdrop gap becomes `--board-end-gap`, which the Trash zone reads."
   }
 }
