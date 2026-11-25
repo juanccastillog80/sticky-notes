@@ -1,0 +1,153 @@
+{
+  "title": "A Click on a Note body survives Chrome's button-less move",
+  "lede": "Sometimes a click on a Note body didn't start Editing. If the pointer wobbles as the button is let go, Chrome sends a `pointermove` with `buttons === 0` just before the `pointerup`, in the same millisecond. The controller read that move as a release it couldn't see and ended the Press with no Click. Inside the Dead zone, it now waits for the `pointerup`, which decides.",
+  "files": [
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "Where do the pointer events come from?",
+      "summary": "While a Press is live, window listeners in the capture phase pass every `pointermove` and `pointerup` to the controller; `io.click` calls the Note's `onClick`.",
+      "owns": "The DOM side: listeners, pointer capture, the Preview element.",
+      "never": "Decides whether a Press is a Click or a Drag.",
+      "tested": "Browser tests for moving, resizing and editing."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When does a button-less move end a Press?",
+      "summary": "Only once the pointer is outside the Dead zone. Inside it, the move is ignored and the `pointerup` that follows ends the Press as a Click.",
+      "owns": "The Drag lifecycle: Dead zone, Preview, Click, commit.",
+      "never": "Touches the DOM directly.",
+      "tested": "Node tests in `controller.test.ts`, with a recording fake `DragIO`."
+    },
+    {
+      "path": "src/drag/controller.test.ts",
+      "question": "How is Chrome's event sequence proved?",
+      "summary": "It replays press, button-less move, `pointerup` at the coordinates seen in the logs, and expects exactly one Click.",
+      "owns": "The regression test for this bug.",
+      "never": "Runs in a browser: Playwright's mouse can't produce Chrome's extra move.",
+      "tested": "It is the test."
+    }
+  ],
+  "flow": [
+    ["src/drag/useDrag.ts", "src/drag/controller.ts", "src/drag/useDrag.ts"],
+    ["src/drag/controller.test.ts", "src/drag/controller.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Click with a wobble (the bug)",
+      "steps": [
+        {
+          "title": "pointermove with buttons === 0, 0.1 px from the press",
+          "explain": "Chrome sends this just before the `pointerup` when the pointer shifts as the button comes up. Before the fix, `end(true)` ran here: the Press was still pending, and an unseen release is never a Click, so no Click, and the session was gone. Now `stillInDeadZone` is true, so the move only records the pointer and returns.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "window.addEventListener('pointermove', handlers.move, options);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "    move(e) {",
+              "to": "if (stillInDeadZone(session)) return;"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function stillInDeadZone(s: Session): boolean {",
+              "to": "return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;"
+            }
+          ]
+        },
+        {
+          "title": "pointerup, same millisecond",
+          "explain": "The session is still live, so this real release reaches `end(true, true)`. The Press is still pending and `released` is true, so it's a Click, called last so its handler runs with the pointer already let go.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "    up(e) {",
+              "to": "end(true, true);"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function end(commit: boolean, released = false) {",
+              "to": "if (released) io.click(s.pointer);"
+            }
+          ]
+        },
+        {
+          "title": "The Click starts Editing",
+          "explain": "`io.click` calls the Note's `onClick`, which is `startEditingAt`, with the release point for the caret.",
+          "run": [
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "click(pointer) {",
+              "to": "latest.current.onClick?.(pointer);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A release we really didn't see",
+      "steps": [
+        {
+          "title": "pointermove with buttons === 0, past the Dead zone",
+          "explain": "The button was let go outside the window, say, and the pointer is back more than 3 px away. `stillInDeadZone` is false, so `end(true)` runs as before: a Drag commits where the pointer is, and a Press that never became a Drag ends with no Click. The #24 rule holds.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (e.buttons === 0) {",
+              "to": "end(true);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "What the tests prove",
+      "steps": [
+        {
+          "title": "Chrome's sequence is a Click",
+          "explain": "Press at (10, 10), a button-less move to (10.1, 10), then `pointerup` there: exactly one Click at the release point, and the listeners detached once. This failed before the fix.",
+          "run": [
+            {
+              "file": "src/drag/controller.test.ts",
+              "from": "a button-less move just before the release, still inside the Dead zone, leaves it a Click",
+              "to": "expect(t.of('detach')).toHaveLength(1);"
+            }
+          ]
+        },
+        {
+          "title": "A button-less move inside the Dead zone moves nothing",
+          "explain": "Waiting for the `pointerup` must not turn a would-be Click into a Drag: no Preview, no commit.",
+          "run": [
+            {
+              "file": "src/drag/controller.test.ts",
+              "from": "a button-less move inside the Dead zone never moves the Note",
+              "to": "expect(t.commits()).toEqual([]);"
+            }
+          ]
+        },
+        {
+          "title": "An unseen release is still not a Click",
+          "explain": "This existing case used a move to (11, 10), inside the Dead zone, which now waits. It moves to (20, 10) instead, so it still checks that an unseen release ends the Press with no Click.",
+          "run": [
+            {
+              "file": "src/drag/controller.test.ts",
+              "from": "'a release we did not see (buttons === 0, the pointer since moved off)',",
+              "to": "t.move(20, 10, 0);"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "A lost release inside the Dead zone leaves the session open",
+      "detail": "If the button really is let go where we can't see it and the pointer comes back within 3 px, no `pointerup` arrives. The session stays until the next press, Escape or `pointercancel`, which end it with no Click and no change. Harmless, and the price of not dropping real Clicks."
+    },
+    {
+      "title": "No browser test",
+      "detail": "Playwright's `page.mouse` doesn't produce Chrome's extra move, so the Node test is the only automated check. The fix was confirmed by hand in Chrome with temporary logs: every wobbly release took the new path and started Editing."
+    }
+  ],
+  "omitted": {}
+}
