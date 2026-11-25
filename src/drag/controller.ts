@@ -81,7 +81,8 @@ export interface DragController {
  *
  *   press → io.dispatch(kind.press), io.attachPointerListeners(sessionHandlers)
  *   move / scroll → Dead zone → Preview (io.writePreview)
- *   up → end(true, released);  buttons === 0 → end(true);  cancel / Escape / dispose → end(false)
+ *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides
+ *   cancel / Escape / dispose → end(false)
  *   end → detach, io.releaseCapture, then a Click (io.click) or reset Preview + io.dispatch the commit
  *
  * The handlers exist for the whole controller, but are attached only while a Press is live.
@@ -98,9 +99,15 @@ export function createDragController(io: DragIO): DragController {
     };
   }
 
-  function update(s: Session) {
+  /** Still a would-be Click: it has never left the Dead zone, and isn't outside it now. */
+  function stillInDeadZone(s: Session): boolean {
     const d = delta(s);
-    if (s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX) return;
+    return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;
+  }
+
+  function update(s: Session) {
+    if (stillInDeadZone(s)) return;
+    const d = delta(s);
     s.pending = false;
     // Synchronously, from the event: no rAF, so the Preview is never a frame behind.
     io.writePreview(s.preview(d, { pointer: s.pointer }), s.from);
@@ -134,6 +141,9 @@ export function createDragController(io: DragIO): DragController {
       if (!session || !ownPointer(e)) return;
       session.pointer = { x: e.clientX, y: e.clientY };
       if (e.buttons === 0) {
+        // Chrome sends a button-less move just before the `pointerup` of a press that
+        // wobbled as it was let go: inside the Dead zone, that `pointerup` decides.
+        if (stillInDeadZone(session)) return;
         end(true);
         return;
       }
