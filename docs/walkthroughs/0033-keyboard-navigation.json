@@ -14,14 +14,14 @@
     {
       "path": "src/components/Note.module.css",
       "question": "What does a focused Note look like?",
-      "summary": "An accent outline, outset 2 px, only on `:focus-visible`.",
+      "summary": "A dashed accent outline, outset 3 px, only on `:focus-visible`: unlike the solid Editing outline.",
       "owns": "The Note's focus ring.",
       "never": "Shows for a pointer focus.",
-      "tested": "Browser test: a focused Note shows a solid outline at least 2 px wide."
+      "tested": "Browser tests: the ring is at least 2 px, and its line style differs from Editing's."
     },
     {
       "path": "src/components/useStopEditing.ts",
-      "question": "Why does Escape need a second step to put focus on the Note?",
+      "question": "How does Editing end from the keyboard: Escape, or Tab to another Note?",
       "summary": "It blurs the textarea and ends Editing. Focus lands on the body until the Note takes it back.",
       "owns": "Ending Editing from anywhere.",
       "never": "Decides where focus goes next.",
@@ -92,7 +92,7 @@
       "steps": [
         {
           "title": "Tab lands on the Note's article",
-          "explain": "`tabIndex={0}` puts every article in the Tab order in DOM order, which is creation order, with its × right after it. Stacking order would change with every Raise, so the Tab order would keep jumping. The focus handler Raises the Note so its ring is never under another Note. It checks `:focus-visible` because a right-button press focuses the article too (only a left Press prevents its default), and that must not Raise.",
+          "explain": "`tabIndex={0}` puts every article in the Tab order in DOM order, which is creation order, with its × right after it. Stacking order would change with every Raise, so the Tab order would keep jumping. If another Note was in Editing (Tab out of its textarea), focus arriving here ends it, as a press on this Note would, so the focus ring and the Editing outline are never on two Notes at once. The focus handler then Raises the Note so its ring is never under another Note. It checks `:focus-visible` because a right-button press focuses the article too (only a left Press prevents its default), and that must not Raise.",
           "run": [
             {
               "file": "src/components/Note.tsx",
@@ -101,7 +101,7 @@
             {
               "file": "src/components/Note.tsx",
               "from": "function focusNote(e: FocusEvent<HTMLElement>) {",
-              "to": "if (e.target.matches(':focus-visible') && !isInText(e)) commit({ type: 'raise', id });"
+              "to": "if (e.target.matches(':focus-visible')) commit({ type: 'raise', id });"
             },
             {
               "file": "src/notes/notesReducer.ts",
@@ -112,12 +112,12 @@
         },
         {
           "title": "The ring",
-          "explain": "Outset by 2 px, so it is drawn on the Board around the Note, not on the Note's own colour. It reads the same on all six colours. Only `:focus-visible`, so it shows for keyboard focus and not after a right-click.",
+          "explain": "Dashed and outset by 3 px, so it never reads as the solid Editing outline drawn on the Note's edge; with both on the same Note, the Editing rule comes later and wins. Outset also means it is drawn on the Board, not on the Note's own colour, so it reads the same on all six colours. Only `:focus-visible`, so it shows for keyboard focus and not after a right-click.",
           "run": [
             {
               "file": "src/components/Note.module.css",
               "from": ".note:focus-visible {",
-              "to": "outline-offset: 2px;"
+              "to": "outline-offset: 3px;"
             }
           ]
         },
@@ -172,6 +172,17 @@
               "file": "src/components/Note.tsx",
               "from": "if (editing || !refocusWhenIdle.current) return;",
               "to": "ref.current?.focus();"
+            }
+          ]
+        },
+        {
+          "title": "Tab out of the textarea to the next Note",
+          "explain": "The textarea is the last tabbable thing in its Note, so Tab lands on the next Note's article. That Note's focus handler ends Editing. Shift+Tab instead reaches the Note's own ×, which keeps Editing: `editing` is true there, so nothing stops it.",
+          "run": [
+            {
+              "file": "src/keyboard.browser.test.tsx",
+              "from": "it('Tab from a Note being edited to the next Note ends Editing', async () => {",
+              "to": "expect(stores.ui.getSnapshot().editingId).toBeNull();"
             }
           ]
         },
@@ -289,6 +300,10 @@
     {
       "title": "Neighbour order is read from the DOM",
       "detail": "`deleteAndFocusNeighbour` reads the article's siblings, not the store's `ids`. Both are in the same order because the Board renders `ids` in order. The DOM was used because it hands over the elements to focus directly. The cost is that the Note assumes its parent is the Board."
+    },
+    {
+      "title": "Focus on another Note ends Editing",
+      "detail": "Added after the owner saw the focus ring on one Note and the Editing outline on another, both solid blue. The cost: Shift+Tab from the textarea back to the toolbar passes every earlier Note, and focusing one ends Editing. So recolouring the edited Note from the keyboard now works only for the first Note in the DOM. With the mouse, the swatches still recolour any edited Note. The Note's own article, focused while Editing, shows only the Editing outline."
     }
   ],
   "omitted": {

@@ -83,8 +83,43 @@ it('a focused Note is Raised and shows a focus ring', async () => {
   await expect.element(noteB).toHaveFocus();
   expect(stores.notes.getSnapshot().notes[b.id]?.z).toBe(stores.notes.getSnapshot().topZ);
   const ring = getComputedStyle(noteB.element());
-  expect(ring.outlineStyle).toBe('solid');
+  expect(ring.outlineStyle).not.toBe('none');
   expect(parseFloat(ring.outlineWidth)).toBeGreaterThanOrEqual(2);
+});
+
+it('the focus ring looks different from the Editing outline', async () => {
+  const { stores, noteA, noteB } = await setup();
+  stores.ui.dispatch({ type: 'startEditing', id: a.id });
+  await expect.element(editor(noteA)).toHaveFocus();
+  const editing = getComputedStyle(noteA.element());
+  await tabTo(noteB);
+
+  // A 2 px offset alone was too close to tell apart: the line itself differs.
+  expect(getComputedStyle(noteB.element()).outlineStyle).not.toBe(editing.outlineStyle);
+});
+
+it('Tab from a Note being edited to the next Note ends Editing', async () => {
+  const { stores, noteA, noteB } = await setup();
+  await tabTo(noteA);
+  await userEvent.keyboard('{Enter}');
+  await expect.element(editor(noteA)).toHaveFocus();
+
+  await userEvent.keyboard('{Tab}');
+
+  await expect.element(noteB).toHaveFocus();
+  expect(stores.ui.getSnapshot().editingId).toBeNull();
+});
+
+it("Shift+Tab from the textarea to the Note's own × keeps Editing", async () => {
+  const { stores, noteA } = await setup();
+  await tabTo(noteA);
+  await userEvent.keyboard('{Enter}');
+  await expect.element(editor(noteA)).toHaveFocus();
+
+  await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+
+  await expect.element(deleteButton(noteA)).toHaveFocus();
+  expect(stores.ui.getSnapshot().editingId).toBe(a.id);
 });
 
 it('Enter on a focused Note starts Editing with the caret at the end, and typing changes the text', async () => {

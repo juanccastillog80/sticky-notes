@@ -125,10 +125,14 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   }
 
   function focusNote(e: FocusEvent<HTMLElement>) {
+    // The textarea is focused only by Editing, which a Press or Enter already Raised.
+    if (isInText(e)) return;
+    // Focus arriving from another Note's Editing ends it, as a press on this Note would,
+    // so the focus ring and the Editing outline are never on two Notes at once.
+    if (!editing) stopEditing();
     // Raised, so the focus ring is never under another Note. Only keyboard focus: a
-    // right-button press focuses the article too, and must not Raise. The textarea is
-    // focused only by Editing, which a Press or Enter already Raised.
-    if (e.target.matches(':focus-visible') && !isInText(e)) commit({ type: 'raise', id });
+    // right-button press focuses the article too, and must not Raise.
+    if (e.target.matches(':focus-visible')) commit({ type: 'raise', id });
   }
 
   const { x, y, width, height, z, colour, text } = note;
