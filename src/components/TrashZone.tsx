@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from 'react';
+import { useLayoutEffect } from 'react';
 import { useBoardDom } from '../BoardDomContext';
 import styles from './TrashZone.module.css';
 
@@ -8,8 +8,8 @@ import styles from './TrashZone.module.css';
  * writes `data-state` (`quiet`, `armed`, `over`) straight to the DOM, so a move never
  * re-renders it.
  */
-export function TrashZone({ scrollerRef }: { scrollerRef: RefObject<HTMLElement | null> }) {
-  const { trashRef } = useBoardDom();
+export function TrashZone() {
+  const { scrollerRef, trashRef } = useBoardDom();
 
   // Inset from the scroll container's scrollbars, which come and go with the window size.
   useLayoutEffect(() => {

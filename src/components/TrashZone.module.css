@@ -15,8 +15,11 @@
   background: color-mix(in srgb, var(--color-surface) 88%, transparent);
   color: var(--color-text-muted);
   font-size: 12px;
-  /* Takes presses itself, so a double-click on it never reaches the Board and creates nothing. */
   user-select: none;
+  /*
+   * No `pointer-events: none`: a press here targets the zone, not the Board under it,
+   * so a double-click on the zone creates nothing (the Board checks the press target).
+   */
   transition:
     background-color 120ms,
     border-color 120ms,

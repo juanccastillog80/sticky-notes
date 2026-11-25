@@ -82,7 +82,7 @@ export function Board({
         </section>
       </div>
       <EmptyHint />
-      <TrashZone scrollerRef={scrollerRef} />
+      <TrashZone />
       <UndoToast />
     </main>
   );

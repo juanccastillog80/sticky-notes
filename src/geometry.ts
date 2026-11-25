@@ -70,6 +70,16 @@ export function resizeRect(from: Rect, delta: Point, edges: Edges): Rect {
 }
 
 /** A client point in Board coordinates. `boardRect` already reflects scrolling. */
+/** Whether `point` is inside `rect`, edges included. */
+export function contains(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
+
 export function toBoardPoint(client: Point, boardRect: Point): Point {
   return { x: client.x - boardRect.x, y: client.y - boardRect.y };
 }

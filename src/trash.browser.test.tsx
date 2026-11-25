@@ -1,14 +1,14 @@
 import { beforeEach, expect, it } from 'vitest';
 import { commands, page, type Locator } from 'vitest/browser';
 import { makeNote, testId } from '../test/factories';
-import { drag, pressAndMove } from '../test/mouse';
+import { drag, pointIn, pressAndMove } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);
 });
 
-const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1, text: 'bin me', colour: 'yellow' });
+const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1, text: 'drop me', colour: 'yellow' });
 const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });
 
 async function setup() {
@@ -25,14 +25,12 @@ async function setup() {
 
 /** From a point 30 px into the Note to the client point `to`. */
 function deltaTo(note: Locator, to: { x: number; y: number }) {
-  const rect = note.element().getBoundingClientRect();
-  return { dx: to.x - (rect.x + 30), dy: to.y - (rect.y + 30), position: { x: 30, y: 30 } };
+  const position = { x: 30, y: 30 };
+  const from = pointIn(note, position);
+  return { dx: to.x - from.x, dy: to.y - from.y, position };
 }
 
-function centreOf(element: Element) {
-  const rect = element.getBoundingClientRect();
-  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
+const centreOf = (element: Element) => pointIn(page.elementLocator(element));
 
 it('sits in the bottom-right of the window, 104×104, above the Notes, however far the Board is scrolled', async () => {
   const { zone, scroller } = await setup();

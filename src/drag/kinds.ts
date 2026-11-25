@@ -1,4 +1,11 @@
-import { resizeRect, toCommittedRect, type Edges, type Point, type Rect } from '../geometry';
+import {
+  contains,
+  resizeRect,
+  toCommittedRect,
+  type Edges,
+  type Point,
+  type Rect,
+} from '../geometry';
 import type { Note } from '../notes/note';
 import type { NoteAction } from '../notes/notesReducer';
 
@@ -36,13 +43,7 @@ const raise = (from: Note): NoteAction => ({ type: 'raise', id: from.id });
  * brushes the zone is moved, not deleted.
  */
 function pointerInTrash({ pointer, trash }: DragContext): boolean {
-  return (
-    trash !== null &&
-    pointer.x >= trash.x &&
-    pointer.x <= trash.x + trash.width &&
-    pointer.y >= trash.y &&
-    pointer.y <= trash.y + trash.height
-  );
+  return trash !== null && contains(trash, pointer);
 }
 
 export const moveKind: DragKind<Note> = {
