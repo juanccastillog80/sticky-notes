@@ -52,13 +52,69 @@ CI runs every check on each PR, and runs the browser tests again in Chrome, Edge
 
 ## Architecture
 
-**One Drag lifecycle, written once and specialised by pure Drag kinds.** Moving and resizing share everything except what they show and what they save. A Drag goes through three phases. _Mount_: `useDrag` creates one controller per Note. _Session_: a Press Raises the Note and attaches the listeners (inside text it only Raises), the Dead zone decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled. The decisions live in `createDragController` (`src/drag/controller.ts`), which never touches the DOM. It talks to the DOM through two narrow interfaces, one for each direction. Controller → DOM is `DragIO`: read scroll, attach listeners, release capture, write the Preview, dispatch, report a Click. DOM → controller is `DragHandlers`: move, up, cancel, scroll, key. `useDrag` passes the real DOM; the unit tests pass a recording fake. A Drag kind (`src/drag/kinds.ts`) is pure functions over the same geometry: `press` (the Raise), `preview` and `commit`, so what you release is exactly what you saw. Resize was added as a second kind without changing the controller, which shows the seam is in the right place. The Preview is written straight to the Note's style during the Drag, so after the Raise React renders nothing until release, when one action is dispatched.
+The UI layer is thin. The decisions are made in a pure core that never touches the DOM, and that core holds them all: how a Drag behaves, the geometry, and the state changes.
 
-**Committed state lives in small stores read through selectors, so a change re-renders only the Notes it touched.** `createStore` (`src/store/createStore.ts`) is a pure reducer behind `useSyncExternalStore`, with separate stores for notes and UI state. The reducer keeps every unchanged Note and the `ids` array at the same reference, and a no-op returns the same state and notifies nobody. The Board subscribes to `ids`, and each Note subscribes to `notes[id]`. Moving one Note re-renders that Note only, never the Board or its neighbours. Geometry such as clamping to the Board, the minimum size and resize maths is pure (`src/geometry.ts`) and is shared by the reducer and the Drag kinds. The pure core is unit-tested, with property-based tests for the geometry, and held to the coverage gate. Components are tested in real browsers.
+```mermaid
+flowchart LR
+  subgraph UI["React components (thin)"]
+    Note["Note<br/>(useDrag)"]
+    Bar["Toolbar · swatches · Undo toast"]
+  end
+  subgraph Core["Pure core: unit-tested, 90% coverage gate"]
+    Ctrl["Drag controller"]
+    Kinds["Drag kinds<br/>move · resize"]
+    Geo["geometry"]
+    Cmd["commands"]
+    NS[("notes store")]
+    US[("ui store")]
+  end
+  Note -- "DragHandlers<br/>pointer events" --> Ctrl
+  Ctrl -- "DragIO<br/>Preview, Trash zone look" --> Note
+  Ctrl --> Kinds --> Geo
+  Ctrl -- "one action on release" --> Cmd
+  Bar --> Cmd
+  Cmd --> NS & US
+  NS -. "notes[id]" .-> Note
+  US -. "editingId === id" .-> Note
+```
 
-**The Board has a fixed size and scrolls; persistence will be local-first.** The Board is a fixed 1920×1080 surface scrolling under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can therefore never become invalid when the window shrinks, and a Drag adds the scroll delta so the Note stays under the pointer while the wheel scrolls. `main.tsx` is the composition root. It builds the stores, renders, and only then starts the MSW worker, loaded as a separate chunk so the first paint never waits on the network. The planned persistence ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in state rather than living inside the UI. The Local copy shows first, and a real HTTP client talks to a mocked backend that can be deleted (`src/mocks/`) without touching the client.
+Solid arrows are calls. Dotted arrows are selector subscriptions, which decide what re-renders.
 
-Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html).
+### 1. One Drag engine, specialised by pure Drag kinds
+
+Moving and resizing share everything except what they show and what they save.
+
+- **Lifecycle.** _Mount_: `useDrag` creates one controller per Note. _Session_: a Press Raises the Note and attaches the listeners. The Dead zone then decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled.
+- **No DOM in the controller.** `createDragController` (`src/drag/controller.ts`) talks to the DOM through two narrow interfaces, one for each direction. `DragIO` goes from the controller to the DOM: read scroll, attach listeners, write the Preview, draw the Trash zone, dispatch, report a Click. `DragHandlers` goes from the DOM to the controller: move, up, cancel, scroll, key. `useDrag` passes the real DOM. The unit tests pass a recording fake.
+- **Kinds are pure functions** (`src/drag/kinds.ts`): `press` (the Raise), `preview` and `commit`, over the same geometry. What you release is therefore exactly what you saw. Resize was added as a second kind without changing the controller. The Trash zone belongs to the move kind: its `commit` returns a delete when the pointer is inside the zone.
+- **React stays out of the hot path.** During a Drag the Preview is written straight to the Note's style. After the Raise, React renders nothing until release, when one action is dispatched.
+- **A Click starts Editing.** A Press released inside the Dead zone is a Click, which puts the caret where you clicked. A Press inside text only Raises, so typing and selecting work normally. The Grip strip always moves the Note.
+
+### 2. Two small stores, read through selectors
+
+- **`createStore`** (`src/store/createStore.ts`) is a pure reducer behind `useSyncExternalStore`. The **notes** store holds each Note's position, size, text, colour and place in the Stacking order. The **ui** store holds the Note being edited, the Current colour and the Note that Undo would bring back.
+- **Re-render only what changed.** The reducers keep every unchanged Note and the `ids` array at the same reference, and a no-op returns the same state and notifies nobody. The Board subscribes to `ids` and each Note to `notes[id]`, so moving one Note re-renders only that Note. `useIsEditing(id)` is a boolean per Note, so a change of Editing re-renders only the two Notes involved.
+- **Rules that span both stores live in `commands.ts`**, so each reducer knows only its own store. Creating a Note gives it the Current colour and opens it in Editing. Deleting one ends its Editing and records it for Undo. Recolouring a Note also sets the Current colour. A Drag's commit goes through commands too, so a drop on the Trash zone gets the same Undo as the ×.
+- The stores and commands reach components through a context whose value never changes. Reading it never causes a render, only subscriptions do.
+- **Geometry is pure** (`src/geometry.ts`): clamping to the Board, the minimum size and resize maths. The reducer and the Drag kinds share it.
+
+### 3. Keyboard and focus
+
+- Each Note's `<article>` can be focused, followed in the Tab order by its ×. Keyboard focus (`:focus-visible`) Raises the Note, but a right-button press, which also focuses it, does not.
+- Enter starts Editing, and Escape returns focus to the Note. Delete deletes the Note and moves focus to the next one, so the user keeps their place.
+- The × is not a Press: it never Raises or drags. After it deletes a Note, `ignorePressesFor` swallows the second half of a double-click, so it can't land on the Note that was underneath.
+
+### 4. A fixed Board; persistence planned as local-first
+
+- The Board is a fixed 1920×1080 surface that scrolls under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can never become invalid when the window shrinks. A Drag adds the scroll delta, so the Note stays under the pointer while the wheel scrolls.
+- `main.tsx` is the composition root. It builds the stores, renders, and only then starts the MSW worker. The worker is loaded as a separate chunk, so the first paint never waits on the network.
+- The planned persistence ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in state rather than living inside the UI. The Local copy shows first, and a real HTTP client talks to a mocked backend (`src/mocks/`) that can be deleted without touching the client.
+
+### Testing
+
+The pure core (controller, kinds, reducers, commands, geometry) is unit-tested in Node, with property-based tests for the geometry, and is held to the coverage gate. Components are tested in real browsers through Playwright, including `<Profiler>` tests that check moving, resizing, typing in, recolouring or deleting one Note re-renders no other.
+
+Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html), the Trash zone in [trash zone](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0006-trash-zone.html), and the keyboard in [keyboard navigation](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0033-keyboard-navigation.html).
 
 ## Known limits
 

@@ -1,0 +1,100 @@
+{
+  "title": "README: architecture brought up to date, with a diagram",
+  "lede": "No runtime code changes. The README's Architecture section hadn't changed since #12. It now covers `commands.ts` and the ui store, the Trash zone in the move kind, a Click starting Editing, the keyboard, and the re-render tests. The prose is now key ideas with bullets under a Mermaid overview. This walkthrough checks the new claims against the code.",
+  "files": [
+    {
+      "path": "README.md",
+      "question": "How is the app put together?",
+      "summary": "A diagram of the UI layer and the pure core, then four key ideas and Testing.",
+      "owns": "The reviewer's first view of the architecture.",
+      "never": "Describes code that isn't on `main`.",
+      "tested": "Prettier only. The diagram is drawn by GitHub, not checked in CI."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "Where do the rules that span both stores live?",
+      "summary": "Unchanged. Create, delete, recolour, pick a colour, commit a Drag, Undo.",
+      "owns": "Rules that touch both the notes and the ui store.",
+      "never": "Holds state of its own.",
+      "tested": "`src/commands.test.ts`."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "How does a drop on the Trash zone become a delete?",
+      "summary": "Unchanged. The move kind's `commit` returns a delete when the pointer is inside the zone.",
+      "owns": "What each Drag kind shows and saves.",
+      "never": "Touches the DOM.",
+      "tested": "`src/drag/kinds.test.ts`."
+    },
+    {
+      "path": "src/StoresContext.ts",
+      "question": "Why does a change of Editing re-render only two Notes?",
+      "summary": "Unchanged. `useIsEditing` gives each Note a boolean.",
+      "owns": "The hooks components read the stores through.",
+      "never": "Changes value, so reading it never renders.",
+      "tested": "`src/editing.browser.test.tsx`."
+    }
+  ],
+  "flow": [["README.md", "src/drag/kinds.ts", "src/commands.ts", "src/StoresContext.ts"]],
+  "scenarios": [
+    {
+      "name": "A reviewer reads the Architecture section",
+      "steps": [
+        {
+          "title": "The diagram gives the overview",
+          "explain": "React components on one side, the pure core on the other. Solid arrows are calls, dotted arrows are selector subscriptions. It wasn't previewed locally: check that it draws on the PR's file view.",
+          "run": [
+            {
+              "file": "README.md",
+              "from": "```mermaid",
+              "to": "US -. \"editingId === id\" .-> Note"
+            }
+          ]
+        },
+        {
+          "title": "A drop on the Trash zone is a delete from the move kind",
+          "explain": "The README says the Trash zone belongs to the move kind. The pointer, not the Note's rect, must be inside the zone.",
+          "run": [
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "if (pointerInTrash(ctx)) return { type: 'delete', id: from.id };"
+            }
+          ]
+        },
+        {
+          "title": "That delete goes through commands, so it gets Undo",
+          "explain": "A Drag's commit passes through `commit`, which sends a delete to `deleteNote`. That ends Editing and records the Note for Undo, the same as the ×.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "commit: (action: NoteAction) => {",
+              "to": "else notes.dispatch(action);"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "function deleteNote(id: NoteId) {",
+              "to": "notes.dispatch({ type: 'delete', id });"
+            }
+          ]
+        },
+        {
+          "title": "A change of Editing re-renders only two Notes",
+          "explain": "Each Note subscribes to a boolean, not to `editingId`, so only the Notes whose boolean flips re-render.",
+          "run": [
+            {
+              "file": "src/StoresContext.ts",
+              "from": "return useUi((state) => state.editingId === id);"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Claims checked against the tests",
+      "detail": "The Testing paragraph lists the `<Profiler>` tests found in the browser tests: move, resize, setText, setColour, delete and the change of Editing."
+    }
+  ],
+  "omitted": {}
+}
