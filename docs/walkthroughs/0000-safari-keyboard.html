@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"Safari's Tab skips buttons: README and checklist","lede":"No runtime code changes. In Safari, the owner found that Tab reached the Notes but not the toolbar. By default, Safari's Tab skips buttons and only reaches text fields and elements with `tabIndex={0}`, such as the Note's `\u003carticle>`. The README now says how to turn on full Tab navigation, and the cross-browser checklist gains the keyboard checks, including a Safari section.","files":[{"path":"README.md","question":"Why does Tab skip the toolbar in Safari?","summary":"The Keyboard paragraph names the Safari setting and Option+Tab.","owns":"The reviewer's first view of the keyboard model.","never":"Promises behaviour that a browser setting controls.","tested":"Prettier only.","lines":["# Sticky Notes","","A single-page desktop app for placing, arranging and resizing sticky notes on a board. It is written in React and TypeScript, with no component libraries.","","**Live app:** https://juanccastillog80.github.io/sticky-notes/ (deployed from `main` on every merge)","","## What it does","","| Feature                                              | Status                                                                                                 |","| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |","| 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons    |","| 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges              |","| 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                  |","| 4. Remove a note on a trash zone                     | Done: drop a Note with the pointer on the bottom-right Trash zone, or click its ×; both offer Undo     |","| Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                    |","| Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                        |","| Bonus III: note colours                              | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note |","","**Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Moving and resizing from the keyboard aren't built. In Safari, Tab skips buttons unless \"Press Tab to highlight each item on a webpage\" is on (Settings → Advanced), or use Option+Tab.","","The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead zone, Raise…) are defined in [`GLOSSARY.md`](GLOSSARY.md).","","### Not included","","The brief asks for 3 of the 4 features; all 4 are built. The bonuses are being added one at a time, to the same standard, since they make the UI better.","","- **localStorage and REST saving (bonuses IV, V)** are not built yet. The persistence design is recorded in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md). The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup. It doesn't save anything yet, so notes are lost on reload. The planned `?fail=&latency=` URL parameters for demoing failed and slow saves belong to that work and don't exist yet.","","## Setup","","Requires Node 26 (see `.nvmrc`).","","```sh","npm ci","npx playwright install chromium firefox   # for the browser tests","npm run dev                                # http://localhost:5173/sticky-notes/","```","","| Script                 | What it does                                                                  |","| ---------------------- | ----------------------------------------------------------------------------- |","| `npm run dev`          | Vite dev server                                                               |","| `npm run build`        | Typecheck, then production build into `dist/`                                 |","| `npm run preview`      | Serve the production build                                                    |","| `npm run typecheck`    | `tsc -b`                                                                      |","| `npm run lint`         | ESLint and Prettier check                                                     |","| `npm test`             | All tests: unit (Node) and browser (Chromium and Firefox, through Playwright) |","| `npm run test:unit`    | Unit tests only, including type-level tests                                   |","| `npm run test:browser` | Browser tests only. `BROWSERS=chrome,msedge,firefox` picks the browsers       |","| `npm run coverage`     | Unit coverage, with a 90% gate on the pure core                               |","","CI runs every check on each PR, and runs the browser tests again in Chrome, Edge and Firefox on Windows and in Chrome and Firefox on macOS. A merge to `main` deploys to GitHub Pages.","","## Architecture","","**One Drag lifecycle, written once and specialised by pure Drag kinds.** Moving and resizing share everything except what they show and what they save. A Drag goes through three phases. _Mount_: `useDrag` creates one controller per Note. _Session_: a Press Raises the Note and attaches the listeners (inside text it only Raises), the Dead zone decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled. The decisions live in `createDragController` (`src/drag/controller.ts`), which never touches the DOM. It talks to the DOM through two narrow interfaces, one for each direction. Controller → DOM is `DragIO`: read scroll, attach listeners, release capture, write the Preview, dispatch, report a Click. DOM → controller is `DragHandlers`: move, up, cancel, scroll, key. `useDrag` passes the real DOM; the unit tests pass a recording fake. A Drag kind (`src/drag/kinds.ts`) is pure functions over the same geometry: `press` (the Raise), `preview` and `commit`, so what you release is exactly what you saw. Resize was added as a second kind without changing the controller, which shows the seam is in the right place. The Preview is written straight to the Note's style during the Drag, so after the Raise React renders nothing until release, when one action is dispatched.","","**Committed state lives in small stores read through selectors, so a change re-renders only the Notes it touched.** `createStore` (`src/store/createStore.ts`) is a pure reducer behind `useSyncExternalStore`, with separate stores for notes and UI state. The reducer keeps every unchanged Note and the `ids` array at the same reference, and a no-op returns the same state and notifies nobody. The Board subscribes to `ids`, and each Note subscribes to `notes[id]`. Moving one Note re-renders that Note only, never the Board or its neighbours. Geometry such as clamping to the Board, the minimum size and resize maths is pure (`src/geometry.ts`) and is shared by the reducer and the Drag kinds. The pure core is unit-tested, with property-based tests for the geometry, and held to the coverage gate. Components are tested in real browsers.","","**The Board has a fixed size and scrolls; persistence will be local-first.** The Board is a fixed 1920×1080 surface scrolling under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can therefore never become invalid when the window shrinks, and a Drag adds the scroll delta so the Note stays under the pointer while the wheel scrolls. `main.tsx` is the composition root. It builds the stores, renders, and only then starts the MSW worker, loaded as a separate chunk so the first paint never waits on the network. The planned persistence ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in state rather than living inside the UI. The Local copy shows first, and a real HTTP client talks to a mocked backend that can be deleted (`src/mocks/`) without touching the client.","","Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html).","","## Known limits","","- Notes are kept in memory only: a reload starts from an empty Board (see \"Not included\").","- Once persistence exists, syncing several tabs won't be handled: across tabs, the last save wins.","- Browser tests run in Chromium and Firefox on every PR, and also in Chrome and Edge on real Windows and macOS runners. None are skipped or retried. Any Firefox flakiness found will be recorded here rather than silenced.","- Desktop pointer input only. Touch and pen aren't targeted, per the brief.","","## Cross-browser sign-off","","Manual pass at 1024×768 and on a large monitor, in the latest Chrome, Edge and Firefox: see [`docs/cross-browser-checklist.md`](docs/cross-browser-checklist.md)."],"added":[18]},{"path":"docs/cross-browser-checklist.md","question":"What must the manual pass check for the keyboard?","summary":"A #33 row for Chrome, Edge and Firefox, and a Safari section with the setting turned on.","owns":"The manual sign-off record.","never":"Replaces the browser tests in CI.","tested":"Not run: filled in by hand.","lines":["# Cross-browser checklist","","Run on the live app in the latest Chrome, Edge and Firefox, once with the window at 1024×768 and once on a large monitor. The numbers are the user stories in the spec (issue #1); only the stories for built features are listed. Record anything that differs under \"Findings\". It is either fixed or moved to \"Known limits\" in the README.","","| #     | Check                                                                      | Chrome | Edge | Firefox |","| ----- | -------------------------------------------------------------------------- | ------ | ---- | ------- |","| 1, 4  | Board edges are clear; calm backdrop beyond them on a large monitor        |        |      |         |","| 2     | At 1024×768 the Board scrolls inside the window; the toolbar stays put     |        |      |         |","| 3     | Shrinking the window never moves a Note                                    |        |      |         |","| 5–7   | Dot grid, empty-Board hint, opens scrolled to the top-left                 |        |      |         |","| 8     | Double-click empty Board creates a Note centred on the pointer             |        |      |         |","| 9–11  | S/M/L create in the visible middle, with a cascade when repeated           |        |      |         |","| 12    | A new Note opens in Editing, ready to type                                 |        |      |         |","| 14–15 | A Note near the edge is pushed inside; double-click on a Note does nothing |        |      |         |","| 16–18 | Drag from anywhere on the Note; a click inside the Dead zone doesn't move  |        |      |         |","| 19–20 | Stops at the Board's edges; drops exactly where it's shown                 |        |      |         |","| 21    | Wheel-scroll mid-drag keeps the Note under the pointer                     |        |      |         |","| 22    | Escape mid-drag puts the Note back                                         |        |      |         |","| 24–25 | Deeper shadow while dragging; no text selection or native image drag       |        |      |         |","| 26    | Releasing outside the window ends the drag where it was                    |        |      |         |","| 27–29 | Resize from all 8 edges and corners; correct cursors; `se` tick shown      |        |      |         |","| 30–31 | Stops at 140×100 with the opposite edge fixed; stops at the Board's edges  |        |      |         |","| 32–33 | Text reflows live and never distorts                                       |        |      |         |","| 45    | A click on an idle Note starts Editing, caret where clicked                |        |      |         |","| 46    | Drag-select, double-click a word, normal text shortcuts while Editing      |        |      |         |","| 47–48 | Grip strip moves the edited Note, keeps focus and caret; text never jumps  |        |      |         |","| 49–51 | Accent outline and darker strip; one Note at most; Escape or a press ends  |        |      |         |","| 52    | Text kept exactly as typed, line breaks included                           |        |      |         |","| 53    | Pressing a Note Raises it at once, for the whole Drag                      |        |      |         |","| 34–36 | Pointer-on-zone drop deletes; zone pinned bottom-right; brushing moves     |        |      |         |","| 37–39 | Zone hints during a move, red with Note dimmed when over; resize: never    |        |      |         |","| 40–42 | \"Note deleted\" toast with Undo after a drop; Undo restores it exactly      |        |      |         |","| #33   | Tab: Note, ×, next Note; dashed ring and Raise; Enter, Escape, Delete      |        |      |         |","","## Safari (keyboard only)","","Safari's Tab skips buttons by default, so the toolbar and every × are passed over while Notes are still reached. Turn on Safari → Settings → Advanced → \"Press Tab to highlight each item on a webpage\" (or use Option+Tab), then check:","","- [ ] Tab reaches the toolbar buttons, the colour swatches, each Note and its ×","- [ ] A Note focused with Tab shows the dashed ring and is Raised","- [ ] Escape while Editing leaves the dashed ring on that Note, and it is Raised","- [ ] Delete on a focused Note moves the ring to the next Note","","## Findings","","None recorded yet."],"added":[32,33,34,35,36,37,38,39,40,41]},{"path":"src/components/Note.tsx","question":"Why does Safari reach Notes but not the ×?","summary":"Unchanged. The article has `tabIndex={0}`; the × is a plain `\u003cbutton>`.","owns":"The Note's focusability.","never":"Overrides the browser's Tab settings.","tested":"`src/keyboard.browser.test.tsx`, in Chromium and Firefox only.","lines":["import {","  memo,","  useLayoutEffect,","  useRef,","  type FocusEvent,","  type KeyboardEvent,","  type PointerEvent,","} from 'react';","import { useBoardDom } from '../BoardDomContext';","import type { Point } from '../geometry';","import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';","import { isInText } from '../drag/press';","import { useDrag } from '../drag/useDrag';","import type { NoteId } from '../notes/note';","import { useCommands, useIsEditing, useNotes, useStores } from '../StoresContext';","import { caretOffsetAt } from './caret';","import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';","import styles from './Note.module.css';","import { useStopEditing } from './useStopEditing';","import { ResizeHandles } from './ResizeHandles';","","/**"," * Idle, a press anywhere but a handle starts a move, and a Click starts Editing."," * While Editing, the body is a textarea, so a press there only Raises (see `isInText`)"," * and Drags start from the Grip strip and the handles alone."," *"," * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or"," * Backspace deletes. A left press prevents its default, so it never focuses the article;"," * a right or middle press can, which is why only keyboard focus (`:focus-visible`) Raises."," */","export const Note = memo(function Note({ id }: { id: NoteId }) {","  const note = useNotes((state) => state.notes[id]);","  const editing = useIsEditing(id);","  const { notes, ui } = useStores();","  const stopEditing = useStopEditing();","  const { deleteNote, commit } = useCommands();","  const { scrollerRef, trashRef } = useBoardDom();","  const ref = useRef\u003cHTMLElement>(null);","  const textRef = useRef\u003cHTMLDivElement>(null);","  const editorRef = useRef\u003cHTMLTextAreaElement>(null);","  // Where the Click that starts Editing puts the caret; `null` is the end of the text.","  const pendingCaret = useRef\u003cnumber | null>(null);","  // Escape ended Editing: the article takes focus once the textarea is gone.","  const refocusWhenIdle = useRef(false);","  const start = useDrag(ref, { scrollerRef, trashRef, commit, onClick: startEditingAt });","","  // Before paint, so the caret is in place on the first frame of Editing.","  useLayoutEffect(() => {","    const editor = editorRef.current;","    if (!editing || !editor) return;","    const offset = pendingCaret.current ?? editor.value.length;","    pendingCaret.current = null;","    editor.focus();","    editor.setSelectionRange(offset, offset);","  }, [editing]);","","  // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.","  useLayoutEffect(() => {","    if (editing || !refocusWhenIdle.current) return;","    refocusWhenIdle.current = false;","    ref.current?.focus();","  }, [editing]);","","  if (!note) return null;","","  /** `caret` is a text offset, or `null` for the end of the text. */","  function startEditing(caret: number | null) {","    if (editing) return;","    pendingCaret.current = caret;","    ui.dispatch({ type: 'startEditing', id });","  }","","  function startEditingAt(pointer: Point) {","    // Measured on the idle text, which the textarea lays out identically.","    startEditing(caretOffsetAt(textRef.current, pointer));","  }","","  function press(e: PointerEvent\u003cHTMLElement>) {","    if (!note) return;","    // A press on another Note, handles included, ends Editing wherever it is.","    if (!editing) stopEditing();","    start(e, moveKind, note);","  }","","  function pressHandle(e: PointerEvent\u003cHTMLElement>, handle: ResizeHandle) {","    if (!note) return;","    if (!editing) stopEditing();","    start(e, resizeKinds[handle], note);","  }","","  function keyDownInEditor(e: KeyboardEvent\u003cHTMLTextAreaElement>) {","    // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.","    if (e.key !== 'Escape' || e.defaultPrevented) return;","    // So Tab carries on from this Note.","    refocusWhenIdle.current = true;","    stopEditing();","  }","","  /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */","  function keyDownOnNote(e: KeyboardEvent\u003cHTMLElement>) {","    // With a modifier, the key belongs to the browser or the system (Cmd+Backspace and the like).","    if (e.target !== e.currentTarget || editing || e.metaKey || e.ctrlKey || e.altKey) return;","    if (e.key === 'Enter') {","      // Or the textarea, focused before the key's default runs, would get a line break.","      e.preventDefault();","      startEditing(null);","    } else if (e.key === 'Delete' || e.key === 'Backspace') {","      e.preventDefault();","      deleteAndFocusNeighbour(e.currentTarget);","    }","  }","","  /**","   * Keeps the user's place for the next Tab: focus left on the removed article would","   * fall to the body, and Tab would start again from the toolbar.","   */","  function deleteAndFocusNeighbour(article: HTMLElement) {","    const board = article.parentElement;","    const siblings = board ? [...board.querySelectorAll\u003cHTMLElement>(':scope > article')] : [];","    const index = siblings.indexOf(article);","    const next = siblings[index + 1] ?? siblings[index - 1] ?? board;","    deleteNote(id);","    // Before the Undo toast's effect runs, so it sees focus taken and leaves it here.","    next?.focus();","  }","","  function focusNote(e: FocusEvent\u003cHTMLElement>) {","    // The textarea is focused only by Editing, which a Press or Enter already Raised.","    if (isInText(e)) return;","    // Focus arriving from another Note's Editing ends it, as a press on this Note would,","    // so the focus ring and the Editing outline are never on two Notes at once.","    if (!editing) stopEditing();","    // Raised, so the focus ring is never under another Note. Only keyboard focus: a","    // right-button press focuses the article too, and must not Raise.","    if (e.target.matches(':focus-visible')) commit({ type: 'raise', id });","  }","","  const { x, y, width, height, z, colour, text } = note;","  return (","    \u003carticle","      ref={ref}","      aria-label=\"Note\"","      tabIndex={0}","      className={styles.note}","      data-colour={colour}","      data-editing={editing ? '' : undefined}","      // Geometry only. `transform` is left free for the Drag Preview.","      style={{ left: x, top: y, width, height, zIndex: z }}","      onPointerDown={press}","      onKeyDown={keyDownOnNote}","      onFocus={focusNote}","    >","      \u003cdiv className={styles.gripStrip} data-grip-strip=\"\" />","      \u003cbutton","        type=\"button\"","        aria-label=\"Delete note\"","        className={styles.delete}","        onPointerDown={(e) => {","          // Not a Press: no Raise, no Drag, and focus stays where it is until the delete.","          e.stopPropagation();","          e.preventDefault();","        }}","        onClick={(e) => {","          deleteNote(id);","          // A mouse click (not Enter or Space) may be the first half of a double-click.","          if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);","        }}","      >","        ×","      \u003c/button>","      {editing ? (","        \u003ctextarea","          ref={editorRef}","          aria-label=\"Note text\"","          className={styles.editor}","          value={text}","          onChange={(e) => {","            notes.dispatch({ type: 'setText', id, text: e.target.value });","          }}","          onKeyDown={keyDownInEditor}","        />","      ) : (","        \u003cdiv ref={textRef} className={styles.text} data-note-text=\"\">","          {text}","        \u003c/div>","      )}","      \u003cResizeHandles onPress={pressHandle} />","    \u003c/article>","  );","});"],"added":[]}],"flow":[["README.md","src/components/Note.tsx"]],"scenarios":[{"name":"A Safari user presses Tab","steps":[{"title":"Tab reaches the Note but not its ×","explain":"With Safari's default setting, an element with an explicit `tabIndex={0}` is in the Tab order, and a `\u003cbutton>` is not. This is Safari's documented default, not something checked in this session: Safari isn't in the test matrix.","run":[{"file":"src/components/Note.tsx","start":142,"end":142},{"file":"src/components/Note.tsx","start":155,"end":155}]},{"title":"The README says how to reach every button","explain":"The code doesn't force buttons into Safari's Tab order. Keyboard users on a Mac usually have the setting on, and overriding it would go against their choice.","run":[{"file":"README.md","start":18,"end":18}]},{"title":"The manual pass covers it","explain":"The Safari section also covers the check left open from #33: whether focus set by the app Raises the Note there.","run":[{"file":"docs/cross-browser-checklist.md","start":34,"end":41}]}]}],"notes":[{"title":"Not verified in Safari","detail":"The explanation is Safari's default behaviour, and it matches what the owner saw: Notes were reached, but the toolbar wasn't. Nobody has yet checked in Safari that the setting or Option+Tab reaches the toolbar. The checklist's first Safari item does that."}],"omitted":{}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>

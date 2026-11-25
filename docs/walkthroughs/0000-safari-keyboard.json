@@ -1,0 +1,69 @@
+{
+  "title": "Safari's Tab skips buttons: README and checklist",
+  "lede": "No runtime code changes. In Safari, the owner found that Tab reached the Notes but not the toolbar. By default, Safari's Tab skips buttons and only reaches text fields and elements with `tabIndex={0}`, such as the Note's `<article>`. The README now says how to turn on full Tab navigation, and the cross-browser checklist gains the keyboard checks, including a Safari section.",
+  "files": [
+    {
+      "path": "README.md",
+      "question": "Why does Tab skip the toolbar in Safari?",
+      "summary": "The Keyboard paragraph names the Safari setting and Option+Tab.",
+      "owns": "The reviewer's first view of the keyboard model.",
+      "never": "Promises behaviour that a browser setting controls.",
+      "tested": "Prettier only."
+    },
+    {
+      "path": "docs/cross-browser-checklist.md",
+      "question": "What must the manual pass check for the keyboard?",
+      "summary": "A #33 row for Chrome, Edge and Firefox, and a Safari section with the setting turned on.",
+      "owns": "The manual sign-off record.",
+      "never": "Replaces the browser tests in CI.",
+      "tested": "Not run: filled in by hand."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Why does Safari reach Notes but not the ×?",
+      "summary": "Unchanged. The article has `tabIndex={0}`; the × is a plain `<button>`.",
+      "owns": "The Note's focusability.",
+      "never": "Overrides the browser's Tab settings.",
+      "tested": "`src/keyboard.browser.test.tsx`, in Chromium and Firefox only."
+    }
+  ],
+  "flow": [["README.md", "src/components/Note.tsx"]],
+  "scenarios": [
+    {
+      "name": "A Safari user presses Tab",
+      "steps": [
+        {
+          "title": "Tab reaches the Note but not its ×",
+          "explain": "With Safari's default setting, an element with an explicit `tabIndex={0}` is in the Tab order, and a `<button>` is not. This is Safari's documented default, not something checked in this session: Safari isn't in the test matrix.",
+          "run": [
+            { "file": "src/components/Note.tsx", "from": "tabIndex={0}" },
+            { "file": "src/components/Note.tsx", "from": "aria-label=\"Delete note\"" }
+          ]
+        },
+        {
+          "title": "The README says how to reach every button",
+          "explain": "The code doesn't force buttons into Safari's Tab order. Keyboard users on a Mac usually have the setting on, and overriding it would go against their choice.",
+          "run": [{ "file": "README.md", "from": "**Keyboard.**" }]
+        },
+        {
+          "title": "The manual pass covers it",
+          "explain": "The Safari section also covers the check left open from #33: whether focus set by the app Raises the Note there.",
+          "run": [
+            {
+              "file": "docs/cross-browser-checklist.md",
+              "from": "## Safari (keyboard only)",
+              "to": "- [ ] Delete on a focused Note moves the ring to the next Note"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Not verified in Safari",
+      "detail": "The explanation is Safari's default behaviour, and it matches what the owner saw: Notes were reached, but the toolbar wasn't. Nobody has yet checked in Safari that the setting or Option+Tab reaches the toolbar. The checklist's first Safari item does that."
+    }
+  ],
+  "omitted": {}
+}
