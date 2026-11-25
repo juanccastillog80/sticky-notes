@@ -102,3 +102,43 @@ describe('deleteNote and undoDelete', () => {
     expect(ui.getSnapshot()).toBe(INITIAL_UI);
   });
 });
+
+describe('commit, where a Drag saves', () => {
+  const a = makeNote({ id: testId('a'), z: 1 });
+  const b = makeNote({ id: testId('b'), x: 500, z: 2 });
+
+  function setup() {
+    const notes = createNotesStore();
+    notes.dispatch({ type: 'load', notes: [a, b] });
+    const ui = createUiStore();
+    return { notes, ui, ...createCommands({ notes, ui }) };
+  }
+
+  it('a delete (a drop on the Trash zone) records Undo and ends Editing of that Note', () => {
+    const { notes, ui, commit } = setup();
+    ui.dispatch({ type: 'startEditing', id: a.id });
+
+    commit({ type: 'delete', id: a.id });
+
+    expect(notes.getSnapshot().ids).toEqual(['b']);
+    expect(ui.getSnapshot()).toMatchObject({ lastDeleted: a, editingId: null });
+  });
+
+  it('a delete leaves Editing of another Note alone', () => {
+    const { ui, commit } = setup();
+    ui.dispatch({ type: 'startEditing', id: b.id });
+
+    commit({ type: 'delete', id: a.id });
+
+    expect(ui.getSnapshot().editingId).toBe(b.id);
+  });
+
+  it('any other action goes straight to the Notes store, with no Undo', () => {
+    const { notes, ui, commit } = setup();
+
+    commit({ type: 'move', id: a.id, x: 300, y: 200 });
+
+    expect(notes.getSnapshot().notes[a.id]).toMatchObject({ x: 300, y: 200 });
+    expect(ui.getSnapshot().lastDeleted).toBeNull();
+  });
+});

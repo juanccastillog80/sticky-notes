@@ -1,0 +1,44 @@
+/* The bottom-right of the visible Board, inset from the scrollbars. Set in TrashZone. */
+.zone {
+  position: absolute;
+  right: calc(14px + var(--scrollbar-x, 0px));
+  bottom: calc(14px + var(--scrollbar-y, 0px));
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  width: 104px;
+  height: 104px;
+  border: 2px dashed color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  /* Takes presses itself, so a double-click on it never reaches the Board and creates nothing. */
+  user-select: none;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms,
+    transform 120ms;
+}
+
+.icon {
+  width: 26px;
+  height: 26px;
+}
+
+/* A move is running. */
+.zone[data-state='armed'] {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
+/* The pointer is inside it: a release deletes. */
+.zone[data-state='over'] {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  transform: scale(1.06);
+}

@@ -21,14 +21,14 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
   const stopEditing = useStopEditing();
-  const { deleteNote } = useCommands();
-  const { scrollerRef } = useBoardDom();
+  const { deleteNote, commit } = useCommands();
+  const { scrollerRef, trashRef } = useBoardDom();
   const ref = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   // Where the Click that starts Editing puts the caret; `null` is the end of the text.
   const pendingCaret = useRef<number | null>(null);
-  const start = useDrag(ref, { scrollerRef, commit: notes.dispatch, onClick: startEditingAt });
+  const start = useDrag(ref, { scrollerRef, trashRef, commit, onClick: startEditingAt });
 
   // Before paint, so the caret is in place on the first frame of Editing.
   useLayoutEffect(() => {

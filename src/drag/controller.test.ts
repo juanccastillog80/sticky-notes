@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { makeNote } from '../../test/factories';
 import type { Point, Rect } from '../geometry';
 import type { NoteAction } from '../notes/notesReducer';
-import { createDragController, type DragHandlers, type DragIO } from './controller';
-import { moveKind } from './kinds';
+import {
+  createDragController,
+  type DragHandlers,
+  type DragIO,
+  type TrashState,
+} from './controller';
+import { moveKind, resizeKinds } from './kinds';
 
 type Call =
   | { readonly call: 'attachPointerListeners' }
@@ -11,12 +16,15 @@ type Call =
   | { readonly call: 'releaseCapture'; readonly pointerId: number }
   | { readonly call: 'writePreview'; readonly rect: Rect | null }
   | { readonly call: 'dispatch'; readonly action: NoteAction }
-  | { readonly call: 'click'; readonly pointer: Point };
+  | { readonly call: 'click'; readonly pointer: Point }
+  | { readonly call: 'writeTrash'; readonly state: TrashState };
 
 /** A fake `io` that records every call, with a scroll position the test sets. */
 function setup() {
   const calls: Call[] = [];
   let scroll: Point = { x: 0, y: 0 };
+  // Far from where the tests drag, unless a test moves the pointer onto it.
+  const trash: Rect = { x: 900, y: 600, width: 104, height: 104 };
   let attached: DragHandlers | null = null;
 
   const io: DragIO = {
@@ -33,6 +41,8 @@ function setup() {
     writePreview: (rect) => calls.push({ call: 'writePreview', rect }),
     dispatch: (action) => calls.push({ call: 'dispatch', action }),
     click: (pointer) => calls.push({ call: 'click', pointer }),
+    trashRect: () => trash,
+    writeTrash: (state) => calls.push({ call: 'writeTrash', state }),
   };
   const controller = createDragController(io);
   const note = makeNote({ x: 100, y: 100 });
@@ -57,6 +67,9 @@ function setup() {
     controller,
     press: (x = 10, y = 10) => {
       controller.press({ pointerId: 1, clientX: x, clientY: y }, moveKind, note);
+    },
+    pressResize: (x = 10, y = 10) => {
+      controller.press({ pointerId: 1, clientX: x, clientY: y }, resizeKinds.se, note);
     },
     move: (x: number, y: number, buttons = 1) => {
       signal((h) => {
@@ -402,5 +415,69 @@ describe('moveKind', () => {
     expect(t.commits()).toEqual([
       { call: 'dispatch', action: { type: 'move', id: t.note.id, x: shown?.x, y: shown?.y } },
     ]);
+  });
+});
+
+describe('the Trash zone', () => {
+  const trashStates = (t: Setup) => t.of('writeTrash').map(({ state }) => state);
+
+  it('a move arms it once it leaves the Dead zone, and each change is written once', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(12, 10);
+    expect(trashStates(t)).toEqual([]);
+
+    t.move(40, 10);
+    t.move(60, 10);
+    t.move(950, 650);
+    t.move(960, 660);
+    t.move(500, 500);
+    t.move(510, 500);
+
+    expect(trashStates(t)).toEqual(['armed', 'over', 'armed']);
+  });
+
+  it('a release over it resets it before the delete', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(950, 650);
+    t.up(950, 650);
+
+    expect(trashStates(t)).toEqual(['over', 'quiet']);
+    expect(t.calls.slice(-2)).toEqual([
+      { call: 'writePreview', rect: null },
+      { call: 'dispatch', action: { type: 'delete', id: t.note.id } },
+    ]);
+    expect(t.calls.findIndex((c) => c.call === 'writeTrash' && c.state === 'quiet')).toBeLessThan(
+      t.calls.findIndex((c) => c.call === 'dispatch' && c.action.type === 'delete'),
+    );
+  });
+
+  it('Escape over it cancels: the zone goes quiet and nothing is deleted', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.move(950, 650);
+    t.on().key({ key: 'Escape' });
+
+    expect(trashStates(t)).toEqual(['over', 'quiet']);
+    expect(t.commits()).toEqual([]);
+  });
+
+  it('a Click never touches it', () => {
+    const t = setup();
+    t.press(10, 10);
+    t.up(11, 10);
+
+    expect(trashStates(t)).toEqual([]);
+  });
+
+  it('a resize never touches it, even over the zone', () => {
+    const t = setup();
+    t.pressResize(10, 10);
+    t.move(950, 650);
+    t.up(950, 650);
+
+    expect(trashStates(t)).toEqual([]);
+    expect(t.commits()).toMatchObject([{ action: { type: 'resize' } }]);
   });
 });
