@@ -19,6 +19,13 @@
   box-shadow: var(--shadow-note-dragging);
 }
 
+/* Released now, it would be deleted. Set and cleared by the Drag engine. */
+.note[data-over-trash] {
+  opacity: 0.55;
+  outline: 2px dashed var(--color-danger);
+  outline-offset: 2px;
+}
+
 .note[data-colour='yellow'] {
   --note-bg: var(--color-note-yellow);
   --note-strip: var(--color-note-yellow-strip);

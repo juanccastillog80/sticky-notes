@@ -17,6 +17,12 @@ export interface MoveSignal extends PointerSignal {
 }
 
 /**
+ * How the Trash zone looks: `quiet` with no move running, `armed` while a move runs,
+ * `over` while the pointer is inside it. The dragged Note shows `over` too.
+ */
+export type TrashState = 'quiet' | 'armed' | 'over';
+
+/**
  * DOM → controller. The controller's session handlers: the DOM side attaches them
  * in `attachPointerListeners` on press, and removes them when the session ends.
  */
@@ -43,12 +49,22 @@ export interface DragIO {
   dispatch: (action: NoteAction) => void;
   /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */
   click: (pointer: Point) => void;
+  /** The Trash zone's rect in client coordinates, or `null` if it isn't on screen. Read once per Press. */
+  trashRect: () => Rect | null;
+  /** Edge-triggered: called only when the state changes, and only for a kind that can delete. */
+  writeTrash: (state: TrashState) => void;
 }
 
 interface Session {
   /** The Drag kind, bound to the rect it started from. */
   readonly preview: (delta: Point, ctx: DragContext) => Rect;
   readonly commit: (delta: Point, ctx: DragContext) => NoteAction | null;
+  /** Absent for a kind that never deletes, such as a resize. */
+  readonly overTrash: ((ctx: DragContext) => boolean) | undefined;
+  /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */
+  readonly trash: Rect | null;
+  /** Last written to the DOM. */
+  trashState: TrashState;
   readonly from: Rect;
   readonly pointerId: number;
   /** Client coordinates. */
@@ -83,7 +99,10 @@ export interface DragController {
  *   move / scroll → Dead zone → Preview (io.writePreview)
  *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides
  *   cancel / Escape / dispose → end(false)
- *   end → detach, io.releaseCapture, then a Click (io.click) or reset Preview + io.dispatch the commit
+ *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + io.dispatch the commit
+ *
+ * A kind with `overTrash` (a move) also drives the Trash zone: `armed` once it leaves the
+ * Dead zone, `over` while the pointer is inside the zone, `quiet` at the end, each written once.
  *
  * The handlers exist for the whole controller, but are attached only while a Press is live.
  */
@@ -105,12 +124,22 @@ export function createDragController(io: DragIO): DragController {
     return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;
   }
 
+  const context = (s: Session): DragContext => ({ pointer: s.pointer, trash: s.trash });
+
+  function setTrash(s: Session, state: TrashState) {
+    if (!s.overTrash || s.trashState === state) return;
+    s.trashState = state;
+    io.writeTrash(state);
+  }
+
   function update(s: Session) {
     if (stillInDeadZone(s)) return;
     const d = delta(s);
     s.pending = false;
+    const ctx = context(s);
     // Synchronously, from the event: no rAF, so the Preview is never a frame behind.
-    io.writePreview(s.preview(d, { pointer: s.pointer }), s.from);
+    io.writePreview(s.preview(d, ctx), s.from);
+    setTrash(s, s.overTrash?.(ctx) ? 'over' : 'armed');
   }
 
   /**
@@ -128,7 +157,8 @@ export function createDragController(io: DragIO): DragController {
       if (released) io.click(s.pointer);
       return;
     }
-    const action = commit ? s.commit(delta(s), { pointer: s.pointer }) : null;
+    const action = commit ? s.commit(delta(s), context(s)) : null;
+    setTrash(s, 'quiet');
     // Reset before dispatching: the re-render then moves the Note to where the Preview was.
     io.writePreview(null, s.from);
     if (action) io.dispatch(action);
@@ -175,6 +205,9 @@ export function createDragController(io: DragIO): DragController {
       session = {
         preview: (d, ctx) => kind.preview(from, d, ctx),
         commit: (d, ctx) => kind.commit(from, d, ctx),
+        overTrash: kind.overTrash,
+        trash: kind.overTrash ? io.trashRect() : null,
+        trashState: 'quiet',
         from,
         pointerId: e.pointerId,
         pressPoint,

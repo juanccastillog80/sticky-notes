@@ -135,7 +135,7 @@ it('a press on empty Board ends Editing', async () => {
   const { stores, noteA, board } = await setup();
   await editABeforeWorld(noteA);
 
-  await press(board, { x: 900, y: 600 });
+  await press(board, { x: 500, y: 500 });
 
   expect(stores.ui.getSnapshot().editingId).toBeNull();
   expect(document.activeElement).toBe(document.body);

@@ -1,0 +1,247 @@
+{
+  "issue": 6,
+  "title": "Delete by dropping on the Trash zone, with Undo",
+  "lede": "A 104×104 **Trash zone** is pinned to the bottom-right of the visible Board, above the Notes. A move hints it (`armed`); with the pointer inside it, both the zone and the Note change look (`over`); a release there deletes the Note through the same `deleteNote` as the ×, so the **Undo toast** follows. Only the pointer counts, never the Note's rect, and a resize never touches the zone. The Undo, toast and reducer actions already existed from #28.",
+  "files": [
+    {
+      "path": "src/components/TrashZone.tsx",
+      "question": "Where is the Trash zone, and who changes its look?",
+      "summary": "Renders the zone in the Board's viewport, outside the scroll container, inset from the scrollbars. Its `data-state` is written by the Drag engine, never by React.",
+      "owns": "The zone's markup and its scrollbar inset.",
+      "never": "Listens to the pointer or decides a delete.",
+      "tested": "Browser tests in `trash.browser.test.tsx`."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "When does a release delete instead of move?",
+      "summary": "`moveKind` has `overTrash: pointerInTrash`, and its `commit` returns `delete` when the pointer is inside the zone. Resize kinds have no `overTrash`.",
+      "owns": "The hit rule: the pointer itself, edges included.",
+      "never": "Measures the DOM: the zone's rect arrives in the `DragContext`.",
+      "tested": "Node tests in `kinds.test.ts`, including a large Note brushing the zone."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When is the zone measured, and when is each state written?",
+      "summary": "A press measures the zone once, for a kind with `overTrash`. Each update writes `armed` or `over` only when it changes; the end writes `quiet` before resetting the Preview and dispatching.",
+      "owns": "The edge-triggered `writeTrash` calls and their order.",
+      "never": "Touches the DOM or knows the zone is a `div`.",
+      "tested": "Node tests against a recording fake `DragIO`."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "What does `writeTrash` do in the DOM?",
+      "summary": "Sets `data-state` on the zone and `data-over-trash` on the dragged Note.",
+      "owns": "The real `trashRect` and `writeTrash`.",
+      "never": "Decides the state.",
+      "tested": "Browser tests. Not in the coverage gate."
+    },
+    {
+      "path": "src/commands.ts",
+      "question": "Why does a drop get Undo?",
+      "summary": "`commit` is where a Drag saves: a `delete` goes through `deleteNote`, which ends Editing and records Undo; anything else goes straight to the Notes store.",
+      "owns": "Rules that span both stores.",
+      "never": "Touches the DOM.",
+      "tested": "Node tests in `commands.test.ts`."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Where does a Note's Drag save to?",
+      "summary": "Passes `trashRef` and the `commit` command to `useDrag`, instead of `notes.dispatch`.",
+      "owns": "Wiring a Note to the Drag engine.",
+      "never": "Knows about the Trash zone's states.",
+      "tested": "Browser tests."
+    }
+  ],
+  "flow": [
+    [
+      "src/components/Note.tsx",
+      "src/drag/useDrag.ts",
+      "src/drag/controller.ts",
+      "src/drag/kinds.ts"
+    ],
+    ["src/drag/controller.ts", "src/drag/useDrag.ts", "src/components/TrashZone.tsx"],
+    ["src/drag/useDrag.ts", "src/commands.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "The window opens or is resized",
+      "steps": [
+        {
+          "title": "The scroll container changes size",
+          "explain": "The zone sits outside the scroll container, so it never scrolls, but the container's scrollbars come and go with the window size. The effect measures them; the CSS then puts the zone 14 px inside the visible Board's corner: the window's corner less the scrollbars and the 24 px backdrop past the Board's edge, or the Board's own corner in a window larger than the Board. So when scrolled all the way, the zone is still over the Board. Browser tests check 1024×768 scrolled to the end and a 2400×1400 window.",
+          "run": [
+            {
+              "file": "src/components/TrashZone.tsx",
+              "from": "const inset = () => {",
+              "to": "observer.observe(scroller);"
+            },
+            {
+              "file": "src/components/TrashZone.tsx",
+              "from": "'--board-width': `${String(BOARD_SIZE.width)}px`,",
+              "to": "'--board-height': `${String(BOARD_SIZE.height)}px`,"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Move a Note onto the Trash zone and release",
+      "steps": [
+        {
+          "title": "pointerdown on the Note",
+          "explain": "The zone is measured once, at press, and only for a kind that can delete. ADR 0001 pins the zone to the window, so a scroll mid-drag never moves it, and a single measurement avoids reading layout on every move. A resize gets `trash: null` and never calls `trashRect`.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const start = useDrag(ref, { scrollerRef, trashRef, commit, onClick: startEditingAt });"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "overTrash: kind.overTrash,",
+              "to": "trashState: 'quiet',"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "trashRect() {",
+              "to": "return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;"
+            }
+          ]
+        },
+        {
+          "title": "pointermove past the Dead zone: the zone is armed",
+          "explain": "Every update asks the kind whether the pointer is over the zone. `setTrash` writes only on a change, so a hundred moves outside the zone write `armed` once. A Click never gets here, so it never touches the zone.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "const ctx = context(s);",
+              "to": "setTrash(s, s.overTrash?.(ctx) ? 'over' : 'armed');"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function setTrash(s: Session, state: TrashState) {",
+              "to": "io.writeTrash(state);"
+            }
+          ]
+        },
+        {
+          "title": "pointermove into the zone: both change look",
+          "explain": "Only the pointer is tested against the zone, so a large Note whose corner covers the zone stays `armed`. `over` sets the zone red and slightly larger, and dims the Note with a dashed red outline.",
+          "run": [
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "function pointerInTrash({ pointer, trash }: DragContext): boolean {",
+              "to": "return trash !== null && contains(trash, pointer);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "writeTrash(state) {",
+              "to": "else delete element.dataset.overTrash;"
+            }
+          ]
+        },
+        {
+          "title": "pointerup inside the zone",
+          "explain": "`moveKind.commit` returns `delete`. The zone goes `quiet` before the dispatch, while the Note's element still exists, so its `data-over-trash` is cleared too. The `commit` command sends the delete through `deleteNote`, which ends Editing if it was this Note and records it for Undo.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "const action = commit ? s.commit(delta(s), context(s)) : null;",
+              "to": "if (action) io.dispatch(action);"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "if (pointerInTrash(ctx)) return { type: 'delete', id: from.id };"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "commit: (action: NoteAction) => {",
+              "to": "else notes.dispatch(action);"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "function deleteNote(id: NoteId) {",
+              "to": "notes.dispatch({ type: 'delete', id });"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nothing is deleted: back out, Escape, or a resize",
+      "steps": [
+        {
+          "title": "pointermove back out of the zone, then pointerup",
+          "explain": "The state goes `over` → `armed`, then `quiet` at the end, and the commit is an ordinary `move`. The browser test drives this with real mouse input and checks both attributes after the release.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "setTrash(s, s.overTrash?.(ctx) ? 'over' : 'armed');"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "const { x, y } = moved(from, delta);",
+              "to": "return { type: 'move', id: from.id, x, y };"
+            }
+          ]
+        },
+        {
+          "title": "Escape over the zone",
+          "explain": "`end(false)` computes no action, but still writes `quiet`, so the zone and the Note never stay red after a cancel.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "const action = commit ? s.commit(delta(s), context(s)) : null;",
+              "to": "setTrash(s, 'quiet');"
+            }
+          ]
+        },
+        {
+          "title": "A resize released over the zone",
+          "explain": "A resize kind has no `overTrash`, so `setTrash` returns at once and its `commit` never looks at the pointer. Tested in both `kinds.test.ts` and `controller.test.ts`.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (!s.overTrash || s.trashState === state) return;"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Undo restores the Note as it was at the drop, `z` included",
+      "detail": "The Press Raises the Note before it is dropped, so Undo brings it back on top (`z: 3` in the browser test), not at its `z` before the Drag. The counter-argument: story 41 could be read as \"before I touched it\". But the Raise is a real, saved action, and Undo reverses only the delete."
+    },
+    {
+      "title": "The zone takes presses",
+      "detail": "The zone has no `pointer-events: none`. Without it, a double-click on the zone would land on the Board under it and create a Note, against story 15. The cost: a Note under the zone can't be pressed there, but it is always uncovered by scrolling (ADR 0001)."
+    },
+    {
+      "title": "No Board ref in `BoardDomContext`",
+      "detail": "The issue asked for Board, scroll container and Trash zone refs. Nothing reads a Board ref, so only `trashRef` was added."
+    },
+    {
+      "title": "Hidden from assistive technology",
+      "detail": "The zone is `aria-hidden`: it is a pointer-only drop target. Keyboard users delete with the ×."
+    }
+  ],
+  "omitted": {
+    "README.md": "Feature 4 is now done; the \"Not included\" entry is gone.",
+    "docs/cross-browser-checklist.md": "Rows for stories 34–42.",
+    "src/App.tsx": "Creates `trashRef` and adds it to the `BoardDom` value.",
+    "src/BoardDomContext.ts": "Adds `trashRef`.",
+    "src/components/Board.tsx": "Renders `<TrashZone />` in the viewport, before the toast.",
+    "src/components/TrashZone.module.css": "Quiet, armed and over looks; the inset inside the visible Board's corner.",
+    "src/components/Note.module.css": "The Note's `data-over-trash` look.",
+    "src/tokens.css": "`--color-danger` and `--color-danger-soft`.",
+    "src/geometry.ts": "`contains(rect, point)`, edges included.",
+    "src/commands.test.ts": "Tests for `commit`.",
+    "src/drag/controller.test.ts": "Edge-triggered `writeTrash` tests.",
+    "src/drag/kinds.test.ts": "Hit rule tests.",
+    "src/trash.browser.test.tsx": "Real-mouse tests: pinned position, states, drop and Undo, brushing, double-click.",
+    "test/mouse.ts": "Exports `pointIn` for the new browser test.",
+    "src/components/Board.module.css": "The 24 px backdrop gap becomes `--board-end-gap`, which the Trash zone reads.",
+    "src/editing.browser.test.tsx": "A press on empty Board moved off the Trash zone, which now covers the old spot and takes presses."
+  }
+}

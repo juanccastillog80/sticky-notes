@@ -1,4 +1,11 @@
-import { resizeRect, toCommittedRect, type Edges, type Point, type Rect } from '../geometry';
+import {
+  contains,
+  resizeRect,
+  toCommittedRect,
+  type Edges,
+  type Point,
+  type Rect,
+} from '../geometry';
 import type { Note } from '../notes/note';
 import type { NoteAction } from '../notes/notesReducer';
 
@@ -6,6 +13,8 @@ import type { NoteAction } from '../notes/notesReducer';
 export interface DragContext {
   /** The pointer, in client coordinates. */
   readonly pointer: Point;
+  /** The Trash zone's rect in client coordinates, measured at press, or `null` if it isn't on screen. */
+  readonly trash: Rect | null;
 }
 
 /**
@@ -17,6 +26,8 @@ export interface DragKind<From extends Rect> {
   press?: (from: From) => NoteAction | null;
   preview: (from: From, delta: Point, ctx: DragContext) => Rect;
   commit: (from: From, delta: Point, ctx: DragContext) => NoteAction | null;
+  /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */
+  overTrash?: (ctx: DragContext) => boolean;
 }
 
 /** The rect a move shows, which is exactly the rect it saves. */
@@ -27,10 +38,20 @@ function moved(from: Rect, delta: Point): Rect {
 /** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */
 const raise = (from: Note): NoteAction => ({ type: 'raise', id: from.id });
 
+/**
+ * The pointer itself must be inside the zone, edges included: a large Note that only
+ * brushes the zone is moved, not deleted.
+ */
+function pointerInTrash({ pointer, trash }: DragContext): boolean {
+  return trash !== null && contains(trash, pointer);
+}
+
 export const moveKind: DragKind<Note> = {
   press: raise,
   preview: moved,
-  commit(from, delta) {
+  overTrash: pointerInTrash,
+  commit(from, delta, ctx) {
+    if (pointerInTrash(ctx)) return { type: 'delete', id: from.id };
     const { x, y } = moved(from, delta);
     return { type: 'move', id: from.id, x, y };
   },

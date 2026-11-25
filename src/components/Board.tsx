@@ -12,6 +12,7 @@ import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
 import { useCommands, useNotes } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
+import { TrashZone } from './TrashZone';
 import { UndoToast } from './UndoToast';
 import styles from './Board.module.css';
 import { useStopEditing } from './useStopEditing';
@@ -81,6 +82,7 @@ export function Board({
         </section>
       </div>
       <EmptyHint />
+      <TrashZone />
       <UndoToast />
     </main>
   );

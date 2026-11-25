@@ -8,7 +8,7 @@ declare module 'vitest/browser' {
 }
 
 /** The client point at `position` inside the element, or its centre. */
-function pointIn(locator: Locator, position?: { x: number; y: number }) {
+export function pointIn(locator: Locator, position?: { x: number; y: number }) {
   const rect = locator.element().getBoundingClientRect();
   return position
     ? { x: rect.x + position.x, y: rect.y + position.y }

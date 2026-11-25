@@ -20,6 +20,8 @@ body {
   --color-surface: #ffffff;
   --color-accent: #2f5bd3;
   --color-accent-on-dark: #9db6ff;
+  --color-danger: #c4382c;
+  --color-danger-soft: #fbe5e2;
   --color-control-hover: #f3f2ef;
   --color-backdrop: #e9e6df;
   --color-board: #fbfaf7;

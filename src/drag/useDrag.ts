@@ -8,6 +8,8 @@ import type { DragKind } from './kinds';
 export interface DragOptions {
   /** The Board's scroll container, which can scroll mid-drag. */
   readonly scrollerRef: RefObject<HTMLElement | null>;
+  /** The Trash zone, which only a kind that can delete measures and draws on. */
+  readonly trashRef: RefObject<HTMLElement | null>;
   /** Where a Press's Raise and a released Drag's one action go. */
   readonly commit: (action: NoteAction) => void;
   /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */
@@ -65,6 +67,19 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
       },
       click(pointer) {
         latest.current.onClick?.(pointer);
+      },
+      trashRect() {
+        const rect = latest.current.trashRef.current?.getBoundingClientRect();
+        return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+      },
+      writeTrash(state) {
+        const zone = latest.current.trashRef.current;
+        if (zone) zone.dataset.state = state;
+        const element = previewRef.current;
+        if (element) {
+          if (state === 'over') element.dataset.overTrash = '';
+          else delete element.dataset.overTrash;
+        }
       },
     });
     controller.current = drag;

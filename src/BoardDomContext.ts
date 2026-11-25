@@ -4,6 +4,8 @@ import { createContext, use, type RefObject } from 'react';
 export interface BoardDom {
   /** The Board's scroll container. */
   readonly scrollerRef: RefObject<HTMLDivElement | null>;
+  /** The Trash zone, which a move measures at press and draws its states on. */
+  readonly trashRef: RefObject<HTMLDivElement | null>;
 }
 
 export const BoardDomContext = createContext<BoardDom | null>(null);
