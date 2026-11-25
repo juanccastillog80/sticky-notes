@@ -1,0 +1,236 @@
+{
+  "issue": 8,
+  "title": "Note colours and the Current colour",
+  "lede": "Six toolbar swatches either recolour the Note being edited, or with none being edited, set the **Current colour** for the next Note. One command, `pickColour`, holds that rule. A colour is a `data-colour` attribute: global CSS maps it to three variables (background, strip, Editing strip), so a Note, a swatch and a New-button glyph all recolour by changing one attribute.",
+  "files": [
+    {
+      "path": "src/commands.ts",
+      "question": "What does a swatch press do to the stores?",
+      "summary": "`pickColour` recolours the edited Note through `recolour`, which also sets the Current colour. With nothing being edited, it sets only the Current colour.",
+      "owns": "The rule that spans the Notes store and the UI store.",
+      "never": "Touches the DOM or knows about swatches as buttons.",
+      "tested": "Node tests in `commands.test.ts` for `recolour` and `pickColour`."
+    },
+    {
+      "path": "src/notes/notesReducer.ts",
+      "question": "How does a recolour re-render only one Note?",
+      "summary": "`setColour` replaces just that Note through `withNote`, so `ids` and every other Note keep their reference. Recolouring a missing Note, or with the same colour, returns the same state.",
+      "owns": "A Note's colour.",
+      "never": "Knows the Current colour.",
+      "tested": "Node tests in `notesReducer.test.ts`; a Profiler test in `colours.browser.test.tsx`."
+    },
+    {
+      "path": "src/ui/uiReducer.ts",
+      "question": "Where does the Current colour live?",
+      "summary": "`setCurrentColour` sets `currentColour`, which `createNote` already read. A no-op keeps the state.",
+      "owns": "The Current colour.",
+      "never": "Recolours a Note.",
+      "tested": "Node tests in `uiReducer.test.ts`."
+    },
+    {
+      "path": "src/components/ColourSwatches.tsx",
+      "question": "How does a swatch keep the edited Note's focus and caret?",
+      "summary": "Six buttons and a \"this note / next note\" label. A mouse press is prevented at `mousedown`, so focus never leaves the textarea; the click then calls `pickColour`.",
+      "owns": "The swatches, which one is pressed, and the label.",
+      "never": "Decides what a pick changes: that is `pickColour`.",
+      "tested": "Real-mouse browser tests in `colours.browser.test.tsx`."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Where does a Note get its colour?",
+      "summary": "It already rendered `data-colour={colour}`; this PR only adds `data-grip-strip` to the strip, for the browser test.",
+      "owns": "The Note's markup.",
+      "never": "Picks a colour.",
+      "tested": "Browser tests."
+    },
+    {
+      "path": "src/components/Note.module.css",
+      "question": "Which variables does a Note read?",
+      "summary": "`--note-bg`, `--note-strip`, and `--note-strip-editing` while Editing. The yellow-only `data-colour` rule moved to `tokens.css`.",
+      "owns": "The Note's look.",
+      "never": "Defines a colour.",
+      "tested": "Browser test of the three shades per colour."
+    },
+    {
+      "path": "src/tokens.css",
+      "question": "How does one attribute give three shades?",
+      "summary": "Eighteen colour tokens, and one `[data-colour='…']` rule per colour that maps them to `--note-bg`, `--note-strip` and `--note-strip-editing`.",
+      "owns": "The palette, each background above 12:1 against `--color-note-text`.",
+      "never": "Styles a component: each component reads the three variables.",
+      "tested": "A browser test that every colour gives three distinct, non-transparent shades."
+    },
+    {
+      "path": "src/components/NewNoteButtons.tsx",
+      "question": "How do the New buttons show the Current colour?",
+      "summary": "They subscribe to `currentColour` and put it on a glyph's `data-colour`.",
+      "owns": "The glyph.",
+      "never": "Re-renders as Notes change: Notes are still read at press time.",
+      "tested": "Browser test of the glyph's `data-colour`."
+    }
+  ],
+  "flow": [
+    [
+      "src/components/ColourSwatches.tsx",
+      "src/commands.ts",
+      "src/notes/notesReducer.ts",
+      "src/ui/uiReducer.ts"
+    ],
+    ["src/ui/uiReducer.ts", "src/components/NewNoteButtons.tsx", "src/tokens.css"]
+  ],
+  "scenarios": [
+    {
+      "name": "Recolour the Note being edited",
+      "steps": [
+        {
+          "title": "mousedown on the Pink swatch",
+          "explain": "Focus moves as the default action of `mousedown`, so preventing it there keeps focus, and with it the selection, in the textarea. Preventing `pointerdown` alone would not be enough here. Nothing ends Editing either: only a press on empty Board or on another Note does. The browser test sets the caret at 3 and finds it still at 3 after the press, in Chromium and Firefox.",
+          "run": [
+            {
+              "file": "src/components/ColourSwatches.tsx",
+              "from": "onMouseDown={(e) => {",
+              "to": "e.preventDefault();"
+            }
+          ]
+        },
+        {
+          "title": "click: the Note turns pink, and so does the Current colour",
+          "explain": "`pickColour` reads `editingId` at click time and hands the edited Note to `recolour`. That checks the Note exists before touching either store, so a stale id can't change the Current colour on its own. `setColour` replaces only that Note, which is why the Profiler test sees Note a re-render and not Note b.",
+          "run": [
+            {
+              "file": "src/components/ColourSwatches.tsx",
+              "from": "pickColour(colour);"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "pickColour: (colour: NoteColour) => {",
+              "to": "if (editingId) recolour(editingId, colour);"
+            },
+            {
+              "file": "src/commands.ts",
+              "from": "function recolour(id: NoteId, colour: NoteColour) {",
+              "to": "ui.dispatch({ type: 'setCurrentColour', colour });"
+            },
+            {
+              "file": "src/notes/notesReducer.ts",
+              "from": "function setColour(state: NotesState, id: NoteId, colour: NoteColour): NotesState {",
+              "to": "return withNote(state, { ...note, colour });"
+            }
+          ]
+        },
+        {
+          "title": "render: one attribute, three shades",
+          "explain": "The Note already renders `data-colour={colour}`, and the global rule for `pink` swaps the three variables. The Grip strip reads `--note-strip-editing` while the Note is being edited, so each colour has its own Editing shade rather than a computed `color-mix`.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "data-colour={colour}"
+            },
+            {
+              "file": "src/tokens.css",
+              "from": "[data-colour='pink'] {",
+              "to": "--note-strip-editing: var(--color-note-pink-strip-editing);"
+            },
+            {
+              "file": "src/components/Note.module.css",
+              "from": ".note[data-editing] .gripStrip {",
+              "to": "background: var(--note-strip-editing);"
+            }
+          ]
+        },
+        {
+          "title": "render: the swatches show this Note's colour",
+          "explain": "While Editing, the pressed swatch is the edited Note's colour, not the Current colour. Both are the same right after a pick, but they differ when you start editing an older Note. The selector returns a primitive, so the swatches re-render only when that colour changes, not on every keystroke.",
+          "run": [
+            {
+              "file": "src/components/ColourSwatches.tsx",
+              "from": "const editedColour = useNotes(",
+              "to": "const shown = editedColour ?? currentColour;"
+            },
+            {
+              "file": "src/components/ColourSwatches.tsx",
+              "from": "{editedColour ? 'this note' : 'next note'}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Set the colour for the next Note",
+      "steps": [
+        {
+          "title": "click Green with nothing being edited",
+          "explain": "No Note changes: the browser test checks both Notes are still yellow. Only the UI store changes, and `withCurrentColour` keeps the state when the colour is already green, so a second click notifies nobody.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "else ui.dispatch({ type: 'setCurrentColour', colour });"
+            },
+            {
+              "file": "src/ui/uiReducer.ts",
+              "from": "function withCurrentColour(state: UiState, currentColour: NoteColour): UiState {",
+              "to": "return currentColour === state.currentColour ? state : { ...state, currentColour };"
+            }
+          ]
+        },
+        {
+          "title": "render: the New-button glyphs turn green",
+          "explain": "The buttons subscribe to `currentColour` only. The glyph is a small Note, with its strip drawn as the top 3 px of a gradient, using the same variables as a real Note.",
+          "run": [
+            {
+              "file": "src/components/NewNoteButtons.tsx",
+              "from": "const currentColour = useUi((state) => state.currentColour);"
+            },
+            {
+              "file": "src/components/NewNoteButtons.tsx",
+              "from": "<span aria-hidden=\"true\" className={styles.glyph} data-colour={currentColour} />"
+            }
+          ]
+        },
+        {
+          "title": "click New M: the new Note is green",
+          "explain": "`createNote` was already reading the Current colour; this PR gives the user a way to change it.",
+          "run": [
+            {
+              "file": "src/commands.ts",
+              "from": "const colour = ui.getSnapshot().currentColour;",
+              "to": "notes.dispatch({ type: 'create', note: { id, x, y, width, height, text: '', colour } });"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The pressed swatch follows the edited Note, not the Current colour",
+      "detail": "The issue doesn't say which swatch looks pressed. Showing the edited Note's colour answers \"what colour is this note?\", which matches the \"this note\" label. The counter-argument: right after you start editing an older Note, the New-button glyphs (Current colour) and the pressed swatch can disagree. They agree again after the first pick."
+    },
+    {
+      "title": "Keyboard users move focus to the swatch",
+      "detail": "Only a mouse press keeps focus in the Note. Tabbing to a swatch takes focus off the textarea, but Editing doesn't end on blur, so Enter or Space still recolours the edited Note. Focus is not sent back to the textarea; doing that would make the swatches impossible to step through with Tab."
+    },
+    {
+      "title": "Colour rules moved to global CSS",
+      "detail": "The `[data-colour]` rules left `Note.module.css` for `tokens.css`, so swatches and glyphs reuse them. A seventh colour means editing `NOTE_COLOURS`, `COLOUR_NAMES` and `tokens.css`; plain CSS has no loop to avoid the six repeated rules."
+    },
+    {
+      "title": "Strips are below 12:1",
+      "detail": "The 12:1 rule holds for the backgrounds, which carry the text (lowest: orange, 12.09). Strip shades go down to about 8:1 on the Editing strips. They hold only the ×, which is drawn at reduced opacity anyway."
+    },
+    {
+      "title": "The Current colour isn't saved",
+      "detail": "Like the Notes themselves, it is lost on reload until the local copy (#9) lands."
+    }
+  ],
+  "omitted": {
+    "README.md": "Bonus III row added; the \"not built yet\" line no longer lists colours.",
+    "src/notes/note.ts": "`COLOUR_NAMES`, the swatch labels, shared with the browser test.",
+    "src/components/ColourSwatches.module.css": "Round two-tone swatches, the pressed ring, a `:focus-visible` outline and a fixed-width label.",
+    "src/components/NewNoteButtons.module.css": "The glyph, and a flex layout to place it beside the letter.",
+    "src/components/TopBar.tsx": "Renders `<ColourSwatches />` after the New buttons.",
+    "src/colours.browser.test.tsx": "Real-mouse tests: shades per colour, focus and caret kept, next Note, label and glyphs, Profiler.",
+    "src/commands.test.ts": "Tests for `recolour` and `pickColour`.",
+    "src/notes/notesReducer.test.ts": "Tests for `setColour`.",
+    "src/ui/uiReducer.test.ts": "Tests for `setCurrentColour`."
+  }
+}
