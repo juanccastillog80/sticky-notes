@@ -67,11 +67,15 @@
   background: color-mix(in srgb, var(--note-strip), black 10%);
 }
 
-/* Over the strip's right end, left of the `ne` corner handle, above the `n` edge. */
+/*
+ * Centred in the strip's right end, inset as much from the right as from the top.
+ * Drawn above the `n` edge and most of the `ne` corner handle: the Note still resizes
+ * from its other edges and corners.
+ */
 .delete {
   position: absolute;
   top: 2px;
-  right: 14px;
+  right: 2px;
   z-index: 2;
   display: grid;
   place-items: center;

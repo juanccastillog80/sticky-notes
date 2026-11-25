@@ -11,7 +11,7 @@ A single-page desktop app for placing, arranging and resizing sticky notes on a 
 | 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons |
 | 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges           |
 | 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels               |
-| 4. Remove a note on a trash zone                     | Not included (see below)                                                                            |
+| 4. Remove a note on a trash zone                     | Trash zone not included (see below); each Note's × deletes it instead, with Undo                    |
 | Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                 |
 | Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                     |
 
@@ -21,7 +21,7 @@ The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead
 
 The brief asks for 3 of the 4 features. Features 1–3 came first, polished and tested. The bonuses are being added one at a time, to the same standard, since they make the UI better.
 
-- **Trash zone (feature 4)** is designed (spec issue #6, [ADR 0001](docs/adr/0001-fixed-scrolling-board.md)) but not built.
+- **Trash zone (feature 4)** is designed (spec issue #6, [ADR 0001](docs/adr/0001-fixed-scrolling-board.md)) but not built. Notes are deleted instead with the × on their Grip strip, followed by a 5-second Undo toast (#28). That is one click instead of a drag, and a misclick can be undone.
 - **Colours, localStorage and REST saving (bonuses III, IV, V)** are not built yet. The persistence design is recorded in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md). The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup. It doesn't save anything yet, so notes are lost on reload. The planned `?fail=&latency=` URL parameters for demoing failed and slow saves belong to that work and don't exist yet.
 
 ## Setup
