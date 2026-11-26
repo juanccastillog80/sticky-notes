@@ -66,7 +66,7 @@ interface Session {
   /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */
   readonly trash: Rect | null;
   /** The Board's top-left on screen, measured at press. A scroll since moves it the other way. */
-  readonly pressBoard: Point;
+  readonly pressBoardOrigin: Point;
   /** Last written to the DOM. */
   trashState: TrashState;
   readonly from: Rect;
@@ -113,12 +113,18 @@ export interface DragController {
 export function createDragController(io: DragIO): DragController {
   let session: Session | null = null;
 
+  /** How far the container has scrolled since the press. */
+  function scrolled(s: Session): Point {
+    const scroll = io.scrollPosition();
+    return { x: scroll.x - s.pressScroll.x, y: scroll.y - s.pressScroll.y };
+  }
+
   function delta(s: Session): Point {
     // The Board moves under a still pointer when the container scrolls.
-    const scroll = io.scrollPosition();
+    const scroll = scrolled(s);
     return {
-      x: s.pointer.x - s.pressPoint.x + scroll.x - s.pressScroll.x,
-      y: s.pointer.y - s.pressPoint.y + scroll.y - s.pressScroll.y,
+      x: s.pointer.x - s.pressPoint.x + scroll.x,
+      y: s.pointer.y - s.pressPoint.y + scroll.y,
     };
   }
 
@@ -130,13 +136,10 @@ export function createDragController(io: DragIO): DragController {
 
   function context(s: Session): DragContext {
     // The Board moves up and left on screen as the container scrolls down and right.
-    const scroll = io.scrollPosition();
+    const scroll = scrolled(s);
     return {
       trash: s.trash,
-      board: {
-        x: s.pressBoard.x - (scroll.x - s.pressScroll.x),
-        y: s.pressBoard.y - (scroll.y - s.pressScroll.y),
-      },
+      boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },
     };
   }
 
@@ -225,7 +228,7 @@ export function createDragController(io: DragIO): DragController {
         },
         overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),
         trash: overTrash ? io.trashRect() : null,
-        pressBoard: overTrash ? io.boardOrigin() : { x: 0, y: 0 },
+        pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },
         trashState: 'quiet',
         from,
         pointerId: e.pointerId,

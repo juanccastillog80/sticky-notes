@@ -14,7 +14,7 @@ export interface DragContext {
   /** The Trash zone's rect in client coordinates, measured at press, or `null` if it isn't on screen. */
   readonly trash: Rect | null;
   /** The Board's top-left in client coordinates now: where it was at press, less the scroll since. */
-  readonly board: Point;
+  readonly boardOrigin: Point;
 }
 
 /** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */
@@ -47,13 +47,13 @@ function raise(from: Note, save: DragSave) {
 /**
  * The Note's Preview rect, placed on screen, overlaps the zone, touching edges included.
  * It is the Note that is dropped, so the pointer doesn't matter: a large Note held by its
- * far edge is deleted once it covers the zone. The highlight and the release both ask
+ * far edge is deleted as soon as any part of it reaches the zone. The highlight and the release both ask
  * this, so the highlight always predicts what a release does.
  */
-function noteOverTrash(from: Rect, delta: Point, { trash, board }: DragContext): boolean {
+function noteOverTrash(from: Rect, delta: Point, { trash, boardOrigin }: DragContext): boolean {
   if (trash === null) return false;
   const shown = moved(from, delta);
-  return intersects({ ...shown, x: shown.x + board.x, y: shown.y + board.y }, trash);
+  return intersects({ ...shown, x: shown.x + boardOrigin.x, y: shown.y + boardOrigin.y }, trash);
 }
 
 export const moveKind: DragKind<Note> = {

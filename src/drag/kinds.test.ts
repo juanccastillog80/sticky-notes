@@ -6,7 +6,7 @@ import type { Note } from '../notes/note';
 import { moveKind, resizeKinds, type DragContext, type DragKind } from './kinds';
 
 const note = makeNote({ x: 100, y: 100, width: 220, height: 170 });
-const ctx: DragContext = { trash: null, board: { x: 0, y: 0 } };
+const ctx: DragContext = { trash: null, boardOrigin: { x: 0, y: 0 } };
 
 /** What `kind.commit` saved at release, as `[action, ...args]` calls. */
 function saved(kind: DragKind<Note>, from: Note, delta: Point, ctx: DragContext): Call[] {
@@ -26,7 +26,7 @@ describe('moveKind and the Trash zone', () => {
   // Client coordinates, as measured on screen.
   const trash = { x: 900, y: 600, width: 104, height: 104 };
   /** The Board's top-left on screen: below a 56 px top bar, unless a test says otherwise. */
-  const at = (board: Point = { x: 0, y: 56 }): DragContext => ({ trash, board });
+  const at = (boardOrigin: Point = { x: 0, y: 56 }): DragContext => ({ trash, boardOrigin });
 
   /** Whether the zone is highlighted now, and what a release now saves: they must agree. */
   function release(from: Note, delta: Point, ctx: DragContext) {
@@ -101,7 +101,7 @@ describe('moveKind and the Trash zone', () => {
   it('with no Trash zone on screen, a move is only a move', () => {
     const big = makeNote({ x: 700, y: 450, width: 400, height: 300 });
 
-    expect(release(big, { x: 0, y: 0 }, { trash: null, board: { x: 0, y: 56 } })).toEqual({
+    expect(release(big, { x: 0, y: 0 }, { trash: null, boardOrigin: { x: 0, y: 56 } })).toEqual({
       over: false,
       saved: [['move', big.id, 700, 450]],
     });
