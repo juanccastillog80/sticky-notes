@@ -1,0 +1,313 @@
+{
+  "issue": 37,
+  "title": "Zustand stores with named actions",
+  "lede": "The hand-written store (`createStore`, the reducers, `dispatch` and `commands.ts`) is gone. The Notes store and the UI store are now **Zustand** vanilla stores with named actions: `notes.getState().move(id, x, y)`. Components subscribe with the same selectors as before, so the re-render rules haven't changed. The rules that span both stores (Undo, Editing, the Current colour) are now Notes actions, and the Notes store is given the UI store when it is created. Nothing the user sees changes.",
+  "files": [
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "What does a Notes action do, and why does a no-op re-render nothing?",
+      "summary": "Each action `set`s a pure transition. A transition returns the state it was given when nothing changes, and Zustand then notifies nobody. The cross-store actions read and write the UI store they were given.",
+      "owns": "The Notes, their Stacking order, and the rules that span both stores: createNote, deleteNote, undoDelete, recolour, pickColour.",
+      "never": "Touches the DOM or knows about React.",
+      "tested": "Node tests: `notesStore.test.ts` for the pure `transitions`, `notesActions.test.ts` for the actions, both stores included."
+    },
+    {
+      "path": "src/ui/uiStore.ts",
+      "question": "How does the UI store keep a no-op from notifying anyone?",
+      "summary": "Every action sets one field through `setField`, which returns the same state when the value is already there.",
+      "owns": "The Note being edited, the Current colour and the Note that Undo would bring back.",
+      "never": "Knows the Notes store.",
+      "tested": "Node tests in `uiStore.test.ts`, including one that a no-op notifies no subscriber."
+    },
+    {
+      "path": "src/StoresContext.ts",
+      "question": "How do components reach the stores, and how do tests build their own?",
+      "summary": "`createStores()` wires the two stores. The context hands them out, and `useNotes`/`useUi` wrap Zustand's `useStore(store, selector)`.",
+      "owns": "The wiring of the two stores, and the selector hooks.",
+      "never": "Holds state of its own.",
+      "tested": "Through every browser test, which builds fresh stores with `createStores()`."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "What does a Drag kind save, now that there is no action object to return?",
+      "summary": "`press` and `commit` call the `save` they are given (`raise`, `move`, `resize`, `deleteNote`). A drop on the Trash zone calls `deleteNote`, so it gets the same Undo as the ×.",
+      "owns": "What each kind shows and saves.",
+      "never": "Reads the store or the DOM.",
+      "tested": "Node tests in `kinds.test.ts`, with a recording `save`."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When does a released Drag save, compared with the Preview reset?",
+      "summary": "It measures the delta first, resets the Trash zone and the Preview, and then saves, the same order as before.",
+      "owns": "The Drag lifecycle.",
+      "never": "Knows which store action a kind calls.",
+      "tested": "Node tests in `controller.test.ts`: the reset comes before the one save."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "Where do a Drag's saves end up?",
+      "summary": "`io.save` forwards each call to `notes.getState()` at the moment of the call, not at render.",
+      "owns": "The DOM side of the Drag engine.",
+      "never": "Decides anything.",
+      "tested": "Browser tests in `drag.browser.test.tsx` and `trash.browser.test.tsx`."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "How does a Note call actions without subscribing to them?",
+      "summary": "It reads `notes.getState()` and `ui.getState()` inside event handlers, and subscribes only to `notes[id]` and its own Editing flag.",
+      "owns": "A Note's events.",
+      "never": "Subscribes to another Note.",
+      "tested": "Browser tests, including the `<Profiler>` tests."
+    },
+    {
+      "path": "src/components/UndoToast.tsx",
+      "question": "How does Undo reach the store?",
+      "summary": "The button calls `notes.getState().undoDelete()`, and the toast subscribes to `lastDeleted`.",
+      "owns": "The Undo toast.",
+      "never": "Restores a Note by itself.",
+      "tested": "Browser tests in `delete.browser.test.tsx` and `trash.browser.test.tsx`."
+    },
+    {
+      "path": "test/recordCalls.ts",
+      "question": "How do the tests see which actions ran?",
+      "summary": "`recordActions(store)` swaps every action in the store for a wrapper that records `[name, ...args]`, then calls through. `recordingSave` is the same for the Drag unit tests.",
+      "owns": "Recording action calls in tests.",
+      "never": "Changes what an action does.",
+      "tested": "Used by the drag, delete and keyboard browser tests and the Drag unit tests."
+    }
+  ],
+  "flow": [
+    [
+      "src/components/Note.tsx",
+      "src/drag/useDrag.ts",
+      "src/drag/controller.ts",
+      "src/drag/kinds.ts",
+      "src/notes/notesStore.ts"
+    ],
+    ["src/notes/notesStore.ts", "src/ui/uiStore.ts", "src/components/UndoToast.tsx"],
+    ["src/StoresContext.ts", "src/notes/notesStore.ts", "src/ui/uiStore.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Drag a Note to a new place",
+      "steps": [
+        {
+          "title": "The app starts: two stores, wired once",
+          "explain": "The UI store is built first, because the Notes store needs it for the cross-store rules. The UI store never needs the Notes store, so there is no cycle. `main.tsx` and every browser test call this same function, so tests build the app's stores exactly as the app does.",
+          "run": [
+            {
+              "file": "src/StoresContext.ts",
+              "from": "export function createStores(): Stores {",
+              "to": "return { ui, notes: createNotesStore(ui) };"
+            }
+          ]
+        },
+        {
+          "title": "Each Note subscribes to its own Note only",
+          "explain": "Zustand's `useStore` re-renders when the selected value changes by `Object.is`. `state.notes[id]` is a reference already in the state, and the transitions keep an unchanged Note at the same reference, so moving Note a doesn't re-render Note b. The `<Profiler>` browser tests check this.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const note = useNotes((state) => state.notes[id]);"
+            },
+            {
+              "file": "src/StoresContext.ts",
+              "from": "export function useNotes<T>(selector: (state: NotesState) => T): T {",
+              "to": "return useStore(useStores().notes, selector);"
+            }
+          ]
+        },
+        {
+          "title": "pointerdown: the Press Raises through save",
+          "explain": "The kind no longer returns `{ type: 'raise' }` for the controller to dispatch. It calls `save.raise`, and `useDrag` forwards that to the store's `raise` action, reading `notes.getState()` at the moment of the call. Reading it then, and not at render, is also what lets a test's recorder see the call.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "kind.press?.(from, io.save);"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "function raise(from: Note, save: DragSave) {",
+              "to": "save.raise(from.id);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "notes.getState().raise(id);"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "raise: (id) => {",
+              "to": "set((state) => raise(state, id));"
+            }
+          ]
+        },
+        {
+          "title": "pointerup: measure, reset the Preview, then save",
+          "explain": "The delta and the pointer are taken before anything is reset, then the Trash zone goes quiet and the Preview is cleared, and only then does the kind save. That is the order the old code had: the re-render then draws the Note exactly where the Preview was. Saving first would flash the Note at its new place with the old transform still on it.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "// Measured before the reset, so what is saved is exactly what the Preview showed.",
+              "to": "if (commit) s.commit(d, ctx);"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "commit(from, delta, ctx, save) {",
+              "to": "save.move(from.id, x, y);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "notes.getState().move(id, x, y);"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "move: (id, x, y) => {",
+              "to": "set((state) => move(state, id, { x, y }));"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "An action that changes nothing",
+      "steps": [
+        {
+          "title": "Raise a Note that is already in front",
+          "explain": "The pure `raise` transition returns the state it was given. Zustand's `setState` compares the result with `Object.is` and stops there: no new state, no subscriber called, nothing re-renders. The UI store gets the same effect from `setField`. Covered by `notesActions.test.ts` (\"an action that changes nothing leaves the state reference the same\") and `uiStore.test.ts` (\"tells subscribers about a change, but not about a no-op\").",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "// Each action `set`s a pure transition. One that returns the state it was given",
+              "to": "// leaves the reference the same, and Zustand notifies nobody."
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "if (alreadyInFront) return state;"
+            },
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "set((state) => (Object.is(state[key], value) ? state : { [key]: value }));"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Drop a Note on the Trash zone, then Undo",
+      "steps": [
+        {
+          "title": "pointerup over the Trash zone",
+          "explain": "The move kind calls `deleteNote` instead of `move`. This is the same action the × and the Delete key call, so all three get the same Undo.",
+          "run": [
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "if (pointerInTrash(ctx)) {",
+              "to": "save.deleteNote(from.id);"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "notes.getState().deleteNote(id);"
+            }
+          ]
+        },
+        {
+          "title": "deleteNote crosses into the UI store",
+          "explain": "This used to be `commands.ts`. The order hasn't changed: end Editing if it was this Note, so no phantom Editing is left, record the Note for Undo, then remove it. A missing Note returns early and changes neither store.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "deleteNote: (id) => {",
+              "to": "set((state) => withoutNote(state, id));"
+            }
+          ]
+        },
+        {
+          "title": "Undo",
+          "explain": "The toast subscribes to `lastDeleted`, and its button calls `undoDelete`, which restores the Note exactly as it was, `z` included, and then hides the toast.",
+          "run": [
+            {
+              "file": "src/components/UndoToast.tsx",
+              "from": "const lastDeleted = useUi((state) => state.lastDeleted);"
+            },
+            {
+              "file": "src/components/UndoToast.tsx",
+              "from": "notes.getState().undoDelete();"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "undoDelete: () => {",
+              "to": "ui.getState().hideUndo();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "How a test sees which actions ran",
+      "steps": [
+        {
+          "title": "recordActions wraps every action",
+          "explain": "The old tests replaced `stores.notes.dispatch` to log each action object. Now `recordActions` swaps each action in the store for a wrapper that logs `[name, ...args]` and calls through. Components and `useDrag` read actions from `getState()` when they call them, so they go through the wrappers. Only top-level calls are logged: `pickColour` calling `recolour` inside the store doesn't show up. No test depends on that.",
+          "run": [
+            {
+              "file": "test/recordCalls.ts",
+              "from": "export function recordActions<S extends object>(store: {",
+              "to": "return calls;"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Drag kinds call save instead of returning an action",
+      "detail": "Returning a `{ type: 'move', ... }` object was the action union the issue removes. A `{ name, args }` descriptor would bring the same union back under a new name. Kinds now call the `save` they are given, so `commit` is no longer a pure function, though `preview` still is and both use the same geometry. The counter-argument: a pure `commit` was easier to test. The tests now pass a recording `save` instead."
+    },
+    {
+      "title": "The UI transitions live in the store",
+      "detail": "The issue says the pure transitions keep their unit tests. The Notes transitions do (`transitions` in `notesStore.ts`). The UI ones were three one-line field setters, now one `setField`, and they are tested through the store in `uiStore.test.ts`."
+    },
+    {
+      "title": "Browser tests: the assertions changed shape, not meaning",
+      "detail": "The issue allows changes to how a test sets up its stores. Recording at the action layer changes what gets logged, from `{ type: 'move', id, x, y }` to `['move', id, x, y]`, and from `{ type: 'delete', id }` to `['deleteNote', id]`. Every browser test asserts the same events as before."
+    },
+    {
+      "title": "setColour and load are public actions",
+      "detail": "Neither is called by the app today. `load` is what persistence (#9) will call. `setColour` is the Notes-only primitive behind `recolour`, which the colour browser tests use to set a colour without touching the Current colour."
+    }
+  ],
+  "omitted": {
+    "README.md": "The architecture section and diagram now describe the Zustand stores.",
+    "package.json": "Adds zustand.",
+    "package-lock.json": "Lockfile for zustand.",
+    "vite.config.ts": "Removes the deleted `src/store` and `src/commands.ts` from the coverage list.",
+    "src/main.tsx": "Builds the stores with `createStores()`.",
+    "src/commands.ts": "Deleted: merged into the Notes store's actions.",
+    "src/commands.test.ts": "Deleted: moved to `src/notes/notesActions.test.ts`.",
+    "src/store/createStore.ts": "Deleted: replaced by Zustand.",
+    "src/notes/notesActions.test.ts": "The old commands tests, now against the Notes store's actions.",
+    "src/notes/notesStore.test.ts": "Renamed from `notesReducer.test.ts`; calls the pure transitions directly.",
+    "src/notes/note.test-d.ts": "Drops the type test for the deleted action union.",
+    "src/ui/uiStore.test.ts": "Renamed from `uiReducer.test.ts`; tests the store's actions.",
+    "src/components/Board.tsx": "`createNote` through the store.",
+    "src/components/ColourSwatches.tsx": "`pickColour` through the store.",
+    "src/components/NewNoteButtons.tsx": "`createNote` through the store.",
+    "src/components/useStopEditing.ts": "`stopEditing` through the store.",
+    "src/drag/controller.test.ts": "Records `save` calls instead of dispatched actions.",
+    "src/drag/kinds.test.ts": "Records `save` calls instead of comparing returned actions.",
+    "src/App.browser.test.tsx": "`load` through the store.",
+    "src/colours.browser.test.tsx": "Store setup through actions.",
+    "src/delete.browser.test.tsx": "Records actions with `recordActions`.",
+    "src/drag.browser.test.tsx": "Records actions with `recordActions`.",
+    "src/editing.browser.test.tsx": "Store setup through actions.",
+    "src/keyboard.browser.test.tsx": "Records actions with `recordActions`.",
+    "src/trash.browser.test.tsx": "`load` and `getState` through the store.",
+    "test/factories.ts": "Imports `NotesState` from its new module.",
+    "test/renderApp.tsx": "Builds the stores with `createStores()`.",
+    "src/notes/notesReducer.ts": "Renamed to `notesStore.ts`.",
+    "src/notes/notesReducer.test.ts": "Renamed to `notesStore.test.ts`.",
+    "src/ui/uiReducer.ts": "Renamed to `uiStore.ts`.",
+    "src/ui/uiReducer.test.ts": "Renamed to `uiStore.test.ts`."
+  }
+}
