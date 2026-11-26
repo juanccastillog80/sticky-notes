@@ -69,7 +69,6 @@ export function resizeRect(from: Rect, delta: Point, edges: Edges): Rect {
   return { x, y, width, height };
 }
 
-/** A client point in Board coordinates. `boardRect` already reflects scrolling. */
 /** Whether `point` is inside `rect`, edges included. */
 export function contains(rect: Rect, point: Point): boolean {
   return (
@@ -80,6 +79,14 @@ export function contains(rect: Rect, point: Point): boolean {
   );
 }
 
+/** Whether the rects overlap (axis-aligned boxes), touching edges included, as in `contains`. */
+export function intersects(a: Rect, b: Rect): boolean {
+  return (
+    a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height
+  );
+}
+
+/** A client point in Board coordinates. `boardRect` already reflects scrolling. */
 export function toBoardPoint(client: Point, boardRect: Point): Point {
   return { x: client.x - boardRect.x, y: client.y - boardRect.y };
 }

@@ -27,7 +27,7 @@ Run on the live app in the latest Chrome, Edge and Firefox, once with the window
 | 49–51 | Accent outline and darker strip; one Note at most; Escape or a press ends  |        |      |         |
 | 52    | Text kept exactly as typed, line breaks included                           |        |      |         |
 | 53    | Pressing a Note Raises it at once, for the whole Drag                      |        |      |         |
-| 34–36 | Pointer-on-zone drop deletes; zone pinned bottom-right; brushing moves     |        |      |         |
+| 34–36 | Note overlapping zone deletes, pointer anywhere; pinned; beside it: moved  |        |      |         |
 | 37–39 | Zone hints during a move, red with Note dimmed when over; resize: never    |        |      |         |
 | 40–42 | "Note deleted" toast with Undo after a drop; Undo restores it exactly      |        |      |         |
 | #33   | Tab: Note, ×, next Note; dashed ring and Raise; Enter, Escape, Delete      |        |      |         |

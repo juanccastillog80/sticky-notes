@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { commands, page, type Locator } from 'vitest/browser';
 import { makeNote, testId } from '../test/factories';
-import { drag, pointIn, pressAndMove } from '../test/mouse';
+import { drag, pointIn, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 
 beforeEach(async () => {
@@ -10,17 +10,39 @@ beforeEach(async () => {
 
 const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1, text: 'drop me', colour: 'yellow' });
 const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });
+const big = makeNote({ id: testId('big'), x: 100, y: 300, width: 400, height: 300, z: 3 });
 
 async function setup() {
   const { screen, stores } = await renderApp();
-  stores.notes.getState().load([a, b]);
+  stores.notes.getState().load([a, b, big]);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const zone = screen.getByText('Drop to delete').element().parentElement;
   if (!zone) throw new Error('No Trash zone');
   const scroller = screen.getByRole('region', { name: 'Board' }).element().parentElement;
   if (!scroller) throw new Error('The Board has no scroll container');
-  return { screen, stores, noteA: notes.nth(0), zone, scroller, toast: screen.getByRole('status') };
+  return {
+    screen,
+    stores,
+    noteA: notes.nth(0),
+    noteBig: notes.nth(2),
+    zone,
+    scroller,
+    toast: screen.getByRole('status'),
+  };
+}
+
+/**
+ * Real mouse input: press `note` at `grab` (a point inside it), then move until its
+ * top-left is at the client point `topLeft`. Returns where the pointer ends up.
+ */
+async function pressAndMoveTo(
+  note: Locator,
+  topLeft: { x: number; y: number },
+  grab: { x: number; y: number },
+) {
+  const rect = note.element().getBoundingClientRect();
+  return pressAndMove(note, { dx: topLeft.x - rect.x, dy: topLeft.y - rect.y, position: grab });
 }
 
 /** From a point 30 px into the Note to the client point `to`. */
@@ -52,7 +74,7 @@ it('sits in the bottom-right of the window, 104×104, above the Notes, however f
   );
 });
 
-it('is quiet, armed while a move runs, and over (with the Note marked) while the pointer is inside it', async () => {
+it('is quiet, armed while a move runs, and over (with the Note marked) while the Note overlaps it', async () => {
   const { noteA, zone } = await setup();
   expect(zone.dataset.state).toBe('quiet');
 
@@ -81,20 +103,71 @@ it('a drop on the Trash zone deletes the Note and shows the toast; Undo restores
 
   await toast.getByRole('button', { name: 'Undo' }).click();
 
-  // The Press Raised it above `b` before the drop, and Undo keeps that place.
-  expect(stores.notes.getState().notes[a.id]).toEqual({ ...a, z: 3 });
+  // The Press Raised it above the others before the drop, and Undo keeps that place.
+  expect(stores.notes.getState().notes[a.id]).toEqual({ ...a, z: 4 });
 });
 
-it('a large Note brushing the zone with the pointer outside it is moved, not deleted', async () => {
-  const { stores, noteA, zone } = await setup();
+it('a large Note grabbed by its far edge, released with the pointer outside the zone, is deleted when it overlaps the zone', async () => {
+  const { stores, noteBig, zone, toast } = await setup();
   const target = zone.getBoundingClientRect();
 
-  // The pointer stops 20 px left of the zone; the 220-wide Note reaches well into it.
-  await drag(noteA, deltaTo(noteA, { x: target.x - 20, y: target.y + 50 }));
+  // Grabbed 20 px in from its left edge; its right edge ends 40 px into the zone, so the
+  // pointer stops 340 px left of the zone.
+  const pointer = await pressAndMoveTo(
+    noteBig,
+    { x: target.x + 40 - 400, y: target.y - 100 },
+    { x: 20, y: 150 },
+  );
+  expect(pointer.x).toBeLessThan(target.x - 300);
+  expect(zone.dataset.state).toBe('over');
+  await release();
 
-  const moved = stores.notes.getState().notes[a.id];
-  expect(moved).toBeDefined();
-  expect(moved?.x).not.toBe(a.x);
+  expect(stores.notes.getState().notes[big.id]).toBeUndefined();
+  await expect.element(toast.getByText('Note deleted')).toBeVisible();
+});
+
+it('a Note released next to the zone without overlapping it is moved, not deleted', async () => {
+  const { stores, noteA, zone } = await setup();
+  const target = zone.getBoundingClientRect();
+  const boardTop = noteA.element().getBoundingClientRect().y - a.y;
+
+  // Its right edge stops 10 px left of the zone.
+  await pressAndMoveTo(noteA, { x: target.x - 10 - a.width, y: target.y }, { x: 30, y: 30 });
+  expect(zone.dataset.state).toBe('armed');
+  await release();
+
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({
+    x: Math.round(target.x - 10 - a.width),
+    y: Math.round(target.y - boardTop),
+  });
+});
+
+it("still decides by the Note's place on screen after the Board scrolls during the Drag", async () => {
+  const { stores, noteA, zone, scroller } = await setup();
+  const target = zone.getBoundingClientRect();
+  const grab = { x: 30, y: 30 };
+  const start = await pressAndMove(noteA, { dx: 40, dy: 40, position: grab });
+
+  scroller.scrollTo(200, 100);
+  await expect.poll(() => scroller.scrollTop).toBe(100);
+  await new Promise(requestAnimationFrame);
+  // The Note moved on the Board with the scroll, so it stays under the still pointer.
+  expect(noteA.element().getBoundingClientRect()).toMatchObject({
+    x: start.x - grab.x,
+    y: start.y - grab.y,
+  });
+
+  // 10 px left of the zone: not over it.
+  const beside = { x: target.x - 10 - a.width + grab.x, y: target.y + grab.y };
+  await commands.mouse([{ type: 'move', ...beside, steps: 10 }]);
+  expect(zone.dataset.state).toBe('armed');
+
+  // 20 px into it, with the pointer still well left of it.
+  await commands.mouse([{ type: 'move', x: beside.x + 30, y: beside.y, steps: 5 }]);
+  expect(zone.dataset.state).toBe('over');
+  await release();
+
+  expect(stores.notes.getState().notes[a.id]).toBeUndefined();
 });
 
 it('a double-click on the zone creates nothing', async () => {
@@ -102,7 +175,7 @@ it('a double-click on the zone creates nothing', async () => {
 
   await screen.getByText('Drop to delete').dblClick();
 
-  expect(stores.notes.getState().ids).toEqual([a.id, b.id]);
+  expect(stores.notes.getState().ids).toEqual([a.id, b.id, big.id]);
 });
 
 it.each([

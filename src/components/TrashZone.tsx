@@ -5,7 +5,7 @@ import styles from './TrashZone.module.css';
 
 /**
  * Pinned to the bottom-right of the visible Board, above Notes, whatever the scroll.
- * Dropping a moved Note with the pointer inside it deletes the Note. The Drag engine
+ * Dropping a moved Note that overlaps it deletes the Note, wherever the pointer is. The Drag engine
  * writes `data-state` (`quiet`, `armed`, `over`) straight to the DOM, so a move never
  * re-renders it.
  */

@@ -23,8 +23,11 @@ type Call =
 function setup() {
   const calls: Call[] = [];
   let scroll: Point = { x: 0, y: 0 };
-  // Far from where the tests drag, unless a test moves the pointer onto it.
+  // Far from where the tests drag, unless a test moves the Note onto it.
   const trash: Rect = { x: 900, y: 600, width: 104, height: 104 };
+  // The Board's top-left on screen at press. With it, the Note (Board 100, 100) is on
+  // screen at (10, 10), the default press point, so the Note's top-left follows the pointer.
+  const boardOrigin: Point = { x: -90, y: -90 };
   let attached: DragHandlers | null = null;
 
   const io: DragIO = {
@@ -42,6 +45,7 @@ function setup() {
     save: recordingSave((save) => calls.push({ call: 'save', save })),
     click: (pointer) => calls.push({ call: 'click', pointer }),
     trashRect: () => trash,
+    boardOrigin: () => boardOrigin,
     writeTrash: (state) => calls.push({ call: 'writeTrash', state }),
   };
   const controller = createDragController(io);
@@ -423,6 +427,24 @@ describe('the Trash zone', () => {
     t.move(510, 500);
 
     expect(trashStates(t)).toEqual(['armed', 'over', 'armed']);
+  });
+
+  it("follows the Note's place on screen when the Board scrolls during the Drag", () => {
+    const t = setup();
+    t.press(10, 10);
+    // The Note is on screen at (500, 300) to (720, 470): apart from the zone.
+    t.move(500, 300);
+    // The Board scrolls under the still pointer: the Note moves on the Board with it, so it
+    // stays where it was on screen. Measured from the Board as it was at press, it would
+    // now be at (800, 600), over the zone.
+    t.scrollTo({ x: 300, y: 300 });
+    expect(trashStates(t)).toEqual(['armed']);
+
+    t.move(950, 650);
+    t.up(950, 650);
+
+    expect(trashStates(t)).toEqual(['armed', 'over', 'quiet']);
+    expect(t.commits()).toEqual([{ call: 'save', save: ['deleteNote', t.note.id] }]);
   });
 
   it('a release over it resets it before the delete', () => {

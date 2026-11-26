@@ -1,5 +1,5 @@
 import {
-  contains,
+  intersects,
   resizeRect,
   toCommittedRect,
   type Edges,
@@ -11,10 +11,10 @@ import type { NotesActions } from '../notes/notesStore';
 
 /** What a Drag kind may read besides its own rect and the Board delta. */
 export interface DragContext {
-  /** The pointer, in client coordinates. */
-  readonly pointer: Point;
   /** The Trash zone's rect in client coordinates, measured at press, or `null` if it isn't on screen. */
   readonly trash: Rect | null;
+  /** The Board's top-left in client coordinates now: where it was at press, less the scroll since. */
+  readonly board: Point;
 }
 
 /** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */
@@ -31,7 +31,7 @@ export interface DragKind<From extends Rect> {
   preview: (from: From, delta: Point, ctx: DragContext) => Rect;
   commit: (from: From, delta: Point, ctx: DragContext, save: DragSave) => void;
   /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */
-  overTrash?: (ctx: DragContext) => boolean;
+  overTrash?: (from: From, delta: Point, ctx: DragContext) => boolean;
 }
 
 /** The rect a move shows, which is exactly the rect it saves. */
@@ -45,19 +45,23 @@ function raise(from: Note, save: DragSave) {
 }
 
 /**
- * The pointer itself must be inside the zone, edges included: a large Note that only
- * brushes the zone is moved, not deleted.
+ * The Note's Preview rect, placed on screen, overlaps the zone, touching edges included.
+ * It is the Note that is dropped, so the pointer doesn't matter: a large Note held by its
+ * far edge is deleted once it covers the zone. The highlight and the release both ask
+ * this, so the highlight always predicts what a release does.
  */
-function pointerInTrash({ pointer, trash }: DragContext): boolean {
-  return trash !== null && contains(trash, pointer);
+function noteOverTrash(from: Rect, delta: Point, { trash, board }: DragContext): boolean {
+  if (trash === null) return false;
+  const shown = moved(from, delta);
+  return intersects({ ...shown, x: shown.x + board.x, y: shown.y + board.y }, trash);
 }
 
 export const moveKind: DragKind<Note> = {
   press: raise,
   preview: moved,
-  overTrash: pointerInTrash,
+  overTrash: noteOverTrash,
   commit(from, delta, ctx, save) {
-    if (pointerInTrash(ctx)) {
+    if (noteOverTrash(from, delta, ctx)) {
       save.deleteNote(from.id);
       return;
     }

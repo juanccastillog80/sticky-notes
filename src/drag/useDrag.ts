@@ -8,6 +8,8 @@ import type { DragKind } from './kinds';
 export interface DragOptions {
   /** The Board's scroll container, which can scroll mid-drag. */
   readonly scrollerRef: RefObject<HTMLElement | null>;
+  /** The Board, whose top-left a kind that can delete measures, to place the Note on screen. */
+  readonly boardRef: RefObject<HTMLElement | null>;
   /** The Trash zone, which only a kind that can delete measures and draws on. */
   readonly trashRef: RefObject<HTMLElement | null>;
   /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */
@@ -82,6 +84,10 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
       trashRect() {
         const rect = latest.current.trashRef.current?.getBoundingClientRect();
         return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+      },
+      boardOrigin() {
+        const rect = latest.current.boardRef.current?.getBoundingClientRect();
+        return { x: rect?.x ?? 0, y: rect?.y ?? 0 };
       },
       writeTrash(state) {
         const zone = latest.current.trashRef.current;
