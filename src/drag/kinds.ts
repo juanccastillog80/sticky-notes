@@ -47,8 +47,8 @@ function raise(from: Note, save: DragSave) {
 /**
  * The Note's Preview rect, placed on screen, overlaps the zone, touching edges included.
  * It is the Note that is dropped, so the pointer doesn't matter: a large Note held by its
- * far edge is deleted as soon as any part of it reaches the zone. The highlight and the release both ask
- * this, so the highlight always predicts what a release does.
+ * far edge is deleted as soon as any part of it reaches the zone. The highlight and the
+ * release both ask this, so the highlight always predicts what a release does.
  */
 function noteOverTrash(from: Rect, delta: Point, { trash, boardOrigin }: DragContext): boolean {
   if (trash === null) return false;
