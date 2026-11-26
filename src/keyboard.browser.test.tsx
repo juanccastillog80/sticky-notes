@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
 import { makeNote, testId } from '../test/factories';
 import { drag, press } from '../test/mouse';
+import { recordActions } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
 import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
-import type { NoteAction } from './notes/notesReducer';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);
@@ -22,13 +22,8 @@ const c = makeNote({ id: testId('c'), x: 700, y: 100, z: 3 });
 
 async function setup(notes = [a, b, c]) {
   const { screen, stores } = await renderApp();
-  stores.notes.dispatch({ type: 'load', notes });
-  const actions: NoteAction[] = [];
-  const dispatch = stores.notes.dispatch;
-  stores.notes.dispatch = (action) => {
-    actions.push(action);
-    dispatch(action);
-  };
+  stores.notes.getState().load(notes);
+  const actions = recordActions(stores.notes);
   const all = screen.getByRole('article', { name: 'Note' });
   await expect.element(all.nth(notes.length - 1)).toBeVisible();
   const board = screen.getByRole('region', { name: 'Board' });
@@ -81,7 +76,7 @@ it('a focused Note is Raised and shows a focus ring', async () => {
   await userEvent.keyboard('{Tab}{Tab}');
 
   await expect.element(noteB).toHaveFocus();
-  expect(stores.notes.getSnapshot().notes[b.id]?.z).toBe(stores.notes.getSnapshot().topZ);
+  expect(stores.notes.getState().notes[b.id]?.z).toBe(stores.notes.getState().topZ);
   const ring = getComputedStyle(noteB.element());
   expect(ring.outlineStyle).not.toBe('none');
   expect(parseFloat(ring.outlineWidth)).toBeGreaterThanOrEqual(2);
@@ -89,7 +84,7 @@ it('a focused Note is Raised and shows a focus ring', async () => {
 
 it('the focus ring looks different from the Editing outline', async () => {
   const { stores, noteA, noteB } = await setup();
-  stores.ui.dispatch({ type: 'startEditing', id: a.id });
+  stores.ui.getState().startEditing(a.id);
   await expect.element(editor(noteA)).toHaveFocus();
   const editing = getComputedStyle(noteA.element());
   await tabTo(noteB);
@@ -107,7 +102,7 @@ it('Tab from a Note being edited to the next Note ends Editing', async () => {
   await userEvent.keyboard('{Tab}');
 
   await expect.element(noteB).toHaveFocus();
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(stores.ui.getState().editingId).toBeNull();
 });
 
 it("Shift+Tab from the textarea to the Note's own × keeps Editing", async () => {
@@ -119,7 +114,7 @@ it("Shift+Tab from the textarea to the Note's own × keeps Editing", async () =>
   await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
 
   await expect.element(deleteButton(noteA)).toHaveFocus();
-  expect(stores.ui.getSnapshot().editingId).toBe(a.id);
+  expect(stores.ui.getState().editingId).toBe(a.id);
 });
 
 it('Enter on a focused Note starts Editing with the caret at the end, and typing changes the text', async () => {
@@ -133,7 +128,7 @@ it('Enter on a focused Note starts Editing with the caret at the end, and typing
   expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([5, 5]);
   await userEvent.keyboard(' there');
   // The Enter that started Editing typed no line break.
-  expect(stores.notes.getSnapshot().notes[a.id]?.text).toBe('hello there');
+  expect(stores.notes.getState().notes[a.id]?.text).toBe('hello there');
 });
 
 it('Escape ends Editing and gives focus back to the Note, so Tab carries on from there', async () => {
@@ -144,7 +139,7 @@ it('Escape ends Editing and gives focus back to the Note, so Tab carries on from
 
   await userEvent.keyboard('{Escape}');
 
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(stores.ui.getState().editingId).toBeNull();
   await expect.element(noteA).toHaveFocus();
   await userEvent.keyboard('{Tab}');
   await expect.element(deleteButton(noteA)).toHaveFocus();
@@ -156,13 +151,13 @@ it('Delete on a focused Note deletes it, shows the Undo toast and focuses the ne
 
   await userEvent.keyboard('{Delete}');
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeUndefined();
+  expect(stores.notes.getState().notes[a.id]).toBeUndefined();
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
   // Note b, now first in the DOM.
   const first = noteA;
   await expect.element(first).toHaveFocus();
   expect(first.element().textContent).not.toContain('hello');
-  expect(stores.notes.getSnapshot().ids).toEqual([b.id, c.id]);
+  expect(stores.notes.getState().ids).toEqual([b.id, c.id]);
 });
 
 it('Backspace on the last Note focuses the previous one, and on the only Note focuses the Board', async () => {
@@ -171,12 +166,12 @@ it('Backspace on the last Note focuses the previous one, and on the only Note fo
 
   await userEvent.keyboard('{Backspace}');
 
-  expect(stores.notes.getSnapshot().ids).toEqual([a.id]);
+  expect(stores.notes.getState().ids).toEqual([a.id]);
   await expect.element(noteA).toHaveFocus();
 
   await userEvent.keyboard('{Backspace}');
 
-  expect(stores.notes.getSnapshot().ids).toEqual([]);
+  expect(stores.notes.getState().ids).toEqual([]);
   await expect.element(board).toHaveFocus();
 });
 
@@ -188,8 +183,8 @@ it('Backspace while Editing only edits the text', async () => {
 
   await userEvent.keyboard('{Backspace}{Delete}');
 
-  expect(stores.notes.getSnapshot().notes[a.id]?.text).toBe('hell');
-  expect(stores.ui.getSnapshot().editingId).toBe(a.id);
+  expect(stores.notes.getState().notes[a.id]?.text).toBe('hell');
+  expect(stores.ui.getState().editingId).toBe(a.id);
 });
 
 it('Backspace on a focused × does not act on the Note', async () => {
@@ -198,8 +193,8 @@ it('Backspace on a focused × does not act on the Note', async () => {
 
   await userEvent.keyboard('{Backspace}');
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeDefined();
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(stores.notes.getState().notes[a.id]).toBeDefined();
+  expect(stores.ui.getState().editingId).toBeNull();
 });
 
 it('Enter with a modifier, or Ctrl+Backspace, on a focused Note does nothing to it', async () => {
@@ -208,8 +203,8 @@ it('Enter with a modifier, or Ctrl+Backspace, on a focused Note does nothing to 
 
   await userEvent.keyboard('{Control>}{Backspace}{Enter}{/Control}{Alt>}{Delete}{/Alt}');
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeDefined();
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(stores.notes.getState().notes[a.id]).toBeDefined();
+  expect(stores.ui.getState().editingId).toBeNull();
 });
 
 it('a right-button press may focus a Note, but neither Raises it nor starts Editing', async () => {
@@ -218,7 +213,7 @@ it('a right-button press may focus a Note, but neither Raises it nor starts Edit
   await press(noteB, { x: 100, y: 60 }, 'right');
 
   expect(actions).toEqual([]);
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
+  expect(stores.ui.getState().editingId).toBeNull();
 });
 
 it('a Click on a Note does not focus it, and a drag Raises once and saves only its move', async () => {
@@ -227,12 +222,12 @@ it('a Click on a Note does not focus it, and a drag Raises once and saves only i
   await drag(noteB, { dx: 40, dy: 0, position: { x: 100, y: 10 } });
 
   expect(actions).toEqual([
-    { type: 'raise', id: b.id },
-    { type: 'move', id: b.id, x: 440, y: 100 },
+    ['raise', b.id],
+    ['move', b.id, 440, 100],
   ]);
   expect(document.activeElement?.closest('article')).toBeNull();
 
   await press(noteB, { x: 100, y: 10 });
 
-  expect(stores.ui.getSnapshot().editingId).toBe(b.id);
+  expect(stores.ui.getState().editingId).toBe(b.id);
 });

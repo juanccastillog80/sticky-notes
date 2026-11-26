@@ -1,6 +1,5 @@
 import { expectTypeOf, it } from 'vitest';
-import type { Note, NoteColour, NoteId } from './note';
-import type { NoteAction } from './notesReducer';
+import type { NoteColour, NoteId } from './note';
 
 it('a plain string is not a NoteId', () => {
   expectTypeOf<string>().not.toExtend<NoteId>();
@@ -12,9 +11,4 @@ it('a plain string is not a NoteId', () => {
 it("'red' is not a NoteColour", () => {
   expectTypeOf<'red'>().not.toExtend<NoteColour>();
   expectTypeOf<'yellow'>().toExtend<NoteColour>();
-});
-
-it('an unknown action type does not compile', () => {
-  expectTypeOf<{ type: 'explode' }>().not.toExtend<NoteAction>();
-  expectTypeOf<{ type: 'load'; notes: Note[] }>().toExtend<NoteAction>();
 });

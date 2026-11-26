@@ -64,16 +64,16 @@ flowchart LR
     Ctrl["Drag controller"]
     Kinds["Drag kinds<br/>move · resize"]
     Geo["geometry"]
-    Cmd["commands"]
-    NS[("notes store")]
-    US[("ui store")]
+    NS[("notes store<br/>(Zustand)")]
+    US[("ui store<br/>(Zustand)")]
   end
   Note -- "DragHandlers<br/>pointer events" --> Ctrl
   Ctrl -- "DragIO<br/>Preview, Trash zone look" --> Note
   Ctrl --> Kinds --> Geo
-  Ctrl -- "one action on release" --> Cmd
-  Bar --> Cmd
-  Cmd --> NS & US
+  Ctrl -- "Raise on Press,<br/>one action on release" --> NS
+  Note -- "Editing · text · ×" --> NS & US
+  Bar --> NS & US
+  NS -- "Undo · Editing · Current colour" --> US
   NS -. "notes[id]" .-> Note
   US -. "editingId === id" .-> Note
 ```
@@ -85,18 +85,18 @@ Solid arrows are calls. Dotted arrows are selector subscriptions, which decide w
 Moving and resizing share everything except what they show and what they save.
 
 - **Lifecycle.** _Mount_: `useDrag` creates one controller per Note. _Session_: a Press Raises the Note and attaches the listeners. The Dead zone then decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled.
-- **No DOM in the controller.** `createDragController` (`src/drag/controller.ts`) talks to the DOM through two narrow interfaces, one for each direction. `DragIO` goes from the controller to the DOM: read scroll, attach listeners, write the Preview, draw the Trash zone, dispatch, report a Click. `DragHandlers` goes from the DOM to the controller: move, up, cancel, scroll, key. `useDrag` passes the real DOM. The unit tests pass a recording fake.
-- **Kinds are pure functions** (`src/drag/kinds.ts`): `press` (the Raise), `preview` and `commit`, over the same geometry. What you release is therefore exactly what you saw. Resize was added as a second kind without changing the controller. The Trash zone belongs to the move kind: its `commit` returns a delete when the pointer is inside the zone.
-- **React stays out of the hot path.** During a Drag the Preview is written straight to the Note's style. After the Raise, React renders nothing until release, when one action is dispatched.
+- **No DOM in the controller.** `createDragController` (`src/drag/controller.ts`) talks to the DOM through two narrow interfaces, one for each direction. `DragIO` goes from the controller to the DOM: read scroll, attach listeners, write the Preview, draw the Trash zone, save through the Notes store's actions, report a Click. `DragHandlers` goes from the DOM to the controller: move, up, cancel, scroll, key. `useDrag` passes the real DOM. The unit tests pass a recording fake.
+- **Kinds are small and stateless** (`src/drag/kinds.ts`): `press` (the Raise), `preview` and `commit`, over the same geometry. `preview` is pure, and `commit` saves the rect it computes the same way, through the `save` it is given (`raise`, `move`, `resize`, `deleteNote`). What you release is therefore exactly what you saw. Resize was added as a second kind without changing the controller. The Trash zone belongs to the move kind: its `commit` calls `deleteNote` when the pointer is inside the zone.
+- **React stays out of the hot path.** During a Drag the Preview is written straight to the Note's style. After the Raise, React renders nothing until release, when one action is called.
 - **A Click starts Editing.** A Press released inside the Dead zone is a Click, which puts the caret where you clicked. A Press inside text only Raises, so typing and selecting work normally. The Grip strip always moves the Note.
 
 ### 2. Two small stores, read through selectors
 
-- **`createStore`** (`src/store/createStore.ts`) is a pure reducer behind `useSyncExternalStore`. The **notes** store holds each Note's position, size, text, colour and place in the Stacking order. The **ui** store holds the Note being edited, the Current colour and the Note that Undo would bring back.
-- **Re-render only what changed.** The reducers keep every unchanged Note and the `ids` array at the same reference, and a no-op returns the same state and notifies nobody. The Board subscribes to `ids` and each Note to `notes[id]`, so moving one Note re-renders only that Note. `useIsEditing(id)` is a boolean per Note, so a change of Editing re-renders only the two Notes involved.
-- **Rules that span both stores live in `commands.ts`**, so each reducer knows only its own store. Creating a Note gives it the Current colour and opens it in Editing. Deleting one ends its Editing and records it for Undo. Recolouring a Note also sets the Current colour. A Drag's commit goes through commands too, so a drop on the Trash zone gets the same Undo as the ×.
-- The stores and commands reach components through a context whose value never changes. Reading it never causes a render, only subscriptions do.
-- **Geometry is pure** (`src/geometry.ts`): clamping to the Board, the minimum size and resize maths. The reducer and the Drag kinds share it.
+- **Two [Zustand](https://zustand.docs.pmnd.rs) vanilla stores** with named actions, so tests and the Drag engine can read and write them outside React: `notes.getState().move(id, x, y)`. The **notes** store (`src/notes/notesStore.ts`) holds each Note's position, size, text, colour and place in the Stacking order. The **ui** store (`src/ui/uiStore.ts`) holds the Note being edited, the Current colour and the Note that Undo would bring back. Components subscribe with Zustand's `useStore(store, selector)`, wrapped as `useNotes` and `useUi`, and call actions from event handlers.
+- **Re-render only what changed.** Each Notes action runs a pure transition (`transitions` in `notesStore.ts`, unit-tested on its own) that keeps every unchanged Note and the `ids` array at the same reference. A no-op returns the same state, so Zustand notifies nobody. The Board subscribes to `ids` and each Note to `notes[id]`, so moving one Note re-renders only that Note. `useIsEditing(id)` is a boolean per Note, so a change of Editing re-renders only the two Notes involved.
+- **Rules that span both stores are Notes actions.** The Notes store is given the UI store when it is created (`createStores()`); the UI store never needs the Notes store back. `createNote` gives the Note the Current colour and opens it in Editing. `deleteNote` ends its Editing and records it for Undo. `recolour` also sets the Current colour. A drop on the Trash zone calls `deleteNote` too, so it gets the same Undo as the ×.
+- The stores reach components through a context whose value never changes, so tests can build their own. Reading it never causes a render, only subscriptions do.
+- **Geometry is pure** (`src/geometry.ts`): clamping to the Board, the minimum size and resize maths. The Notes transitions and the Drag kinds share it.
 
 ### 3. Keyboard and focus
 
@@ -112,7 +112,7 @@ Moving and resizing share everything except what they show and what they save.
 
 ### Testing
 
-The pure core (controller, kinds, reducers, commands, geometry) is unit-tested in Node, with property-based tests for the geometry, and is held to the coverage gate. Components are tested in real browsers through Playwright, including `<Profiler>` tests that check moving, resizing, typing in, recolouring or deleting one Note re-renders no other.
+The pure core (controller, kinds, stores and their transitions, geometry) is unit-tested in Node, with property-based tests for the geometry, and is held to the coverage gate. Components are tested in real browsers through Playwright, including `<Profiler>` tests that check moving, resizing, typing in, recolouring or deleting one Note re-renders no other.
 
 Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html), the Trash zone in [trash zone](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0006-trash-zone.html), and the keyboard in [keyboard navigation](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0033-keyboard-navigation.html).
 

@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { placeInVisibleBoard, type Size } from '../geometry';
 import { NOTE_SIZE_PRESETS } from '../notes/note';
-import { useCommands, useStores, useUi } from '../StoresContext';
+import { useStores, useUi } from '../StoresContext';
 import styles from './NewNoteButtons.module.css';
 
 const BUTTONS = [
@@ -12,7 +12,6 @@ const BUTTONS = [
 
 export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement | null> }) {
   const { notes } = useStores();
-  const { createNote } = useCommands();
   const currentColour = useUi((state) => state.currentColour);
 
   function createInView(size: Size) {
@@ -20,8 +19,8 @@ export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDiv
     if (!scroller) return;
     const { scrollLeft: x, scrollTop: y, clientWidth: width, clientHeight: height } = scroller;
     // Read at press time, not subscribed: the buttons don't re-render as Notes change.
-    const taken = Object.values(notes.getSnapshot().notes);
-    createNote(placeInVisibleBoard({ x, y, width, height }, size, taken));
+    const taken = Object.values(notes.getState().notes);
+    notes.getState().createNote(placeInVisibleBoard({ x, y, width, height }, size, taken));
   }
 
   return (

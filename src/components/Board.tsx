@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
-import { useCommands, useNotes } from '../StoresContext';
+import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
 import { TrashZone } from './TrashZone';
@@ -25,7 +25,7 @@ export function Board({
   onNoteRender?: ProfilerOnRenderCallback;
 }) {
   const ids = useNotes((state) => state.ids);
-  const { createNote } = useCommands();
+  const { notes } = useStores();
   const stopEditing = useStopEditing();
 
   const boardRef = useRef<HTMLElement>(null);
@@ -55,7 +55,7 @@ export function Board({
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
     );
-    createNote(placeCentredAt(pointer, DEFAULT_NOTE_SIZE));
+    notes.getState().createNote(placeCentredAt(pointer, DEFAULT_NOTE_SIZE));
   }
 
   return (

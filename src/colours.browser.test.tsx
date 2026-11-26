@@ -15,7 +15,7 @@ const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });
 
 async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback } = {}) {
   const { screen, stores } = await renderApp(onNoteRender ? { onNoteRender } : {});
-  stores.notes.dispatch({ type: 'load', notes: [a, b] });
+  stores.notes.getState().load([a, b]);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const colours = screen.getByRole('group', { name: 'Colour' });
@@ -36,11 +36,11 @@ it('each colour has its own background, strip and Editing-strip shade', async ()
   const seen = new Set<string>();
 
   for (const colour of NOTE_COLOURS) {
-    stores.ui.dispatch({ type: 'stopEditing' });
-    stores.notes.dispatch({ type: 'setColour', id: a.id, colour });
+    stores.ui.getState().stopEditing();
+    stores.notes.getState().setColour(a.id, colour);
     await expect.element(noteA).toHaveAttribute('data-colour', colour);
     const idle = [background(noteA.element()), background(strip(noteA))];
-    stores.ui.dispatch({ type: 'startEditing', id: a.id });
+    stores.ui.getState().startEditing(a.id);
     await expect.element(noteA).toHaveAttribute('data-editing');
     const editingStrip = background(strip(noteA));
 
@@ -65,11 +65,11 @@ it('while Editing, a swatch recolours that Note and sets the Current colour, kee
   await press(swatch('pink'));
 
   await expect.element(noteA).toHaveAttribute('data-colour', 'pink');
-  expect(stores.notes.getSnapshot().notes[b.id]?.colour).toBe('yellow');
-  expect(stores.ui.getSnapshot().currentColour).toBe('pink');
+  expect(stores.notes.getState().notes[b.id]?.colour).toBe('yellow');
+  expect(stores.ui.getState().currentColour).toBe('pink');
   await expect.element(editor).toHaveFocus();
   expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([3, 3]);
-  expect(stores.ui.getSnapshot().editingId).toBe(a.id);
+  expect(stores.ui.getState().editingId).toBe(a.id);
 });
 
 it('while not Editing, a swatch sets only the Current colour, and the next Note uses it', async () => {
@@ -77,8 +77,8 @@ it('while not Editing, a swatch sets only the Current colour, and the next Note 
 
   await press(swatch('green'));
 
-  expect(stores.ui.getSnapshot().currentColour).toBe('green');
-  expect(Object.values(stores.notes.getSnapshot().notes).map((note) => note.colour)).toEqual([
+  expect(stores.ui.getState().currentColour).toBe('green');
+  expect(Object.values(stores.notes.getState().notes).map((note) => note.colour)).toEqual([
     'yellow',
     'yellow',
   ]);
@@ -107,7 +107,7 @@ it('the label, the pressed swatch and the New-button glyphs track the state', as
   await press(noteA, { x: 20, y: 40 });
   await expect.element(colours).toHaveTextContent('this note');
   await expect.element(swatch('yellow')).toHaveAttribute('aria-pressed', 'true');
-  expect(stores.ui.getSnapshot().currentColour).toBe('blue');
+  expect(stores.ui.getState().currentColour).toBe('blue');
 });
 
 it('setColour on Note a re-renders a and not b', async () => {
@@ -115,7 +115,7 @@ it('setColour on Note a re-renders a and not b', async () => {
   const { stores } = await setup({ onNoteRender: (id) => renders.push(id) });
   renders.length = 0;
 
-  stores.notes.dispatch({ type: 'setColour', id: a.id, colour: 'purple' });
+  stores.notes.getState().setColour(a.id, 'purple');
   await expect.poll(() => renders).toContain('a');
 
   expect(renders).not.toContain('b');

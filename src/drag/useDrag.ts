@@ -1,6 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { Point, Rect } from '../geometry';
-import type { NoteAction } from '../notes/notesReducer';
+import { useStores } from '../StoresContext';
 import { createDragController, type DragController, type DragHandlers } from './controller';
 import { isInText, isPress } from './press';
 import type { DragKind } from './kinds';
@@ -10,8 +10,6 @@ export interface DragOptions {
   readonly scrollerRef: RefObject<HTMLElement | null>;
   /** The Trash zone, which only a kind that can delete measures and draws on. */
   readonly trashRef: RefObject<HTMLElement | null>;
-  /** Where a Press's Raise and a released Drag's one action go. */
-  readonly commit: (action: NoteAction) => void;
   /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */
   readonly onClick?: (pointer: Point) => void;
 }
@@ -34,6 +32,7 @@ export interface DragOptions {
  *     is cancelled and its listeners removed.
  */
 export function useDrag(previewRef: RefObject<HTMLElement | null>, options: DragOptions) {
+  const { notes } = useStores();
   // The latest options, read only inside handlers, so the controller is created once.
   const latest = useRef(options);
   useEffect(() => {
@@ -62,8 +61,20 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
         const element = previewRef.current;
         if (element) writePreview(element, rect, base);
       },
-      dispatch(action) {
-        latest.current.commit(action);
+      // A Press's Raise and a released Drag's one save, through the Notes store's actions.
+      save: {
+        raise: (id) => {
+          notes.getState().raise(id);
+        },
+        move: (id, x, y) => {
+          notes.getState().move(id, x, y);
+        },
+        resize: (id, rect) => {
+          notes.getState().resize(id, rect);
+        },
+        deleteNote: (id) => {
+          notes.getState().deleteNote(id);
+        },
       },
       click(pointer) {
         latest.current.onClick?.(pointer);
@@ -87,7 +98,7 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
       drag.dispose();
       controller.current = null;
     };
-  }, [previewRef]);
+  }, [previewRef, notes]);
 
   return function start<From extends Rect>(e: ReactPointerEvent, kind: DragKind<From>, from: From) {
     if (!isPress(e)) return;

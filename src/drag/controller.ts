@@ -1,6 +1,5 @@
 import type { Point, Rect } from '../geometry';
-import type { NoteAction } from '../notes/notesReducer';
-import type { DragContext, DragKind } from './kinds';
+import type { DragContext, DragKind, DragSave } from './kinds';
 
 /** How far a press must travel before it becomes a Drag. Inside it, a release is a click. */
 export const DEAD_ZONE_PX = 3;
@@ -46,7 +45,8 @@ export interface DragIO {
   releaseCapture: (pointerId: number) => void;
   /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */
   writePreview: (rect: Rect | null, base: Rect) => void;
-  dispatch: (action: NoteAction) => void;
+  /** Where a Press's Raise and a released Drag's one save go. */
+  save: DragSave;
   /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */
   click: (pointer: Point) => void;
   /** The Trash zone's rect in client coordinates, or `null` if it isn't on screen. Read once per Press. */
@@ -58,7 +58,7 @@ export interface DragIO {
 interface Session {
   /** The Drag kind, bound to the rect it started from. */
   readonly preview: (delta: Point, ctx: DragContext) => Rect;
-  readonly commit: (delta: Point, ctx: DragContext) => NoteAction | null;
+  readonly commit: (delta: Point, ctx: DragContext) => void;
   /** Absent for a kind that never deletes, such as a resize. */
   readonly overTrash: ((ctx: DragContext) => boolean) | undefined;
   /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */
@@ -95,11 +95,11 @@ export interface DragController {
 /**
  * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`.
  *
- *   press → io.dispatch(kind.press), io.attachPointerListeners(sessionHandlers)
+ *   press → kind.press saves through io.save, io.attachPointerListeners(sessionHandlers)
  *   move / scroll → Dead zone → Preview (io.writePreview)
  *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides
  *   cancel / Escape / dispose → end(false)
- *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + io.dispatch the commit
+ *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + kind.commit saves through io.save
  *
  * A kind with `overTrash` (a move) also drives the Trash zone: `armed` once it leaves the
  * Dead zone, `over` while the pointer is inside the zone, `quiet` at the end, each written once.
@@ -157,11 +157,13 @@ export function createDragController(io: DragIO): DragController {
       if (released) io.click(s.pointer);
       return;
     }
-    const action = commit ? s.commit(delta(s), context(s)) : null;
+    // Measured before the reset, so what is saved is exactly what the Preview showed.
+    const d = delta(s);
+    const ctx = context(s);
     setTrash(s, 'quiet');
-    // Reset before dispatching: the re-render then moves the Note to where the Preview was.
+    // Reset before saving: the re-render then moves the Note to where the Preview was.
     io.writePreview(null, s.from);
-    if (action) io.dispatch(action);
+    if (commit) s.commit(d, ctx);
   }
 
   const ownPointer = (e: Pick<PointerSignal, 'pointerId'>) => e.pointerId === session?.pointerId;
@@ -198,13 +200,14 @@ export function createDragController(io: DragIO): DragController {
   return {
     press(e, kind, from, { inText = false } = {}) {
       end(false);
-      const pressed = kind.press?.(from);
-      if (pressed) io.dispatch(pressed);
+      kind.press?.(from, io.save);
       if (inText) return;
       const pressPoint = { x: e.clientX, y: e.clientY };
       session = {
         preview: (d, ctx) => kind.preview(from, d, ctx),
-        commit: (d, ctx) => kind.commit(from, d, ctx),
+        commit: (d, ctx) => {
+          kind.commit(from, d, ctx, io.save);
+        },
         overTrash: kind.overTrash,
         trash: kind.overTrash ? io.trashRect() : null,
         trashState: 'quiet',

@@ -73,13 +73,13 @@ it('double-clicking a Note creates nothing', async () => {
 it('a double-click that starts on a Note creates nothing', async () => {
   const { board, stores, notes } = await setup();
   const note = makeNote({ x: 100, y: 100 });
-  stores.notes.dispatch({ type: 'load', notes: [note] });
+  stores.notes.getState().load([note]);
   await expect.element(notes).toBeVisible();
   // Move the Note after the first click, so the second lands on empty Board.
   notes.element().addEventListener(
     'click',
     () => {
-      stores.notes.dispatch({ type: 'load', notes: [{ ...note, x: 600 }] });
+      stores.notes.getState().load([{ ...note, x: 600 }]);
     },
     { once: true },
   );
@@ -129,7 +129,7 @@ it('shows the empty hint only while there are no Notes', async () => {
   await userEvent.dblClick(board, { position: { x: 100, y: 100 } });
   await expect.element(hint).not.toBeInTheDocument();
 
-  stores.notes.dispatch({ type: 'load', notes: [] });
+  stores.notes.getState().load([]);
   await expect.element(hint).toBeVisible();
 });
 
