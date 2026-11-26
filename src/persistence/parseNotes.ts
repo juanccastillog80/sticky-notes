@@ -1,3 +1,4 @@
+import type { Rect } from '../geometry';
 import { NOTE_COLOURS, parseNoteId, type Note, type NoteColour } from '../notes/note';
 
 /**
@@ -18,21 +19,18 @@ export function parseNotes(raw: unknown): Note[] | null {
 
 function parseNote(raw: unknown): Note | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const { id, x, y, width, height, text, colour, z } = raw as Record<string, unknown>;
+  const { id, text, colour, z, ...rest } = raw as Record<string, unknown>;
   const noteId = parseNoteId(id);
-  if (!noteId) return null;
-  if (![x, y, width, height, z].every(isFiniteNumber)) return null;
-  if (typeof text !== 'string' || !isColour(colour)) return null;
-  return {
-    id: noteId,
-    x: x as number,
-    y: y as number,
-    width: width as number,
-    height: height as number,
-    text,
-    colour,
-    z: z as number,
-  };
+  const rect = parseRect(rest);
+  if (!noteId || !rect || typeof text !== 'string' || !isColour(colour)) return null;
+  if (!isFiniteNumber(z)) return null;
+  return { id: noteId, ...rect, text, colour, z };
+}
+
+function parseRect({ x, y, width, height }: Record<string, unknown>): Rect | null {
+  const valid =
+    isFiniteNumber(x) && isFiniteNumber(y) && isFiniteNumber(width) && isFiniteNumber(height);
+  return valid ? { x, y, width, height } : null;
 }
 
 function isFiniteNumber(value: unknown): value is number {

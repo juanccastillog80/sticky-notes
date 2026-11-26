@@ -25,7 +25,7 @@ The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead
 
 The brief asks for 3 of the 4 features; all 4 are built. The bonuses are being added one at a time, to the same standard, since they make the UI better.
 
-- **REST saving (bonus V)** is not built. It is proposed in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md), which also records the built Local copy. The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup and ignores the answer. Nothing is sent to the server, and the `?fail=&latency=` URL parameters for demoing failed and slow saves don't exist.
+- **REST saving (bonus V)** is not built. It is proposed in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md), which also records the built Local copy. The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup and only logs the answer. Nothing is sent to the server, and the `?fail=&latency=` URL parameters for demoing failed and slow saves don't exist.
 
 ## Setup
 

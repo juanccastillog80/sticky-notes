@@ -92,21 +92,24 @@ describe('readLocalCopy', () => {
 });
 
 describe('saveLocalCopy', () => {
+  /** `storage` records each write; `failWrites` makes `setItem` throw, as a full storage does. */
   function setup(...notes: Note[]) {
     const { notes: store } = createStores();
     store.getState().load(notes);
     const storage = fakeStorage();
     const timers = fakeTimers();
     const writes: unknown[] = [];
+    const io = { failWrites: false };
     const recording = {
       ...storage,
       setItem: (key: string, value: string) => {
+        if (io.failWrites) throw new DOMException('Quota exceeded', 'QuotaExceededError');
         writes.push(JSON.parse(value));
         storage.setItem(key, value);
       },
     };
     const saving = saveLocalCopy(store, { storage: recording, timers });
-    return { store, storage, timers, writes, saving };
+    return { store, storage, timers, writes, saving, io };
   }
 
   it('saves once, 300 ms after the last of several changes', () => {
@@ -131,7 +134,7 @@ describe('saveLocalCopy', () => {
     ]);
   });
 
-  it('writes a pending save at once when flushed, and only once', () => {
+  it('writes a scheduled save at once when flushed, and only once', () => {
     const { store, timers, writes, saving } = setup(a);
 
     store.getState().setColour(a.id, 'green');
@@ -143,7 +146,7 @@ describe('saveLocalCopy', () => {
     expect(writes).toHaveLength(1);
   });
 
-  it('writes nothing when flushed with no pending save', () => {
+  it('writes nothing when flushed with no save scheduled', () => {
     const { saving, writes } = setup(a);
 
     saving.flush();
@@ -163,26 +166,15 @@ describe('saveLocalCopy', () => {
   });
 
   it('keeps saving after a write fails', () => {
-    const { notes: store } = createStores();
-    store.getState().load([a]);
-    const storage = fakeStorage();
-    const timers = fakeTimers();
-    let full = true;
-    const failing = {
-      ...storage,
-      setItem: (key: string, value: string) => {
-        if (full) throw new DOMException('Quota exceeded', 'QuotaExceededError');
-        storage.setItem(key, value);
-      },
-    };
-    saveLocalCopy(store, { storage: failing, timers });
+    const { store, timers, storage, io } = setup(a);
 
+    io.failWrites = true;
     store.getState().setText(a.id, 'lost');
     expect(() => {
       timers.advance(300);
     }).not.toThrow();
 
-    full = false;
+    io.failWrites = false;
     store.getState().setText(a.id, 'kept');
     timers.advance(300);
     expect(readLocalCopy(storage)).toEqual([{ ...a, text: 'kept' }]);

@@ -1,4 +1,4 @@
-import type { Note } from '../notes/note';
+import type { Note, NoteId } from '../notes/note';
 import type { NotesState, NotesStore } from '../notes/notesStore';
 import { parseNotes } from './parseNotes';
 
@@ -24,7 +24,7 @@ export const SAVE_DELAY_MS = 300;
 interface LocalCopyV1 {
   readonly v: 1;
   readonly notes: readonly Note[];
-  readonly unsaved: readonly string[];
+  readonly unsaved: readonly NoteId[];
 }
 
 /**
@@ -54,11 +54,13 @@ export function readLocalCopy(storage: LocalCopyStorage): Note[] {
 }
 
 function isVersion1(copy: unknown): copy is { v: 1; notes: unknown } {
-  return typeof copy === 'object' && copy !== null && 'v' in copy && copy.v === 1;
+  return (
+    typeof copy === 'object' && copy !== null && 'v' in copy && copy.v === 1 && 'notes' in copy
+  );
 }
 
 export interface LocalCopySaving {
-  /** Writes a pending save now, as the page is hidden or closed. */
+  /** Writes a scheduled save now, as the page is hidden or closed. */
   readonly flush: () => void;
 }
 
@@ -71,20 +73,20 @@ export function saveLocalCopy(
   store: NotesStore,
   { storage, timers }: { storage: LocalCopyStorage; timers: Timers },
 ): LocalCopySaving {
-  let pending: number | null = null;
+  let scheduled: number | null = null;
 
   function flush() {
-    if (pending === null) return;
-    timers.clearTimeout(pending);
-    pending = null;
+    if (scheduled === null) return;
+    timers.clearTimeout(scheduled);
+    scheduled = null;
     write(storage, store.getState());
   }
 
   // Zustand notifies only when an action returns a new state, so a no-op
   // (a move to the same place, a raise of the front Note) never saves.
   store.subscribe(() => {
-    if (pending !== null) timers.clearTimeout(pending);
-    pending = timers.setTimeout(flush, SAVE_DELAY_MS);
+    if (scheduled !== null) timers.clearTimeout(scheduled);
+    scheduled = timers.setTimeout(flush, SAVE_DELAY_MS);
   });
 
   return { flush };

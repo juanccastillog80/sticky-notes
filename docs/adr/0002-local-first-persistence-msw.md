@@ -4,7 +4,7 @@
 
 ## Built: the Local copy
 
-On startup, `main.tsx` reads the Local copy from localStorage synchronously and loads it before the first render, so a reload shows the Board at once, with no flash of an empty Board. Every change to the Notes is written back over the whole collection, 300 ms after the last change, and a pending write is flushed on `pagehide`, so closing the tab right after typing loses nothing.
+On startup, `main.tsx` reads the Local copy from localStorage synchronously and loads it before the first render, so a reload shows the Board at once, with no flash of an empty Board. Every change to the Notes is written back over the whole collection, 300 ms after the last change, and a scheduled write is flushed on `pagehide`, so closing the tab right after typing loses nothing.
 
 - It is stored as `{ v: 1, notes: Note[], unsaved: [] }` under `sticky-notes:cache`. `unsaved` is always empty for now. It is there for the proposed server saving, so the format won't need a new version when that lands.
 - `parseNotes` (`src/persistence/parseNotes.ts`) is the hand-written guard for Notes from outside the app. A copy that isn't JSON, isn't version 1 or holds one invalid Note is discarded whole, with a `console.warn`, and the app starts empty. A failed `setItem` (quota exceeded, storage blocked) is ignored, and the Board keeps working in memory.
@@ -12,7 +12,7 @@ On startup, `main.tsx` reads the Local copy from localStorage synchronously and 
 
 ## Proposed: the REST API as the record
 
-The REST API would be the record. After `GET /notes`, the server's Notes would replace the local ones, except Notes with an Unsaved change, where the local version wins. Saves would be optimistic and never rolled back. A failed save would be retried with backoff and stay an Unsaved change, which survives a reload because its id is in `unsaved`. The REST API is mocked with MSW, which intercepts real `fetch` calls in the browser (including the GitHub Pages deployment) and in Vitest, so the client is a real HTTP client and every request shows up in DevTools.
+The REST API would be the record. After `GET /notes`, the server's Notes would replace the local ones, except Notes with an Unsaved change, where the local version wins. Saves would be optimistic and never rolled back. A failed save would be retried with backoff and stay an Unsaved change, which survives a reload because its id is in `unsaved`. The REST API would be mocked with MSW, which intercepts real `fetch` calls, so the client would be a real HTTP client and every request would show up in DevTools. What exists today is the browser worker (`src/mocks/`) and one handler, for `GET /notes`, which answers `[]`. There is no HTTP client and no MSW setup in Vitest.
 
 ## Considered Options
 
