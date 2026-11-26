@@ -73,9 +73,9 @@ The front-to-back order in which notes overlap on the board.
 _Avoid_: Z-order, z-index, layer
 
 **Local copy**:
-The notes saved in this browser, shown at once when the app starts, before the server has answered.
+The Notes saved in this browser's localStorage, loaded before the first paint so the Board survives a reload.
 _Avoid_: Cache, snapshot, offline store
 
 **Unsaved change**:
-A change to a note (including deleting it) that the server hasn't confirmed yet. It is retried until it succeeds and survives a reload.
+A change to a note (including deleting it) that the server hasn't confirmed yet. It is retried until it succeeds and survives a reload. Proposed with REST saving (ADR 0002); not built.
 _Avoid_: Pending, dirty, unsynced
