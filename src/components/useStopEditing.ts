@@ -9,6 +9,6 @@ export function useStopEditing() {
   return () => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused.closest('[data-editing]')) focused.blur();
-    ui.dispatch({ type: 'stopEditing' });
+    ui.getState().stopEditing();
   };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useCommands, useStores, useUi } from '../StoresContext';
+import { useStores, useUi } from '../StoresContext';
 import styles from './UndoToast.module.css';
 
 /** How long the Undo toast stays after a delete. */
@@ -12,8 +12,7 @@ export const UNDO_TOAST_MS = 5000;
  */
 export function UndoToast() {
   const lastDeleted = useUi((state) => state.lastDeleted);
-  const { ui } = useStores();
-  const { undoDelete } = useCommands();
+  const { notes, ui } = useStores();
   const undoRef = useRef<HTMLButtonElement>(null);
 
   // A keyboard delete removed the focused ×, dropping focus to the body: Undo takes it,
@@ -25,7 +24,7 @@ export function UndoToast() {
   useEffect(() => {
     if (!lastDeleted) return;
     const timer = setTimeout(() => {
-      ui.dispatch({ type: 'hideUndo' });
+      ui.getState().hideUndo();
     }, UNDO_TOAST_MS);
     return () => {
       clearTimeout(timer);
@@ -38,7 +37,14 @@ export function UndoToast() {
         // Keyed by the deleted Note, so a newer delete is new content and is announced again.
         <div key={lastDeleted.id} className={styles.toast}>
           <span>Note deleted</span>
-          <button ref={undoRef} type="button" className={styles.undo} onClick={undoDelete}>
+          <button
+            ref={undoRef}
+            type="button"
+            className={styles.undo}
+            onClick={() => {
+              notes.getState().undoDelete();
+            }}
+          >
             Undo
           </button>
         </div>

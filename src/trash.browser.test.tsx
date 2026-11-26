@@ -13,7 +13,7 @@ const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });
 
 async function setup() {
   const { screen, stores } = await renderApp();
-  stores.notes.dispatch({ type: 'load', notes: [a, b] });
+  stores.notes.getState().load([a, b]);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const zone = screen.getByText('Drop to delete').element().parentElement;
@@ -75,14 +75,14 @@ it('a drop on the Trash zone deletes the Note and shows the toast; Undo restores
 
   await drag(noteA, deltaTo(noteA, centreOf(zone)));
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeUndefined();
+  expect(stores.notes.getState().notes[a.id]).toBeUndefined();
   expect(zone.dataset.state).toBe('quiet');
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 
   await toast.getByRole('button', { name: 'Undo' }).click();
 
   // The Press Raised it above `b` before the drop, and Undo keeps that place.
-  expect(stores.notes.getSnapshot().notes[a.id]).toEqual({ ...a, z: 3 });
+  expect(stores.notes.getState().notes[a.id]).toEqual({ ...a, z: 3 });
 });
 
 it('a large Note brushing the zone with the pointer outside it is moved, not deleted', async () => {
@@ -92,7 +92,7 @@ it('a large Note brushing the zone with the pointer outside it is moved, not del
   // The pointer stops 20 px left of the zone; the 220-wide Note reaches well into it.
   await drag(noteA, deltaTo(noteA, { x: target.x - 20, y: target.y + 50 }));
 
-  const moved = stores.notes.getSnapshot().notes[a.id];
+  const moved = stores.notes.getState().notes[a.id];
   expect(moved).toBeDefined();
   expect(moved?.x).not.toBe(a.x);
 });
@@ -102,7 +102,7 @@ it('a double-click on the zone creates nothing', async () => {
 
   await screen.getByText('Drop to delete').dblClick();
 
-  expect(stores.notes.getSnapshot().ids).toEqual([a.id, b.id]);
+  expect(stores.notes.getState().ids).toEqual([a.id, b.id]);
 });
 
 it.each([

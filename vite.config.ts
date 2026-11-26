@@ -6,13 +6,11 @@ import { mouse } from './test/browserCommands.ts';
 // Pure-core folders held to the coverage gate (spec: Coverage and gates).
 // Components and the composition root are covered by browser tests instead.
 const PURE_CORE = [
-  'src/store/**',
   'src/notes/**',
   'src/ui/**',
   'src/drag/**',
   'src/persistence/**',
   'src/geometry.ts',
-  'src/commands.ts',
 ];
 
 // Which browsers the browser project runs in: a comma-separated BROWSERS list,

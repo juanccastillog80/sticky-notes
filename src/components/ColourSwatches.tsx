@@ -1,5 +1,5 @@
 import { COLOUR_NAMES, NOTE_COLOURS } from '../notes/note';
-import { useCommands, useNotes, useUi } from '../StoresContext';
+import { useNotes, useStores, useUi } from '../StoresContext';
 import styles from './ColourSwatches.module.css';
 
 /**
@@ -7,7 +7,7 @@ import styles from './ColourSwatches.module.css';
  * `pickColour`). While Editing, the pressed swatch is the edited Note's colour.
  */
 export function ColourSwatches() {
-  const { pickColour } = useCommands();
+  const { notes } = useStores();
   const editingId = useUi((state) => state.editingId);
   const currentColour = useUi((state) => state.currentColour);
   const editedColour = useNotes((state) =>
@@ -32,7 +32,7 @@ export function ColourSwatches() {
             e.preventDefault();
           }}
           onClick={() => {
-            pickColour(colour);
+            notes.getState().pickColour(colour);
           }}
         />
       ))}

@@ -3,8 +3,8 @@ import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
 import { press } from '../test/mouse';
+import { recordActions } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
-import type { NoteAction } from './notes/notesReducer';
 import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
 import { UNDO_TOAST_MS } from './components/UndoToast';
 
@@ -24,13 +24,8 @@ const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });
 
 async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback } = {}) {
   const { screen, stores } = await renderApp(onNoteRender ? { onNoteRender } : {});
-  stores.notes.dispatch({ type: 'load', notes: [a, b] });
-  const actions: NoteAction[] = [];
-  const dispatch = stores.notes.dispatch;
-  stores.notes.dispatch = (action) => {
-    actions.push(action);
-    dispatch(action);
-  };
+  stores.notes.getState().load([a, b]);
+  const actions = recordActions(stores.notes);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const toast = screen.getByRole('status');
@@ -45,8 +40,8 @@ it('every Note shows a × on its strip, and clicking it deletes only that Note, 
 
   await press(deleteButton(noteA));
 
-  expect(stores.notes.getSnapshot().ids).toEqual([b.id]);
-  expect(actions).toEqual([{ type: 'delete', id: a.id }]);
+  expect(stores.notes.getState().ids).toEqual([b.id]);
+  expect(actions).toEqual([['deleteNote', a.id]]);
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 });
 
@@ -56,19 +51,19 @@ it('Undo brings the same Note back: id, rect, text, colour and z', async () => {
 
   await toast.getByRole('button', { name: 'Undo' }).click();
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toEqual(a);
+  expect(stores.notes.getState().notes[a.id]).toEqual(a);
   await expect.element(toast.getByText('Note deleted')).not.toBeInTheDocument();
 });
 
 it('deleting the Note being edited ends Editing', async () => {
   const { stores, noteA } = await setup();
-  stores.ui.dispatch({ type: 'startEditing', id: a.id });
+  stores.ui.getState().startEditing(a.id);
   await expect.element(noteA.getByRole('textbox')).toHaveFocus();
 
   await press(deleteButton(noteA));
 
-  expect(stores.ui.getSnapshot().editingId).toBeNull();
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeUndefined();
+  expect(stores.ui.getState().editingId).toBeNull();
+  expect(stores.notes.getState().notes[a.id]).toBeUndefined();
 });
 
 it('the toast hides after its time, and a newer delete restarts the timer', async () => {
@@ -95,7 +90,7 @@ it('the × works from the keyboard, and focus moves to Undo', async () => {
 
   await userEvent.keyboard('{Enter}');
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toBeUndefined();
+  expect(stores.notes.getState().notes[a.id]).toBeUndefined();
   await expect.element(toast.getByRole('button', { name: 'Undo' })).toHaveFocus();
 });
 
@@ -103,13 +98,13 @@ it('a double-click on the × deletes only that Note, even with another Note unde
   const { stores, notes } = await setup();
   const front = makeNote({ id: testId('front'), z: 2 });
   const under = makeNote({ id: testId('under'), z: 1 });
-  stores.notes.dispatch({ type: 'load', notes: [under, front] });
+  stores.notes.getState().load([under, front]);
   await expect.element(notes.nth(1)).toBeVisible();
 
   await deleteButton(notes.nth(1)).dblClick();
 
-  expect(stores.notes.getSnapshot().ids).toEqual([under.id]);
-  expect(stores.notes.getSnapshot().notes[under.id]).toEqual(under);
+  expect(stores.notes.getState().ids).toEqual([under.id]);
+  expect(stores.notes.getState().notes[under.id]).toEqual(under);
 });
 
 it('deleting Note a does not re-render Note b', async () => {

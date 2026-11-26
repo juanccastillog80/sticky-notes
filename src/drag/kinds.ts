@@ -7,7 +7,7 @@ import {
   type Rect,
 } from '../geometry';
 import type { Note } from '../notes/note';
-import type { NoteAction } from '../notes/notesReducer';
+import type { NotesActions } from '../notes/notesStore';
 
 /** What a Drag kind may read besides its own rect and the Board delta. */
 export interface DragContext {
@@ -17,15 +17,19 @@ export interface DragContext {
   readonly trash: Rect | null;
 }
 
+/** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */
+export type DragSave = Pick<NotesActions, 'raise' | 'move' | 'resize' | 'deleteNote'>;
+
 /**
  * What a Drag does: what it shows while it runs and what it saves at release.
- * Pure, so `preview` and `commit` agree by construction.
+ * `preview` is pure, and `commit` saves a rect computed the same way, so they agree
+ * by construction.
  */
 export interface DragKind<From extends Rect> {
   /** What a Press saves at once, before it is known to be a Drag or a Click. */
-  press?: (from: From) => NoteAction | null;
+  press?: (from: From, save: DragSave) => void;
   preview: (from: From, delta: Point, ctx: DragContext) => Rect;
-  commit: (from: From, delta: Point, ctx: DragContext) => NoteAction | null;
+  commit: (from: From, delta: Point, ctx: DragContext, save: DragSave) => void;
   /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */
   overTrash?: (ctx: DragContext) => boolean;
 }
@@ -36,7 +40,9 @@ function moved(from: Rect, delta: Point): Rect {
 }
 
 /** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */
-const raise = (from: Note): NoteAction => ({ type: 'raise', id: from.id });
+function raise(from: Note, save: DragSave) {
+  save.raise(from.id);
+}
 
 /**
  * The pointer itself must be inside the zone, edges included: a large Note that only
@@ -50,10 +56,13 @@ export const moveKind: DragKind<Note> = {
   press: raise,
   preview: moved,
   overTrash: pointerInTrash,
-  commit(from, delta, ctx) {
-    if (pointerInTrash(ctx)) return { type: 'delete', id: from.id };
+  commit(from, delta, ctx, save) {
+    if (pointerInTrash(ctx)) {
+      save.deleteNote(from.id);
+      return;
+    }
     const { x, y } = moved(from, delta);
-    return { type: 'move', id: from.id, x, y };
+    save.move(from.id, x, y);
   },
 };
 
@@ -74,8 +83,8 @@ function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {
     press: raise,
     preview: (from, delta) => resizeRect(from, delta, handle),
-    commit(from, delta) {
-      return { type: 'resize', id: from.id, ...resizeRect(from, delta, handle) };
+    commit(from, delta, _ctx, save) {
+      save.resize(from.id, resizeRect(from, delta, handle));
     },
   };
 }

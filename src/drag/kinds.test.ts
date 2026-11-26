@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { makeNote } from '../../test/factories';
-import { moveKind, resizeKinds } from './kinds';
+import { recordingSave, type Call } from '../../test/recordCalls';
+import type { Point } from '../geometry';
+import type { Note } from '../notes/note';
+import { moveKind, resizeKinds, type DragContext, type DragKind } from './kinds';
 
 const note = makeNote({ x: 100, y: 100, width: 220, height: 170 });
 const ctx = { pointer: { x: 0, y: 0 }, trash: null };
+
+/** What `kind.commit` saved at release, as `[action, ...args]` calls. */
+function saved(kind: DragKind<Note>, from: Note, delta: Point, ctx: DragContext): Call[] {
+  const calls: Call[] = [];
+  kind.commit(
+    from,
+    delta,
+    ctx,
+    recordingSave((call) => {
+      calls.push(call);
+    }),
+  );
+  return calls;
+}
 
 describe('moveKind and the Trash zone', () => {
   // Client coordinates, as measured on screen.
@@ -13,10 +30,9 @@ describe('moveKind and the Trash zone', () => {
     const pointer = { x: 950, y: 650 };
 
     expect(moveKind.overTrash?.({ pointer, trash })).toBe(true);
-    expect(moveKind.commit(note, { x: 700, y: 400 }, { pointer, trash })).toEqual({
-      type: 'delete',
-      id: note.id,
-    });
+    expect(saved(moveKind, note, { x: 700, y: 400 }, { pointer, trash })).toEqual([
+      ['deleteNote', note.id],
+    ]);
   });
 
   it('the zone edges count as inside', () => {
@@ -29,9 +45,9 @@ describe('moveKind and the Trash zone', () => {
     const big = makeNote({ x: 700, y: 500, width: 400, height: 300 });
 
     expect(moveKind.overTrash?.({ pointer, trash })).toBe(false);
-    expect(moveKind.commit(big, { x: 0, y: 0 }, { pointer, trash })).toMatchObject({
-      type: 'move',
-    });
+    expect(saved(moveKind, big, { x: 0, y: 0 }, { pointer, trash })).toEqual([
+      ['move', big.id, big.x, big.y],
+    ]);
   });
 
   it('with no Trash zone on screen, a move is only a move', () => {
@@ -40,9 +56,9 @@ describe('moveKind and the Trash zone', () => {
 
   it('a resize never deletes, even released over the zone', () => {
     expect(resizeKinds.se.overTrash).toBeUndefined();
-    expect(
-      resizeKinds.se.commit(note, { x: 10, y: 10 }, { pointer: { x: 950, y: 650 }, trash }),
-    ).toMatchObject({ type: 'resize' });
+    const pointer = { x: 950, y: 650 };
+    const calls = saved(resizeKinds.se, note, { x: 10, y: 10 }, { pointer, trash });
+    expect(calls.map(([name]) => name)).toEqual(['resize']);
   });
 });
 
@@ -51,21 +67,12 @@ describe('resizeKinds', () => {
     const delta = { x: -30, y: 20 };
     const shown = resizeKinds.nw.preview(note, delta, ctx);
 
-    expect(resizeKinds.nw.commit(note, delta, ctx)).toEqual({
-      type: 'resize',
-      id: note.id,
-      ...shown,
-    });
+    expect(saved(resizeKinds.nw, note, delta, ctx)).toEqual([['resize', note.id, shown]]);
   });
 
   it('commits a resize to exactly the last Preview', () => {
-    expect(resizeKinds.nw.commit(note, { x: -30, y: 20 }, ctx)).toEqual({
-      type: 'resize',
-      id: note.id,
-      x: 70,
-      y: 120,
-      width: 250,
-      height: 150,
-    });
+    expect(saved(resizeKinds.nw, note, { x: -30, y: 20 }, ctx)).toEqual([
+      ['resize', note.id, { x: 70, y: 120, width: 250, height: 150 }],
+    ]);
   });
 });

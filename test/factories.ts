@@ -1,5 +1,5 @@
 import { parseNoteId, type Note, type NoteId } from '../src/notes/note';
-import type { NotesState } from '../src/notes/notesReducer';
+import type { NotesState } from '../src/notes/notesStore';
 
 export function testId(raw: string): NoteId {
   const id = parseNoteId(raw);

@@ -3,8 +3,8 @@ import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
 import { drag, press, pressAndMove, release } from '../test/mouse';
+import { recordActions, type Call } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
-import type { NoteAction } from './notes/notesReducer';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);
@@ -13,16 +13,11 @@ beforeEach(async () => {
 const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1 });
 const b = makeNote({ id: testId('b'), x: 200, y: 150, z: 2 });
 
-/** The App with Notes `a` and `b` loaded, recording every action dispatched after load. */
+/** The App with Notes `a` and `b` loaded, recording every Notes action called after load. */
 async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback } = {}) {
   const { screen, stores } = await renderApp(onNoteRender ? { onNoteRender } : {});
-  stores.notes.dispatch({ type: 'load', notes: [a, b] });
-  const actions: NoteAction[] = [];
-  const dispatch = stores.notes.dispatch;
-  stores.notes.dispatch = (action) => {
-    actions.push(action);
-    dispatch(action);
-  };
+  stores.notes.getState().load([a, b]);
+  const actions = recordActions(stores.notes);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const board = screen.getByRole('region', { name: 'Board' });
@@ -31,8 +26,7 @@ async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback
   return { stores, actions, noteA: notes.nth(0), notes, scroller };
 }
 
-const moves = (actions: readonly NoteAction[]) =>
-  actions.filter((action) => action.type === 'move');
+const moves = (actions: readonly Call[]) => actions.filter(([name]) => name === 'move');
 
 it('dragging an idle Note moves it by the pointer delta, with exactly one move', async () => {
   const { stores, actions, noteA } = await setup();
@@ -40,8 +34,8 @@ it('dragging an idle Note moves it by the pointer delta, with exactly one move',
   // Grab `a` where `b` doesn't cover it.
   await drag(noteA, { dx: 150, dy: 80, position: { x: 30, y: 30 } });
 
-  expect(moves(actions)).toEqual([{ type: 'move', id: a.id, x: 250, y: 180 }]);
-  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({ x: 250, y: 180 });
+  expect(moves(actions)).toEqual([['move', a.id, 250, 180]]);
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({ x: 250, y: 180 });
   // The Preview is reset, and the Note is drawn where it was saved.
   expect(noteA.element().getAttribute('style')).not.toContain('transform');
   expect((noteA.element() as HTMLElement).style.left).toBe('250px');
@@ -73,7 +67,7 @@ it('scrolling the container mid-drag still lands the Note under the pointer', as
   const pointerX = noteA.element().getBoundingClientRect().x + 30;
   await release();
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({
     x: 100 + 100 + 300,
     y: 100 + 50 + 200,
   });
@@ -95,7 +89,7 @@ it('pressing a Note raises it, and DOM order never changes', async () => {
 
   await press(noteA, { x: 30, y: 30 });
 
-  const state = stores.notes.getSnapshot();
+  const state = stores.notes.getState();
   expect(state.notes[a.id]?.z).toBe(3);
   expect(state.topZ).toBe(3);
   expect((noteA.element() as HTMLElement).style.zIndex).toBe('3');
@@ -108,7 +102,7 @@ it('a right-button press does not raise the Note', async () => {
   await press(noteA, { x: 30, y: 30 }, 'right');
 
   expect(actions).toEqual([]);
-  expect(stores.notes.getSnapshot().notes[a.id]?.z).toBe(1);
+  expect(stores.notes.getState().notes[a.id]?.z).toBe(1);
 });
 
 it('a Note stays in front for the whole Drag', async () => {
@@ -130,7 +124,7 @@ it('a dragged Note stops at the Board edges', async () => {
   // To a point over the top bar, past the Board's top-left corner but still in the window.
   await drag(noteA, { dx: 5 - (grip.x + 30), dy: 10 - (grip.y + 30), position: { x: 30, y: 30 } });
 
-  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({ x: 0, y: 0 });
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({ x: 0, y: 0 });
 });
 
 it('Escape mid-drag puts the Note back and saves nothing', async () => {
@@ -142,7 +136,7 @@ it('Escape mid-drag puts the Note back and saves nothing', async () => {
   await release();
 
   expect(moves(actions)).toEqual([]);
-  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({ x: 100, y: 100 });
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({ x: 100, y: 100 });
   expect(noteA.element().getBoundingClientRect()).toEqual(before);
 });
 
@@ -162,8 +156,7 @@ const handle = (note: Locator, name: string) => {
   if (!element) throw new Error(`No ${name} handle`);
   return page.elementLocator(element);
 };
-const resizes = (actions: readonly NoteAction[]) =>
-  actions.filter((action) => action.type === 'resize');
+const resizes = (actions: readonly Call[]) => actions.filter(([name]) => name === 'resize');
 
 it('dragging the se corner inward stops at the minimum Note size (scenario 4)', async () => {
   const { stores, actions, notes } = await setup();
@@ -173,10 +166,8 @@ it('dragging the se corner inward stops at the minimum Note size (scenario 4)', 
   // Far past the minimum, while the pointer stays in the window.
   await drag(handle(noteB, 'se'), { dx: -250, dy: -150 });
 
-  expect(resizes(actions)).toEqual([
-    { type: 'resize', id: b.id, x: 200, y: 150, width: 140, height: 100 },
-  ]);
-  expect(stores.notes.getSnapshot().notes[b.id]).toMatchObject({ width: 140, height: 100 });
+  expect(resizes(actions)).toEqual([['resize', b.id, { x: 200, y: 150, width: 140, height: 100 }]]);
+  expect(stores.notes.getState().notes[b.id]).toMatchObject({ width: 140, height: 100 });
   expect(noteB.element().getBoundingClientRect()).toMatchObject({ width: 140, height: 100 });
 });
 
@@ -194,7 +185,7 @@ it('the nw corner Preview moves the top-left and saves exactly what it showed', 
   expect([during.width, during.height]).toEqual([a.width + 30, a.height - 20]);
   expect(style.transform).not.toContain('scale');
   expect(after).toEqual(during);
-  expect(stores.notes.getSnapshot().notes[a.id]).toMatchObject({
+  expect(stores.notes.getState().notes[a.id]).toMatchObject({
     x: 70,
     y: 120,
     width: a.width + 30,

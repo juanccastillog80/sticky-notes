@@ -1,6 +1,7 @@
+import { createStore, type StoreApi } from 'zustand/vanilla';
 import { toCommittedRect, type Point, type Rect } from '../geometry';
-import { createStore, type Store } from '../store/createStore';
-import type { Note, NoteColour, NoteId } from './note';
+import type { UiStore } from '../ui/uiStore';
+import { newNoteId, type Note, type NoteColour, type NoteId } from './note';
 
 export interface NotesState {
   readonly notes: Readonly<Record<NoteId, Note>>;
@@ -9,47 +10,7 @@ export interface NotesState {
   readonly topZ: number;
 }
 
-export type NoteAction =
-  | { readonly type: 'create'; readonly note: Omit<Note, 'z'> }
-  | { readonly type: 'move'; readonly id: NoteId; readonly x: number; readonly y: number }
-  | ({ readonly type: 'resize'; readonly id: NoteId } & Rect)
-  | { readonly type: 'raise'; readonly id: NoteId }
-  | { readonly type: 'setText'; readonly id: NoteId; readonly text: string }
-  | { readonly type: 'setColour'; readonly id: NoteId; readonly colour: NoteColour }
-  | { readonly type: 'delete'; readonly id: NoteId }
-  | { readonly type: 'restore'; readonly note: Note }
-  | { readonly type: 'load'; readonly notes: readonly Note[] };
-
 const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };
-
-/**
- * An unchanged Note, unchanged `ids` and a no-op all keep their reference. That
- * is what lets a change re-render only the Notes it touched.
- */
-export function notesReducer(state: NotesState, action: NoteAction): NotesState {
-  switch (action.type) {
-    case 'create':
-      return create(state, action.note);
-    case 'move':
-      return move(state, action.id, action);
-    case 'resize':
-      return resize(state, action.id, action);
-    case 'raise':
-      return raise(state, action.id);
-    case 'setText':
-      return setText(state, action.id, action.text);
-    case 'setColour':
-      return setColour(state, action.id, action.colour);
-    case 'delete':
-      return withoutNote(state, action.id);
-    case 'restore':
-      return restore(state, action.note);
-    case 'load':
-      return load(state, action.notes);
-    default:
-      return assertNever(action);
-  }
-}
 
 function create(state: NotesState, note: Omit<Note, 'z'>): NotesState {
   if (state.notes[note.id]) return state;
@@ -152,13 +113,106 @@ function sameNote(a: Note, b: Note): boolean {
   return (Object.keys(b) as (keyof Note)[]).every((key) => a[key] === b[key]);
 }
 
-/** Stops compiling when an action has no case. */
-function assertNever(action: never): never {
-  throw new Error(`Unknown action: ${JSON.stringify(action)}`);
+/**
+ * The pure state transitions behind the Notes store's actions. An unchanged Note,
+ * unchanged `ids` and a no-op all keep their reference. That is what lets a change
+ * re-render only the Notes it touched.
+ */
+export const transitions = {
+  create,
+  move,
+  resize,
+  raise,
+  setText,
+  setColour,
+  delete: withoutNote,
+  restore,
+  load,
+};
+
+export interface NotesActions {
+  /** Replaces every Note, as a load from storage does. */
+  readonly load: (notes: readonly Note[]) => void;
+  /** A new empty Note in the Current colour, which opens straight into Editing. */
+  readonly createNote: (rect: Rect) => void;
+  readonly move: (id: NoteId, x: number, y: number) => void;
+  readonly resize: (id: NoteId, rect: Rect) => void;
+  readonly raise: (id: NoteId) => void;
+  readonly setText: (id: NoteId, text: string) => void;
+  /** Only the Note's colour. `recolour` is what the user does. */
+  readonly setColour: (id: NoteId, colour: NoteColour) => void;
+  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */
+  readonly recolour: (id: NoteId, colour: NoteColour) => void;
+  /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */
+  readonly pickColour: (colour: NoteColour) => void;
+  /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */
+  readonly deleteNote: (id: NoteId) => void;
+  /** Brings back the last deleted Note exactly as it was, and hides the Undo toast. */
+  readonly undoDelete: () => void;
 }
 
-export type NotesStore = Store<NotesState, NoteAction>;
+export type NotesStore = StoreApi<NotesState & NotesActions>;
 
-export function createNotesStore(): NotesStore {
-  return createStore(notesReducer, EMPTY_NOTES);
+/**
+ * The Notes, and the actions that change them. The UI store is passed in for the
+ * rules that span both stores (Undo, Editing, the Current colour); it never needs
+ * the Notes store back.
+ */
+export function createNotesStore(ui: UiStore): NotesStore {
+  // Each action `set`s a pure transition. One that returns the state it was given
+  // leaves the reference the same, and Zustand notifies nobody.
+  return createStore<NotesState & NotesActions>()((set, get) => {
+    function recolour(id: NoteId, colour: NoteColour) {
+      if (!get().notes[id]) return;
+      set((state) => setColour(state, id, colour));
+      ui.getState().setCurrentColour(colour);
+    }
+
+    return {
+      ...EMPTY_NOTES,
+      load: (notes) => {
+        set((state) => load(state, notes));
+      },
+      createNote: ({ x, y, width, height }) => {
+        const id = newNoteId();
+        const colour = ui.getState().currentColour;
+        set((state) => create(state, { id, x, y, width, height, text: '', colour }));
+        ui.getState().startEditing(id);
+      },
+      move: (id, x, y) => {
+        set((state) => move(state, id, { x, y }));
+      },
+      resize: (id, rect) => {
+        set((state) => resize(state, id, rect));
+      },
+      raise: (id) => {
+        set((state) => raise(state, id));
+      },
+      setText: (id, text) => {
+        set((state) => setText(state, id, text));
+      },
+      setColour: (id, colour) => {
+        set((state) => setColour(state, id, colour));
+      },
+      recolour,
+      pickColour: (colour) => {
+        const { editingId } = ui.getState();
+        if (editingId) recolour(editingId, colour);
+        else ui.getState().setCurrentColour(colour);
+      },
+      deleteNote: (id) => {
+        const note = get().notes[id];
+        if (!note) return;
+        if (ui.getState().editingId === id) ui.getState().stopEditing();
+        ui.getState().showUndo(note);
+        set((state) => withoutNote(state, id));
+      },
+      undoDelete: () => {
+        const note = ui.getState().lastDeleted;
+        if (!note) return;
+        set((state) => restore(state, note));
+        ui.getState().hideUndo();
+      },
+    };
+  });
 }

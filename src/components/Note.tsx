@@ -12,7 +12,7 @@ import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
 import { isInText } from '../drag/press';
 import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
-import { useCommands, useIsEditing, useNotes, useStores } from '../StoresContext';
+import { useIsEditing, useNotes, useStores } from '../StoresContext';
 import { caretOffsetAt } from './caret';
 import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';
 import styles from './Note.module.css';
@@ -33,7 +33,6 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
   const stopEditing = useStopEditing();
-  const { deleteNote, commit } = useCommands();
   const { scrollerRef, trashRef } = useBoardDom();
   const ref = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -42,7 +41,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const pendingCaret = useRef<number | null>(null);
   // Escape ended Editing: the article takes focus once the textarea is gone.
   const refocusWhenIdle = useRef(false);
-  const start = useDrag(ref, { scrollerRef, trashRef, commit, onClick: startEditingAt });
+  const start = useDrag(ref, { scrollerRef, trashRef, onClick: startEditingAt });
 
   // Before paint, so the caret is in place on the first frame of Editing.
   useLayoutEffect(() => {
@@ -67,7 +66,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   function startEditing(caret: number | null) {
     if (editing) return;
     pendingCaret.current = caret;
-    ui.dispatch({ type: 'startEditing', id });
+    ui.getState().startEditing(id);
   }
 
   function startEditingAt(pointer: Point) {
@@ -119,7 +118,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     const siblings = board ? [...board.querySelectorAll<HTMLElement>(':scope > article')] : [];
     const index = siblings.indexOf(article);
     const next = siblings[index + 1] ?? siblings[index - 1] ?? board;
-    deleteNote(id);
+    notes.getState().deleteNote(id);
     // Before the Undo toast's effect runs, so it sees focus taken and leaves it here.
     next?.focus();
   }
@@ -132,7 +131,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     if (!editing) stopEditing();
     // Raised, so the focus ring is never under another Note. Only keyboard focus: a
     // right-button press focuses the article too, and must not Raise.
-    if (e.target.matches(':focus-visible')) commit({ type: 'raise', id });
+    if (e.target.matches(':focus-visible')) notes.getState().raise(id);
   }
 
   const { x, y, width, height, z, colour, text } = note;
@@ -161,7 +160,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
           e.preventDefault();
         }}
         onClick={(e) => {
-          deleteNote(id);
+          notes.getState().deleteNote(id);
           // A mouse click (not Enter or Space) may be the first half of a double-click.
           if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);
         }}
@@ -175,7 +174,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
           className={styles.editor}
           value={text}
           onChange={(e) => {
-            notes.dispatch({ type: 'setText', id, text: e.target.value });
+            notes.getState().setText(id, e.target.value);
           }}
           onKeyDown={keyDownInEditor}
         />

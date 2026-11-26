@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { makeNote, makeState, testId } from '../../test/factories';
 import type { Rect } from '../geometry';
 import type { Note } from './note';
-import { createNotesStore, notesReducer, type NotesState } from './notesReducer';
+import { createUiStore } from '../ui/uiStore';
+import { createNotesStore, transitions, type NotesState } from './notesStore';
 
 const a = makeNote({ id: testId('a'), z: 1 });
 const b = makeNote({ id: testId('b'), x: 500, z: 2 });
@@ -10,10 +11,7 @@ const b = makeNote({ id: testId('b'), x: 500, z: 2 });
 describe('create', () => {
   const create = (state: NotesState, overrides: Partial<Note> = {}) => {
     const { id, x, y, width, height, text, colour } = makeNote({ id: testId('new'), ...overrides });
-    return notesReducer(state, {
-      type: 'create',
-      note: { id, x, y, width, height, text, colour },
-    });
+    return transitions.create(state, { id, x, y, width, height, text, colour });
   };
 
   it('adds the Note last, at the front of the Stacking order', () => {
@@ -57,8 +55,7 @@ describe('create', () => {
 });
 
 describe('load', () => {
-  const load = (state: NotesState, ...notes: Note[]) =>
-    notesReducer(state, { type: 'load', notes });
+  const load = (state: NotesState, ...notes: Note[]) => transitions.load(state, notes);
 
   it('replaces the Notes, keeping their order and Stacking order', () => {
     const c = makeNote({ id: testId('c'), z: 9 });
@@ -113,30 +110,29 @@ describe('load', () => {
 
 describe('the Notes store', () => {
   it('tells subscribers about a change, but not about a no-op', () => {
-    const store = createNotesStore();
+    const store = createNotesStore(createUiStore());
     let calls = 0;
     store.subscribe(() => (calls += 1));
 
-    store.dispatch({ type: 'load', notes: [a] });
-    store.dispatch({ type: 'load', notes: [a] });
+    store.getState().load([a]);
+    store.getState().load([a]);
 
     expect(calls).toBe(1);
   });
 
   it('stops telling a listener that unsubscribed', () => {
-    const store = createNotesStore();
+    const store = createNotesStore(createUiStore());
     let calls = 0;
     store.subscribe(() => (calls += 1))();
 
-    store.dispatch({ type: 'load', notes: [a] });
+    store.getState().load([a]);
 
     expect(calls).toBe(0);
   });
 });
 
 describe('resize', () => {
-  const resize = (state: NotesState, to: Rect, id = a.id) =>
-    notesReducer(state, { type: 'resize', id, ...to });
+  const resize = (state: NotesState, to: Rect, id = a.id) => transitions.resize(state, id, to);
 
   it('sets the position and size together', () => {
     const next = resize(makeState(a, b), { x: 80, y: 90, width: 300, height: 200 });
@@ -169,7 +165,7 @@ describe('resize', () => {
 
 describe('move', () => {
   const move = (state: NotesState, x: number, y: number, id = a.id) =>
-    notesReducer(state, { type: 'move', id, x, y });
+    transitions.move(state, id, { x, y });
 
   it('moves the Note to the new position, keeping its size', () => {
     const next = move(makeState(a, b), 300, 250);
@@ -210,7 +206,7 @@ describe('move', () => {
 });
 
 describe('raise', () => {
-  const raise = (state: NotesState, id: Note['id']) => notesReducer(state, { type: 'raise', id });
+  const raise = (state: NotesState, id: Note['id']) => transitions.raise(state, id);
 
   it('brings the Note to the front with z = ++topZ', () => {
     const next = raise(makeState(a, b), a.id);
@@ -248,14 +244,14 @@ describe('raise', () => {
 
 describe('setText', () => {
   it('keeps the text exactly as typed, line breaks included', () => {
-    const next = notesReducer(makeState(a, b), { type: 'setText', id: a.id, text: ' one\n\ntwo ' });
+    const next = transitions.setText(makeState(a, b), a.id, ' one\n\ntwo ');
 
     expect(next.notes[a.id]).toEqual({ ...a, text: ' one\n\ntwo ' });
   });
 
   it('keeps ids and the other Notes by reference', () => {
     const state = makeState(a, b);
-    const next = notesReducer(state, { type: 'setText', id: a.id, text: 'hi' });
+    const next = transitions.setText(state, a.id, 'hi');
 
     expect(next.ids).toBe(state.ids);
     expect(next.notes[b.id]).toBe(b);
@@ -264,15 +260,15 @@ describe('setText', () => {
   it('returns the same state when the text does not change, or the Note is missing', () => {
     const state = makeState(a, b);
 
-    expect(notesReducer(state, { type: 'setText', id: a.id, text: a.text })).toBe(state);
-    expect(notesReducer(state, { type: 'setText', id: testId('gone'), text: 'x' })).toBe(state);
+    expect(transitions.setText(state, a.id, a.text)).toBe(state);
+    expect(transitions.setText(state, testId('gone'), 'x')).toBe(state);
   });
 });
 
 describe('setColour', () => {
   it('recolours that Note only, keeping ids and the other Notes by reference', () => {
     const state = makeState(a, b);
-    const next = notesReducer(state, { type: 'setColour', id: a.id, colour: 'green' });
+    const next = transitions.setColour(state, a.id, 'green');
 
     expect(next.notes[a.id]).toEqual({ ...a, colour: 'green' });
     expect(next.ids).toBe(state.ids);
@@ -282,17 +278,15 @@ describe('setColour', () => {
   it('returns the same state when the colour does not change, or the Note is missing', () => {
     const state = makeState(a, b);
 
-    expect(notesReducer(state, { type: 'setColour', id: a.id, colour: a.colour })).toBe(state);
-    expect(notesReducer(state, { type: 'setColour', id: testId('gone'), colour: 'blue' })).toBe(
-      state,
-    );
+    expect(transitions.setColour(state, a.id, a.colour)).toBe(state);
+    expect(transitions.setColour(state, testId('gone'), 'blue')).toBe(state);
   });
 });
 
 describe('delete', () => {
   it('removes the Note, keeping the other Notes by reference', () => {
     const state = makeState(a, b);
-    const next = notesReducer(state, { type: 'delete', id: a.id });
+    const next = transitions.delete(state, a.id);
 
     expect(next.ids).toEqual(['b']);
     expect(next.notes[a.id]).toBeUndefined();
@@ -302,14 +296,14 @@ describe('delete', () => {
   it('returns the same state when the Note is missing', () => {
     const state = makeState(a);
 
-    expect(notesReducer(state, { type: 'delete', id: testId('gone') })).toBe(state);
+    expect(transitions.delete(state, testId('gone'))).toBe(state);
   });
 });
 
 describe('restore', () => {
   it('brings a deleted Note back with the same id, rect, text, colour and z', () => {
-    const deleted = notesReducer(makeState(a, b), { type: 'delete', id: a.id });
-    const next = notesReducer(deleted, { type: 'restore', note: a });
+    const deleted = transitions.delete(makeState(a, b), a.id);
+    const next = transitions.restore(deleted, a);
 
     expect(next.notes[a.id]).toBe(a);
     expect(next.ids).toEqual(['b', 'a']);
@@ -320,12 +314,12 @@ describe('restore', () => {
   it('raises topZ when the restored Note was in front', () => {
     const front = makeNote({ id: testId('front'), z: 9 });
 
-    expect(notesReducer(makeState(a), { type: 'restore', note: front }).topZ).toBe(9);
+    expect(transitions.restore(makeState(a), front).topZ).toBe(9);
   });
 
   it('returns the same state when the id is already on the Board', () => {
     const state = makeState(a);
 
-    expect(notesReducer(state, { type: 'restore', note: a })).toBe(state);
+    expect(transitions.restore(state, a)).toBe(state);
   });
 });
