@@ -4,6 +4,8 @@ import { createContext, use, type RefObject } from 'react';
 export interface BoardDom {
   /** The Board's scroll container. */
   readonly scrollerRef: RefObject<HTMLDivElement | null>;
+  /** The Board itself, whose top-left on screen places a dragged Note's rect against the Trash zone. */
+  readonly boardRef: RefObject<HTMLElement | null>;
   /** The Trash zone, which a move measures at press and draws its states on. */
   readonly trashRef: RefObject<HTMLDivElement | null>;
 }

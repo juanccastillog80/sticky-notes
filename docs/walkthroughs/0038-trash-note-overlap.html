@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"issue":38,"title":"Trash zone: delete when the Note overlaps it, not the pointer","lede":"A drop now deletes when the dragged **Note's rect overlaps the Trash zone**, touching edges included, wherever the pointer is. Before, only the pointer counted, so a large Note held by its far edge could cover most of the zone and still be moved. The Preview rect is in Board coordinates and the zone in client coordinates, so the controller passes the **Board's origin on screen**: measured at press, moved by the scroll since. The highlight (`overTrash`) and the release (`commit`) ask the same function, so the highlight always predicts what a release does.","files":[{"path":"src/drag/kinds.ts","question":"When does a release delete instead of move?","summary":"`noteOverTrash` places the move's Preview rect on screen with `ctx.boardOrigin` and tests it against the zone with `intersects`. `overTrash` and `commit` both call it.","owns":"The hit rule: the Note's rect, edges included; the pointer plays no part.","never":"Measures the DOM or reads the scroll: the zone and the Board's origin arrive in the `DragContext`.","tested":"Node tests in `kinds.test.ts`; each Trash zone case checks `overTrash` and `commit` together.","lines":["import {","  intersects,","  resizeRect,","  toCommittedRect,","  type Edges,","  type Point,","  type Rect,","} from '../geometry';","import type { Note } from '../notes/note';","import type { NotesActions } from '../notes/notesStore';","","/** What a Drag kind may read besides its own rect and the Board delta. */","export interface DragContext {","  /** The Trash zone's rect in client coordinates, measured at press, or `null` if it isn't on screen. */","  readonly trash: Rect | null;","  /** The Board's top-left in client coordinates now: where it was at press, less the scroll since. */","  readonly boardOrigin: Point;","}","","/** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */","export type DragSave = Pick\u003cNotesActions, 'raise' | 'move' | 'resize' | 'deleteNote'>;","","/**"," * What a Drag does: what it shows while it runs and what it saves at release."," * `preview` is pure, and `commit` saves a rect computed the same way, so they agree"," * by construction."," */","export interface DragKind\u003cFrom extends Rect> {","  /** What a Press saves at once, before it is known to be a Drag or a Click. */","  press?: (from: From, save: DragSave) => void;","  preview: (from: From, delta: Point, ctx: DragContext) => Rect;","  commit: (from: From, delta: Point, ctx: DragContext, save: DragSave) => void;","  /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */","  overTrash?: (from: From, delta: Point, ctx: DragContext) => boolean;","}","","/** The rect a move shows, which is exactly the rect it saves. */","function moved(from: Rect, delta: Point): Rect {","  return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y });","}","","/** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */","function raise(from: Note, save: DragSave) {","  save.raise(from.id);","}","","/**"," * The Note's Preview rect, placed on screen, overlaps the zone, touching edges included."," * It is the Note that is dropped, so the pointer doesn't matter: a large Note held by its"," * far edge is deleted as soon as any part of it reaches the zone. The highlight and the"," * release both ask this, so the highlight always predicts what a release does."," */","function noteOverTrash(from: Rect, delta: Point, { trash, boardOrigin }: DragContext): boolean {","  if (trash === null) return false;","  const shown = moved(from, delta);","  return intersects({ ...shown, x: shown.x + boardOrigin.x, y: shown.y + boardOrigin.y }, trash);","}","","export const moveKind: DragKind\u003cNote> = {","  press: raise,","  preview: moved,","  overTrash: noteOverTrash,","  commit(from, delta, ctx, save) {","    if (noteOverTrash(from, delta, ctx)) {","      save.deleteNote(from.id);","      return;","    }","    const { x, y } = moved(from, delta);","    save.move(from.id, x, y);","  },","};","","/** The 8 resize handles, named by the edges they move. */","export const RESIZE_HANDLES = [","  'n',","  's',","  'e',","  'w',","  'ne',","  'nw',","  'se',","  'sw',","] as const satisfies readonly Edges[];","export type ResizeHandle = (typeof RESIZE_HANDLES)[number];","","function resizeKind(handle: ResizeHandle): DragKind\u003cNote> {","  return {","    press: raise,","    preview: (from, delta) => resizeRect(from, delta, handle),","    commit(from, delta, _ctx, save) {","      save.resize(from.id, resizeRect(from, delta, handle));","    },","  };","}","","/** One kind per handle, built once. */","export const resizeKinds = Object.fromEntries(","  RESIZE_HANDLES.map((handle) => [handle, resizeKind(handle)]),",") as Record\u003cResizeHandle, DragKind\u003cNote>>;"],"added":[1,15,16,33,47,48,49,50,52,53,54,55,61,63]},{"path":"src/geometry.ts","question":"When do two rects overlap?","summary":"`intersects(a, b)`: an axis-aligned box test, touching edges counting as overlap, the same rule `contains` uses.","owns":"Pure rect maths.","never":"Knows about the Trash zone or the screen.","tested":"Node tests in `geometry.test.ts`: overlap, touching edges, one inside the other, apart on each axis.","lines":["export interface Point {","  readonly x: number;","  readonly y: number;","}","","export interface Size {","  readonly width: number;","  readonly height: number;","}","","export interface Rect extends Point, Size {}","","/** Fixed, so a stored position can never become invalid (ADR 0001). */","export const BOARD_SIZE = { width: 1920, height: 1080 } as const satisfies Size;","export const MIN_NOTE_SIZE = { width: 140, height: 100 } as const satisfies Size;","","const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);","","/** Keeps the whole rect inside the Board, at a legal Note size. Fractions are kept. */","export function clampToBoard(rect: Rect): Rect {","  const width = clamp(rect.width, MIN_NOTE_SIZE.width, BOARD_SIZE.width);","  const height = clamp(rect.height, MIN_NOTE_SIZE.height, BOARD_SIZE.height);","  return {","    x: clamp(rect.x, 0, BOARD_SIZE.width - width),","    y: clamp(rect.y, 0, BOARD_SIZE.height - height),","    width,","    height,","  };","}","","/** The rect that is stored: whole pixels, inside the Board. */","export function toCommittedRect({ x, y, width, height }: Rect): Rect {","  // Round first: the bounds are whole pixels, so clamping can't bring a fraction back.","  return clampToBoard({","    x: Math.round(x),","    y: Math.round(y),","    width: Math.round(width),","    height: Math.round(height),","  });","}","","/** The edges a resize moves: one side, or two for a corner. */","export type Edges = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';","","/**"," * `from` with the named edges moved by `delta`, as it will be stored. Each moving edge"," * stops at `MIN_NOTE_SIZE` from the opposite edge and at the Board's edge; the"," * opposite edge never moves. The delta is rounded first, so the result is whole pixels."," */","export function resizeRect(from: Rect, delta: Point, edges: Edges): Rect {","  const dx = Math.round(delta.x);","  const dy = Math.round(delta.y);","  const right = from.x + from.width;","  const bottom = from.y + from.height;","  let { x, y, width, height } = from;","  if (edges.includes('e'))","    width = clamp(from.width + dx, MIN_NOTE_SIZE.width, BOARD_SIZE.width - x);","  if (edges.includes('w')) {","    x = clamp(from.x + dx, 0, right - MIN_NOTE_SIZE.width);","    width = right - x;","  }","  if (edges.includes('s')) {","    height = clamp(from.height + dy, MIN_NOTE_SIZE.height, BOARD_SIZE.height - y);","  }","  if (edges.includes('n')) {","    y = clamp(from.y + dy, 0, bottom - MIN_NOTE_SIZE.height);","    height = bottom - y;","  }","  return { x, y, width, height };","}","","/** Whether `point` is inside `rect`, edges included. */","export function contains(rect: Rect, point: Point): boolean {","  return (","    point.x >= rect.x &&","    point.x \u003c= rect.x + rect.width &&","    point.y >= rect.y &&","    point.y \u003c= rect.y + rect.height","  );","}","","/** Whether the rects overlap (axis-aligned boxes), touching edges included, as in `contains`. */","export function intersects(a: Rect, b: Rect): boolean {","  return (","    a.x \u003c= b.x + b.width && b.x \u003c= a.x + a.width && a.y \u003c= b.y + b.height && b.y \u003c= a.y + a.height","  );","}","","/** A client point in Board coordinates. `boardRect` already reflects scrolling. */","export function toBoardPoint(client: Point, boardRect: Point): Point {","  return { x: client.x - boardRect.x, y: client.y - boardRect.y };","}","","/** A `size` rect centred on a point (the pointer, for a double-click), as it will be stored. */","export function placeCentredAt({ x, y }: Point, { width, height }: Size): Rect {","  return toCommittedRect({ x: x - width / 2, y: y - height / 2, width, height });","}","","const CASCADE_STEP = 24;","","/**"," * Centred in the part of the Board that `view` (the scroll container's offset"," * and client size) shows, or at the first free spot of the cascade from there."," */","export function placeInVisibleBoard(view: Rect, size: Size, taken: readonly Point[]): Rect {","  // `view` can reach past the Board, over the backdrop.","  const right = Math.min(view.x + view.width, BOARD_SIZE.width);","  const bottom = Math.min(view.y + view.height, BOARD_SIZE.height);","  const centred = placeCentredAt({ x: (view.x + right) / 2, y: (view.y + bottom) / 2 }, size);","  const visible = { x: view.x, y: view.y, width: right - view.x, height: bottom - view.y };","  const corner = lastSpotIn(visible, size);","","  for (const spot of cascadeSpots(centred, view, corner)) {","    if (!taken.some((point) => samePoint(point, spot))) return spot;","  }","  // Every spot is taken, so stack in the corner.","  return corner;","}","","/** The furthest spot fully in view. Along a side too short for the Note, the furthest on the Board. */","function lastSpotIn(visible: Rect, { width, height }: Size): Rect {","  return toCommittedRect({","    width,","    height,","    x: visible.width \u003c width ? BOARD_SIZE.width : visible.x + visible.width - width,","    y: visible.height \u003c height ? BOARD_SIZE.height : visible.y + visible.height - height,","  });","}","","/** The spots to try, in order: from the centre, then jumping back to the top of `view`. */","function* cascadeSpots(centred: Rect, view: Point, corner: Point): Generator\u003cRect> {","  yield* stepsToCorner(centred, corner);","","  for (let x = Math.round(view.x); x \u003c= corner.x; x += CASCADE_STEP) {","    yield* stepsToCorner(toCommittedRect({ ...centred, x, y: view.y }), corner);","  }","}","","/** `start`, then (24, 24) steps until `corner`, along an edge once it reaches one. */","function* stepsToCorner(start: Rect, corner: Point): Generator\u003cRect> {","  let spot = start;","  for (;;) {","    yield spot;","    const next = {","      ...spot,","      x: Math.min(spot.x + CASCADE_STEP, corner.x),","      y: Math.min(spot.y + CASCADE_STEP, corner.y),","    };","    if (samePoint(next, spot)) return;","    spot = next;","  }","}","","function samePoint(a: Point, b: Point): boolean {","  return a.x === b.x && a.y === b.y;","}"],"added":[81,82,83,84,85,86,87,88]},{"path":"src/drag/controller.ts","question":"Where is the Board on screen at each move?","summary":"A press measures the zone and the Board's origin once, for a kind with `overTrash`. `context` gives the kind the origin less the scroll since the press, the same scroll `delta` adds.","owns":"The `DragContext` and the order of the Trash zone writes.","never":"Touches the DOM: `boardOrigin` is read through `DragIO`.","tested":"Node tests against a recording fake `DragIO`, including a scroll mid-drag.","lines":["import type { Point, Rect } from '../geometry';","import type { DragContext, DragKind, DragSave } from './kinds';","","/** How far a press must travel before it becomes a Drag. Inside it, a release is a click. */","export const DEAD_ZONE_PX = 3;","","export interface PointerSignal {","  readonly pointerId: number;","  readonly clientX: number;","  readonly clientY: number;","}","","export interface MoveSignal extends PointerSignal {","  /** 0 when no button is down: the release happened where we couldn't see it. */","  readonly buttons: number;","}","","/**"," * How the Trash zone looks: `quiet` with no move running, `armed` while a move runs,"," * `over` while the dragged Note overlaps it. The dragged Note shows `over` too."," */","export type TrashState = 'quiet' | 'armed' | 'over';","","/**"," * DOM → controller. The controller's session handlers: the DOM side attaches them"," * in `attachPointerListeners` on press, and removes them when the session ends."," */","export interface DragHandlers {","  move: (e: MoveSignal) => void;","  up: (e: PointerSignal) => void;","  cancel: (e: Pick\u003cPointerSignal, 'pointerId'>) => void;","  scroll: () => void;","  key: (e: { readonly key: string }) => void;","}","","/**"," * Controller → DOM. Everything outside the controller. The hook passes the real DOM;"," * tests pass a recording fake."," */","export interface DragIO {","  /** The scroll container's offset, so a scroll mid-drag moves the Preview with the Board. */","  scrollPosition: () => Point;","  /** Called on press. Attaches every session handler; returns the one function that detaches them all. */","  attachPointerListeners: (handlers: DragHandlers) => () => void;","  releaseCapture: (pointerId: number) => void;","  /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */","  writePreview: (rect: Rect | null, base: Rect) => void;","  /** Where a Press's Raise and a released Drag's one save go. */","  save: DragSave;","  /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */","  click: (pointer: Point) => void;","  /** The Trash zone's rect in client coordinates, or `null` if it isn't on screen. Read once per Press. */","  trashRect: () => Rect | null;","  /** The Board's top-left in client coordinates. Read once per Press, by a kind that can delete. */","  boardOrigin: () => Point;","  /** Edge-triggered: called only when the state changes, and only for a kind that can delete. */","  writeTrash: (state: TrashState) => void;","}","","interface Session {","  /** The Drag kind, bound to the rect it started from. */","  readonly preview: (delta: Point, ctx: DragContext) => Rect;","  readonly commit: (delta: Point, ctx: DragContext) => void;","  /** Absent for a kind that never deletes, such as a resize. */","  readonly overTrash: ((delta: Point, ctx: DragContext) => boolean) | undefined;","  /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */","  readonly trash: Rect | null;","  /** The Board's top-left on screen, measured at press. A scroll since moves it the other way. */","  readonly pressBoardOrigin: Point;","  /** Last written to the DOM. */","  trashState: TrashState;","  readonly from: Rect;","  readonly pointerId: number;","  /** Client coordinates. */","  readonly pressPoint: Point;","  readonly pressScroll: Point;","  pointer: Point;","  /** Still inside the Dead zone. */","  pending: boolean;","  readonly detach: () => void;","}","","export interface PressOptions {","  /** The Press landed inside text being typed in: it Raises, but never becomes a Drag or a Click. */","  readonly inText?: boolean;","}","","export interface DragController {","  press: \u003cFrom extends Rect>(","    e: PointerSignal,","    kind: DragKind\u003cFrom>,","    from: From,","    options?: PressOptions,","  ) => void;","  /** Cancels a running Drag. For unmount. */","  dispose: () => void;","}","","/**"," * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`."," *"," *   press → kind.press saves through io.save, io.attachPointerListeners(sessionHandlers)"," *   move / scroll → Dead zone → Preview (io.writePreview)"," *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides"," *   cancel / Escape / dispose → end(false)"," *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + kind.commit saves through io.save"," *"," * A kind with `overTrash` (a move) also drives the Trash zone: `armed` once it leaves the"," * Dead zone, `over` while the Note overlaps the zone, `quiet` at the end, each written once."," *"," * The handlers exist for the whole controller, but are attached only while a Press is live."," */","export function createDragController(io: DragIO): DragController {","  let session: Session | null = null;","","  /** How far the container has scrolled since the press. */","  function scrolled(s: Session): Point {","    const scroll = io.scrollPosition();","    return { x: scroll.x - s.pressScroll.x, y: scroll.y - s.pressScroll.y };","  }","","  function delta(s: Session): Point {","    // The Board moves under a still pointer when the container scrolls.","    const scroll = scrolled(s);","    return {","      x: s.pointer.x - s.pressPoint.x + scroll.x,","      y: s.pointer.y - s.pressPoint.y + scroll.y,","    };","  }","","  /** Still a would-be Click: it has never left the Dead zone, and isn't outside it now. */","  function stillInDeadZone(s: Session): boolean {","    const d = delta(s);","    return s.pending && Math.hypot(d.x, d.y) \u003c= DEAD_ZONE_PX;","  }","","  function context(s: Session): DragContext {","    // The Board moves up and left on screen as the container scrolls down and right.","    const scroll = scrolled(s);","    return {","      trash: s.trash,","      boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },","    };","  }","","  function setTrash(s: Session, state: TrashState) {","    if (!s.overTrash || s.trashState === state) return;","    s.trashState = state;","    io.writeTrash(state);","  }","","  function update(s: Session) {","    if (stillInDeadZone(s)) return;","    const d = delta(s);","    s.pending = false;","    const ctx = context(s);","    // Synchronously, from the event: no rAF, so the Preview is never a frame behind.","    io.writePreview(s.preview(d, ctx), s.from);","    setTrash(s, s.overTrash?.(d, ctx) ? 'over' : 'armed');","  }","","  /**","   * Every exit comes through here, once. `released`: a real `pointerup` we saw,","   * the only end that turns a Press still inside the Dead zone into a Click.","   */","  function end(commit: boolean, released = false) {","    const s = session;","    if (!s) return;","    session = null;","    s.detach();","    io.releaseCapture(s.pointerId);","    if (s.pending) {","      // Last, so the Click's handler runs with the pointer already let go.","      if (released) io.click(s.pointer);","      return;","    }","    // Measured before the reset, so what is saved is exactly what the Preview showed.","    const d = delta(s);","    const ctx = context(s);","    setTrash(s, 'quiet');","    // Reset before saving: the re-render then moves the Note to where the Preview was.","    io.writePreview(null, s.from);","    if (commit) s.commit(d, ctx);","  }","","  const ownPointer = (e: Pick\u003cPointerSignal, 'pointerId'>) => e.pointerId === session?.pointerId;","","  const sessionHandlers: DragHandlers = {","    move(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      if (e.buttons === 0) {","        // Chrome sends a button-less move just before the `pointerup` of a press that","        // wobbled as it was let go: inside the Dead zone, that `pointerup` decides.","        if (stillInDeadZone(session)) return;","        end(true);","        return;","      }","      update(session);","    },","    up(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      end(true, true);","    },","    cancel(e) {","      if (ownPointer(e)) end(false);","    },","    scroll() {","      if (session) update(session);","    },","    key(e) {","      if (e.key === 'Escape') end(false);","    },","  };","","  return {","    press(e, kind, from, { inText = false } = {}) {","      end(false);","      kind.press?.(from, io.save);","      if (inText) return;","      const pressPoint = { x: e.clientX, y: e.clientY };","      const { overTrash } = kind;","      session = {","        preview: (d, ctx) => kind.preview(from, d, ctx),","        commit: (d, ctx) => {","          kind.commit(from, d, ctx, io.save);","        },","        overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),","        trash: overTrash ? io.trashRect() : null,","        pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },","        trashState: 'quiet',","        from,","        pointerId: e.pointerId,","        pressPoint,","        pressScroll: io.scrollPosition(),","        pointer: pressPoint,","        pending: true,","        detach: io.attachPointerListeners(sessionHandlers),","      };","    },","    dispose() {","      end(false);","    },","  };","}"],"added":[19,53,54,64,67,68,108,115,116,117,118,119,120,123,125,126,136,137,138,139,140,141,142,143,158,222,228,229,230]},{"path":"src/drag/useDrag.ts","question":"Where does the Board's origin come from?","summary":"The real `boardOrigin` reads the Board element's `getBoundingClientRect`, through the new `boardRef`.","owns":"The DOM measurements.","never":"Decides anything.","tested":"Browser tests in `trash.browser.test.tsx`.","lines":["import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';","import type { Point, Rect } from '../geometry';","import { useStores } from '../StoresContext';","import { createDragController, type DragController, type DragHandlers } from './controller';","import { isInText, isPress } from './press';","import type { DragKind } from './kinds';","","export interface DragOptions {","  /** The Board's scroll container, which can scroll mid-drag. */","  readonly scrollerRef: RefObject\u003cHTMLElement | null>;","  /** The Board, whose top-left a kind that can delete measures, to place the Note on screen. */","  readonly boardRef: RefObject\u003cHTMLElement | null>;","  /** The Trash zone, which only a kind that can delete measures and draws on. */","  readonly trashRef: RefObject\u003cHTMLElement | null>;","  /** A Click: a Press released inside the Dead zone, at `pointer` in client coordinates. */","  readonly onClick?: (pointer: Point) => void;","}","","/**"," * The DOM side of the Drag engine: filters presses, captures the pointer and"," * builds the real `io`. The decisions are all in the controller."," *"," * `previewRef` is the element the Preview is drawn on: the Note."," *"," * Lifecycle (the session phase is documented on `createDragController`):"," *"," *   Mount: the effect builds `io` and creates the controller, once. The `io`"," *     methods read refs when called, so they always see the current options."," *     Nothing listens yet. `start` is returned for the Note's pointerdown."," *   Session: start → isPress, then isInText: in text, controller.press only Raises."," *     Otherwise setPointerCapture → controller.press"," *     → io.attachPointerListeners → window listeners, until the session ends."," *   Unmount (or StrictMode's remount): dispose → end(false), so a running Drag"," *     is cancelled and its listeners removed."," */","export function useDrag(previewRef: RefObject\u003cHTMLElement | null>, options: DragOptions) {","  const { notes } = useStores();","  // The latest options, read only inside handlers, so the controller is created once.","  const latest = useRef(options);","  useEffect(() => {","    latest.current = options;","  });","  const captured = useRef\u003cElement | null>(null);","  const controller = useRef\u003cDragController | null>(null);","","  // Created in an effect, so StrictMode's remount gets a fresh controller and every","  // unmount cancels a running Drag.","  useEffect(() => {","    const drag = createDragController({","      scrollPosition() {","        const scroller = latest.current.scrollerRef.current;","        return { x: scroller?.scrollLeft ?? 0, y: scroller?.scrollTop ?? 0 };","      },","      attachPointerListeners(handlers) {","        return listenForDrag(handlers, latest.current.scrollerRef.current);","      },","      releaseCapture(pointerId) {","        const element = captured.current;","        captured.current = null;","        if (element?.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId);","      },","      writePreview(rect, base) {","        const element = previewRef.current;","        if (element) writePreview(element, rect, base);","      },","      // A Press's Raise and a released Drag's one save, through the Notes store's actions.","      save: {","        raise: (id) => {","          notes.getState().raise(id);","        },","        move: (id, x, y) => {","          notes.getState().move(id, x, y);","        },","        resize: (id, rect) => {","          notes.getState().resize(id, rect);","        },","        deleteNote: (id) => {","          notes.getState().deleteNote(id);","        },","      },","      click(pointer) {","        latest.current.onClick?.(pointer);","      },","      trashRect() {","        const rect = latest.current.trashRef.current?.getBoundingClientRect();","        return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;","      },","      boardOrigin() {","        const rect = latest.current.boardRef.current?.getBoundingClientRect();","        return { x: rect?.x ?? 0, y: rect?.y ?? 0 };","      },","      writeTrash(state) {","        const zone = latest.current.trashRef.current;","        if (zone) zone.dataset.state = state;","        const element = previewRef.current;","        if (element) {","          if (state === 'over') element.dataset.overTrash = '';","          else delete element.dataset.overTrash;","        }","      },","    });","    controller.current = drag;","    return () => {","      drag.dispose();","      controller.current = null;","    };","  }, [previewRef, notes]);","","  return function start\u003cFrom extends Rect>(e: ReactPointerEvent, kind: DragKind\u003cFrom>, from: From) {","    if (!isPress(e)) return;","    if (isInText(e)) {","      // No preventDefault and no capture: the caret and text selection keep working.","      controller.current?.press(e, kind, from, { inText: true });","      return;","    }","    // No focus change, no text selection and no native drag.","    e.preventDefault();","    // So neighbours get no hover or double-click during the Drag.","    captured.current = e.currentTarget;","    e.currentTarget.setPointerCapture(e.pointerId);","    controller.current?.press(e, kind, from);","  };","}","","/**"," * End signals listen on `window`, so they arrive whatever has the capture."," * `lostpointercapture` isn't listened to: Chrome can fire it before a valid `pointerup`."," */","function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): () => void {","  const options = { capture: true };","  // Prevented, so the Escape that cancels a Drag does nothing else, such as end Editing.","  const key = (e: KeyboardEvent) => {","    if (e.key === 'Escape') e.preventDefault();","    handlers.key(e);","  };","  window.addEventListener('pointermove', handlers.move, options);","  window.addEventListener('pointerup', handlers.up, options);","  window.addEventListener('pointercancel', handlers.cancel, options);","  window.addEventListener('keydown', key, options);","  scroller?.addEventListener('scroll', handlers.scroll, { passive: true });","  return () => {","    window.removeEventListener('pointermove', handlers.move, options);","    window.removeEventListener('pointerup', handlers.up, options);","    window.removeEventListener('pointercancel', handlers.cancel, options);","    window.removeEventListener('keydown', key, options);","    scroller?.removeEventListener('scroll', handlers.scroll);","  };","}","","/**"," * The Preview is a `translate` from the committed rect, plus `width`/`height` for"," * a resize, never `scale`, so text reflows and is never distorted. A move writes"," * the same size back, so it only composites. `data-dragging` gives the lifted"," * shadow. A reset writes `base`, the rect React rendered at press."," */","function writePreview(element: HTMLElement, rect: Rect | null, base: Rect) {","  const { x, y, width, height } = rect ?? base;","  element.style.transform =","    rect === null ? '' : `translate(${String(x - base.x)}px, ${String(y - base.y)}px)`;","  element.style.width = `${String(width)}px`;","  element.style.height = `${String(height)}px`;","  if (rect === null) delete element.dataset.dragging;","  else element.dataset.dragging = '';","}"],"added":[10,11,87,88,89,90]}],"flow":[["src/drag/useDrag.ts","src/drag/controller.ts","src/drag/kinds.ts","src/geometry.ts"]],"scenarios":[{"name":"A large Note held by its far edge is dropped half over the zone","steps":[{"title":"pointerdown on the Note","explain":"Only a kind that can delete measures anything: the zone (pinned to the window, so measured once) and the Board's top-left on screen. A resize gets `null` and a zero origin it never reads. The Board ref is new in `BoardDomContext`, because `useDrag` now needs the Board element itself, not only its scroll container.","run":[{"file":"src/drag/controller.ts","start":222,"end":222},{"file":"src/drag/controller.ts","start":228,"end":230},{"file":"src/drag/useDrag.ts","start":87,"end":89}]},{"title":"pointermove: the Note's edge reaches the zone","explain":"Each update builds the context and asks the kind. `noteOverTrash` takes the same rect the Preview shows (`moved`: rounded and clamped to the Board), moves it by the Board's origin into client coordinates, and tests it against the zone. Grabbed 20 px in from its left edge, the 400-wide Note reaches the zone while the pointer is still 340 px left of it, so the zone and the Note turn `over`. The browser test checks the pointer really is outside.","run":[{"file":"src/drag/controller.ts","start":154,"end":158},{"file":"src/drag/kinds.ts","start":52,"end":55},{"file":"src/geometry.ts","start":82,"end":84}]},{"title":"pointerup with the pointer outside the zone","explain":"`end` measures the delta and context before resetting the Preview, then `commit` asks `noteOverTrash` again with the same arguments, so it deletes exactly when the zone was `over`. The delete goes through `deleteNote`, so the Undo toast shows, as the browser test checks.","run":[{"file":"src/drag/controller.ts","start":176,"end":182},{"file":"src/drag/kinds.ts","start":63,"end":64}]}]},{"name":"A Note released beside the zone, 10 px short of it","steps":[{"title":"pointerup with the Note's right edge left of the zone","explain":"The rects are apart on the x axis, so `intersects` is false: the zone stayed `armed` and the release is an ordinary `move` to the rect the Preview showed. One more pixel to the right and the edges would touch, which counts as overlap (`kinds.test.ts` checks both: 1 px apart moves, touching deletes).","run":[{"file":"src/drag/kinds.ts","start":67,"end":68}]}]},{"name":"The Board scrolls during the Drag","steps":[{"title":"scroll with the pointer still","explain":"The Board slides up and left under the pointer, and `delta` adds the scroll so the Note follows the pointer, not the Board. Its Board position grows by the scroll while the Board's origin on screen shrinks by the same amount, so the Note's client rect stays put and the zone's state doesn't change. Without the correction in `context`, the Note would be measured as if it had moved by the scroll: the controller test and the browser test both fail if it is removed (checked by deleting it).","run":[{"file":"src/drag/controller.ts","start":116,"end":118},{"file":"src/drag/controller.ts","start":136,"end":141}]},{"title":"Why the scroll still matters at the Board's edge","explain":"When the delta and the scroll cancel out, the scroll seems not to matter. It matters once the Preview is clamped to the Board: the clamped rect no longer follows the pointer, and only the Board's real origin places it correctly on screen. `kinds.test.ts` covers this with a Note pushed past the Board's bottom edge, over the zone only when the Board is scrolled.","run":[{"file":"src/drag/kinds.ts","start":54,"end":54}]}]}],"notes":[{"title":"This reverses the old \"brushing moves\" rule","detail":"#6 chose the pointer on purpose, so a large Note brushing the zone was moved, and the earlier interaction prototype marks overlap as rejected. The client reviewer read that as \"not meeting\" the requirement: you drag the Note to the trash, not the pointer. The counter-argument still stands: a large Note near the bottom-right can now be deleted by accident. Undo is the safety net, and the highlight warns before the release."},{"title":"Touching counts","detail":"The issue asked for the same edge rule as `contains`, so a Note whose edge lies exactly on the zone's edge is deleted. The rects are in fractional client pixels, so this is a single-pixel line in practice."},{"title":"Measured at press, not at every move","detail":"The Board's origin could be read with `getBoundingClientRect` on every move, which would need no scroll arithmetic. Measuring once matches how the zone is measured, keeps layout reads out of the hot path, and keeps the controller testable with a fake `DragIO`."},{"title":"`contains` has no production caller now","detail":"It was used only by the old pointer rule. It is kept, with its tests, as the stated edge rule `intersects` follows. Delete it if you prefer."},{"title":"A Board ref after all","detail":"The #6 walkthrough noted that nothing read a Board ref, so `BoardDomContext` had none. `useDrag` now needs one, so `Board` takes its ref from the context instead of its own `useRef`."}],"omitted":{"GLOSSARY.md":"The Trash zone entry: a release while the Note overlaps it, touching counts, wherever the pointer is.","README.md":"Feature 4 row, the kinds bullet, the `DragIO` list and the geometry bullet describe the new rule.","docs/cross-browser-checklist.md":"Row 34–36: overlap deletes, pointer anywhere; beside it, moved.","src/App.tsx":"Creates `boardRef` and adds it to the `BoardDom` value.","src/BoardDomContext.ts":"Adds `boardRef`.","src/components/Board.tsx":"Takes `boardRef` from the context instead of its own `useRef`.","src/components/TrashZone.tsx":"Doc comment: a Note that overlaps it is deleted.","src/components/TrashZone.module.css":"Comment on the `over` look.","src/drag/controller.test.ts":"The fake `DragIO` gets a Board origin; a scroll mid-drag test.","src/drag/kinds.test.ts":"Trash zone cases rewritten over `overTrash` and `commit` together.","src/geometry.test.ts":"`intersects` tests.","src/components/Note.tsx":"Passes `boardRef` to `useDrag`.","src/trash.browser.test.tsx":"Real-mouse tests: a large Note grabbed by its far edge, a Note beside the zone, and a scroll mid-drag."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>

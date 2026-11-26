@@ -15,8 +15,9 @@ export function App({ stores, onNoteRender }: AppProps) {
   // The Board's scroll container. The top bar reads it to see which part of the Board is
   // visible, and a Drag to follow a scroll.
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLElement>(null);
   const trashRef = useRef<HTMLDivElement>(null);
-  const boardDom = useMemo(() => ({ scrollerRef, trashRef }), []);
+  const boardDom = useMemo(() => ({ scrollerRef, boardRef, trashRef }), []);
 
   return (
     <StoresContext value={stores}>

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
 import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
+import { useBoardDom } from '../BoardDomContext';
 import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
@@ -28,7 +29,7 @@ export function Board({
   const { notes } = useStores();
   const stopEditing = useStopEditing();
 
-  const boardRef = useRef<HTMLElement>(null);
+  const { boardRef } = useBoardDom();
   // A `dblclick` reports only where the second press landed, so the first is remembered:
   // the last two presses anywhere on the page, and whether each landed on empty Board.
   const lastTwoPresses = useRef({ previousWasOnEmptyBoard: false, lastWasOnEmptyBoard: false });
@@ -45,7 +46,7 @@ export function Board({
     return () => {
       document.removeEventListener('pointerdown', rememberPress, { capture: true });
     };
-  }, []);
+  }, [boardRef]);
 
   function createAtPointer(event: MouseEvent<HTMLElement>) {
     // Both presses must be on empty Board: either one anywhere else creates nothing.

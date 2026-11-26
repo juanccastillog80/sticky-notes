@@ -2,6 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   clampToBoard,
+  intersects,
   placeCentredAt,
   placeInVisibleBoard,
   resizeRect,
@@ -67,6 +68,35 @@ describe('clampToBoard', () => {
         }),
       );
     });
+  });
+});
+
+describe('intersects', () => {
+  const zone = rect(900, 600, 104, 104);
+
+  it('is true when the rects overlap', () => {
+    expect(intersects(rect(800, 500), zone)).toBe(true);
+  });
+
+  it('counts touching edges as overlap, as contains counts its edges', () => {
+    expect(intersects(rect(680, 600), zone)).toBe(true); // right edge on the zone's left
+    expect(intersects(rect(1004, 704), zone)).toBe(true); // top-left on the zone's bottom-right
+  });
+
+  it('is true when one is inside the other, either way round', () => {
+    const big = rect(850, 550, 400, 300);
+    expect(intersects(big, zone)).toBe(true);
+    expect(intersects(zone, big)).toBe(true);
+  });
+
+  it.each([
+    ['left', rect(679, 600)],
+    ['right', rect(1005, 600)],
+    ['above', rect(900, 429)],
+    ['below', rect(900, 705)],
+  ])('is false when apart on one axis: %s of it', (_, other) => {
+    expect(intersects(other, zone)).toBe(false);
+    expect(intersects(zone, other)).toBe(false);
   });
 });
 

@@ -52,7 +52,7 @@
   color: var(--color-text);
 }
 
-/* The pointer is inside it: a release deletes. */
+/* The dragged Note overlaps it: a release deletes. */
 .zone[data-state='over'] {
   border-color: var(--color-danger);
   background: var(--color-danger-soft);

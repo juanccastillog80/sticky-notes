@@ -17,7 +17,7 @@ export interface MoveSignal extends PointerSignal {
 
 /**
  * How the Trash zone looks: `quiet` with no move running, `armed` while a move runs,
- * `over` while the pointer is inside it. The dragged Note shows `over` too.
+ * `over` while the dragged Note overlaps it. The dragged Note shows `over` too.
  */
 export type TrashState = 'quiet' | 'armed' | 'over';
 
@@ -51,6 +51,8 @@ export interface DragIO {
   click: (pointer: Point) => void;
   /** The Trash zone's rect in client coordinates, or `null` if it isn't on screen. Read once per Press. */
   trashRect: () => Rect | null;
+  /** The Board's top-left in client coordinates. Read once per Press, by a kind that can delete. */
+  boardOrigin: () => Point;
   /** Edge-triggered: called only when the state changes, and only for a kind that can delete. */
   writeTrash: (state: TrashState) => void;
 }
@@ -60,9 +62,11 @@ interface Session {
   readonly preview: (delta: Point, ctx: DragContext) => Rect;
   readonly commit: (delta: Point, ctx: DragContext) => void;
   /** Absent for a kind that never deletes, such as a resize. */
-  readonly overTrash: ((ctx: DragContext) => boolean) | undefined;
+  readonly overTrash: ((delta: Point, ctx: DragContext) => boolean) | undefined;
   /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */
   readonly trash: Rect | null;
+  /** The Board's top-left on screen, measured at press. A scroll since moves it the other way. */
+  readonly pressBoardOrigin: Point;
   /** Last written to the DOM. */
   trashState: TrashState;
   readonly from: Rect;
@@ -102,19 +106,25 @@ export interface DragController {
  *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + kind.commit saves through io.save
  *
  * A kind with `overTrash` (a move) also drives the Trash zone: `armed` once it leaves the
- * Dead zone, `over` while the pointer is inside the zone, `quiet` at the end, each written once.
+ * Dead zone, `over` while the Note overlaps the zone, `quiet` at the end, each written once.
  *
  * The handlers exist for the whole controller, but are attached only while a Press is live.
  */
 export function createDragController(io: DragIO): DragController {
   let session: Session | null = null;
 
+  /** How far the container has scrolled since the press. */
+  function scrolled(s: Session): Point {
+    const scroll = io.scrollPosition();
+    return { x: scroll.x - s.pressScroll.x, y: scroll.y - s.pressScroll.y };
+  }
+
   function delta(s: Session): Point {
     // The Board moves under a still pointer when the container scrolls.
-    const scroll = io.scrollPosition();
+    const scroll = scrolled(s);
     return {
-      x: s.pointer.x - s.pressPoint.x + scroll.x - s.pressScroll.x,
-      y: s.pointer.y - s.pressPoint.y + scroll.y - s.pressScroll.y,
+      x: s.pointer.x - s.pressPoint.x + scroll.x,
+      y: s.pointer.y - s.pressPoint.y + scroll.y,
     };
   }
 
@@ -124,7 +134,14 @@ export function createDragController(io: DragIO): DragController {
     return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;
   }
 
-  const context = (s: Session): DragContext => ({ pointer: s.pointer, trash: s.trash });
+  function context(s: Session): DragContext {
+    // The Board moves up and left on screen as the container scrolls down and right.
+    const scroll = scrolled(s);
+    return {
+      trash: s.trash,
+      boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },
+    };
+  }
 
   function setTrash(s: Session, state: TrashState) {
     if (!s.overTrash || s.trashState === state) return;
@@ -139,7 +156,7 @@ export function createDragController(io: DragIO): DragController {
     const ctx = context(s);
     // Synchronously, from the event: no rAF, so the Preview is never a frame behind.
     io.writePreview(s.preview(d, ctx), s.from);
-    setTrash(s, s.overTrash?.(ctx) ? 'over' : 'armed');
+    setTrash(s, s.overTrash?.(d, ctx) ? 'over' : 'armed');
   }
 
   /**
@@ -203,13 +220,15 @@ export function createDragController(io: DragIO): DragController {
       kind.press?.(from, io.save);
       if (inText) return;
       const pressPoint = { x: e.clientX, y: e.clientY };
+      const { overTrash } = kind;
       session = {
         preview: (d, ctx) => kind.preview(from, d, ctx),
         commit: (d, ctx) => {
           kind.commit(from, d, ctx, io.save);
         },
-        overTrash: kind.overTrash,
-        trash: kind.overTrash ? io.trashRect() : null,
+        overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),
+        trash: overTrash ? io.trashRect() : null,
+        pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },
         trashState: 'quiet',
         from,
         pointerId: e.pointerId,
