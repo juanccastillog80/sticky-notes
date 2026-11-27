@@ -1,0 +1,348 @@
+{
+  "issue": 54,
+  "title": "Press module: one place decides what a pointerdown means",
+  "lede": "Before this PR, the rule that pressing anywhere else ends **Editing** had to be reported from five places (the Note body, the Resize handles, the ×, `focusNote`, empty Board), and two more modules each listened on the whole page. #51 was one of those places forgetting the rule. Now one **Press module** in `src/press/` owns everything that happens when the pointer goes down. Its pure core, `createPress`, decides. Its DOM side, `pressDom.ts`, reads the **Press target** off `data-press-target` attributes and does what the core says. `Note.tsx` keeps only markup and keys.",
+  "files": [
+    {
+      "path": "src/press/press.ts",
+      "question": "What does a press mean?",
+      "summary": "The pure core. It takes a Press target with a pointer, focus on a Note, a click on a ×, the browser's double-click and the Drag controller's Click, and calls the stores and the one Drag controller.",
+      "owns": "Raise, ending Editing, a press inside text, Drag or Click, the Click's caret, creating a Note on double-click, the ignore window after a ×, ending a Drag whose Note was deleted.",
+      "never": "Touches the DOM: it gets plain targets and pointers, and returns what to do with the event (`drag`, `prevent`, `none`).",
+      "tested": "`src/press/press.test.ts`: every rule, in Node, with `createStores()`, the real Drag controller and a fake `DragIO`."
+    },
+    {
+      "path": "src/press/pressDom.ts",
+      "question": "How do DOM events reach the core?",
+      "summary": "Attached once by the Board. It holds the only `document` listener (`pointerdown`, capture phase) and `focusin`, `click` and `dblclick` on the Board, and builds the real `DragIO` for the one Drag controller.",
+      "owns": "Reading the Press target from `data-press-target`, `data-note-id` and `data-handle`; `preventDefault`; pointer capture; the Preview and the Trash zone look; measuring the Click's caret.",
+      "never": "Decides anything the core decides: no Raise, no Editing, no timing.",
+      "tested": "The browser tests (`editing`, `delete`, `drag`, `keyboard`, `trash`, `board`, `colours`, `App`). `isInText` also has a Node test in `pressDom.test.ts`."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What is left in a Note?",
+      "summary": "Markup with `data-press-target` on the article (`body`), the Grip strip (`grip`) and the × (`delete`); Enter, Delete, Backspace and Escape; the editor placing the caret Editing carries.",
+      "owns": "Rendering a Note and its keys.",
+      "never": "Listens for `pointerdown` or `focus`, or holds Board DOM references.",
+      "tested": "The browser tests, unchanged except one import line in three files."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "Who attaches the Press module?",
+      "summary": "One effect calls `attachPress` and returns its cleanup. `lastTwoPresses`, `onDoubleClick` and `onPointerDown` are gone.",
+      "owns": "Rendering the Board and its Notes, and attaching the Press module once.",
+      "never": "Handles a pointer event itself.",
+      "tested": "The browser tests; `App.browser.test.tsx` covers the double-click cases."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "What changed in the Drag controller?",
+      "summary": "Only the Raise left: `press` no longer calls `kind.press` and has no `inText` option. There is now one controller per Board, not one per Note.",
+      "owns": "The session: Dead zone, Preview, Trash zone, Click, release and cancel.",
+      "never": "Raises: that is the Press's.",
+      "tested": "`src/drag/controller.test.ts`: the first test now checks a press saves nothing and only starts listening."
+    },
+    {
+      "path": "src/ui/editing.ts",
+      "question": "Where does the Click's caret go?",
+      "summary": "Editing state now carries `caret`, set by `startEditing(id, caret)`. The editor reads it once when it mounts. Enter passes `null`, the end of the text.",
+      "owns": "Editing's rules, as before.",
+      "never": "Measures text.",
+      "tested": "`src/ui/uiStore.test.ts`: `Editing carries the caret it started with, the end of the text by default`."
+    }
+  ],
+  "flow": [
+    [
+      "src/press/pressDom.ts",
+      "src/press/press.ts",
+      "src/drag/controller.ts",
+      "src/press/pressDom.ts",
+      "src/press/press.ts",
+      "src/ui/editing.ts",
+      "src/components/Note.tsx"
+    ],
+    ["src/press/pressDom.ts", "src/press/press.ts", "src/ui/editing.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Click an idle Note's text: Editing starts with the caret there",
+      "steps": [
+        {
+          "title": "The Board attaches the Press module once",
+          "explain": "One effect, on mount. Its cleanup removes every listener and disposes the core, which cancels a running Drag. Under StrictMode it runs twice, and the second attach starts clean.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "useEffect(() => attachPress(stores, boardDom), [stores, boardDom]);"
+            },
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "const capture = { capture: true };",
+              "to": "board.addEventListener('dblclick', doubleClick, capture);"
+            }
+          ]
+        },
+        {
+          "title": "pointerdown on the text: the DOM side reads the Press target",
+          "explain": "Captured on `document`, so it runs before anything else. The text has no `data-press-target`, so the nearest marked element is the article: `{ on: 'body', id }`. It passes the plain pointer fields to the core.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "function pointerDown(e: PointerEvent) {",
+              "to": "});"
+            },
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "function pressTargetOf(target: EventTarget | null, board: HTMLElement): PressTarget {",
+              "to": "return on === 'grip' || on === 'delete' ? { on, id } : { on: 'body', id };"
+            }
+          ]
+        },
+        {
+          "title": "The core: end Editing elsewhere, Raise, hand the Press to the Drag controller",
+          "explain": "First it records whether this press was on empty Board, for the double-click. Then it reports the press to Editing (any button), checks it is a left-button Press, Raises, and starts the Drag session. It remembers `pressedId` for the Click. The controller's `press` no longer calls `kind.press` or takes `inText`: it ends any earlier session and starts listening, nothing else.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "pointerDown(target, pointer) {",
+              "to": "return 'drag';"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "press(e, kind, from) {",
+              "to": "const pressPoint = { x: e.clientX, y: e.clientY };"
+            }
+          ]
+        },
+        {
+          "title": "Back in the DOM side: preventDefault and pointer capture",
+          "explain": "`drag` means: no focus change, no text selection, and capture the pointer. For a Resize handle, capture goes on the handle so its cursor stays; otherwise on the Note. The Note is remembered as the Preview element.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "if (outcome === 'none') return;",
+              "to": "holder.setPointerCapture(e.pointerId);"
+            }
+          ]
+        },
+        {
+          "title": "pointerup inside the Dead zone: the controller reports a Click",
+          "explain": "The controller is unchanged here. Its `io.click` is the DOM side's, which measures the caret on the idle text and hands it to the core. The core starts Editing on the Note it remembered, with that caret.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "click(pointer) {",
+              "to": "press.clicked(caretOffsetAt(text, pointer));"
+            },
+            {
+              "file": "src/press/press.ts",
+              "from": "clicked(caret) {",
+              "to": "if (id !== null) ui.getState().startEditing(id, caret);"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "if (state.editingId === id) return state;",
+              "to": "return { ...end(state, 'press'), editingId: id, editingEndedBy: null, caret };"
+            }
+          ]
+        },
+        {
+          "title": "The editor mounts and places the caret",
+          "explain": "Read once, before paint. Before this PR the caret was a ref inside `Note`; now it is part of Editing, so Enter (`null`) and a Click go through the same path.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const offset = ui.getState().caret ?? editor.value.length;",
+              "to": "editor.setSelectionRange(offset, offset);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Note A is in Editing; press inside its text, then on Note B's ×",
+      "steps": [
+        {
+          "title": "Inside A's textarea: only a Raise",
+          "explain": "`isInText` is true, so the core reports the press (A is the edited Note, so nothing ends), Raises, and returns `none`: no `preventDefault`, so the caret and selection stay the browser's. The test `inside text only Raises` covers it.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "inText: isInText(e),",
+              "to": "inText: isInText(e),"
+            },
+            {
+              "file": "src/press/press.ts",
+              "from": "if (pointer.inText) return 'none';"
+            }
+          ]
+        },
+        {
+          "title": "On B's ×: Editing ends, but it is no Press",
+          "explain": "The core reports `pressed(b)` before it looks at the target kind, so a new Press target can't skip it: that is the #51 bug made impossible. Then `delete` returns `prevent`: no Raise, no Drag, and focus stays put.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "ui.getState().pressed(target.id);",
+              "to": "if (target.on === 'delete') return 'prevent';"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Double-click B's ×, with Note A underneath",
+      "steps": [
+        {
+          "title": "The first click deletes B and opens the ignore window",
+          "explain": "The DOM side's `click` listener sees a click inside a `delete` target. `detail > 0` means a mouse click, which may be half a double-click, so the core ignores presses on Notes for `DOUBLE_CLICK_MS`.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "function click(e: MouseEvent) {",
+              "to": "press.deleteButtonClicked(id, { mouse: e.detail > 0 });"
+            },
+            {
+              "file": "src/press/press.ts",
+              "from": "deleteButtonClicked(id, { mouse }) {",
+              "to": "if (mouse) ignoreUntil = now() + DOUBLE_CLICK_MS;"
+            }
+          ]
+        },
+        {
+          "title": "The second press lands on A: ignored",
+          "explain": "`prevent`, before anything else on a Note: no Raise, no Editing change, no Drag. `preventDefault` on `pointerdown` also suppresses the compatibility `mousedown`. A press on empty Board in the window still works, as it returns earlier. The browser test `a double-click on the × deletes only that Note` checks A is unchanged.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "if (ignoring()) return 'prevent';"
+            }
+          ]
+        },
+        {
+          "title": "Enter on a × in that window still deletes",
+          "explain": "A change from `ignorePressesFor`, which swallowed every `click` on a Note. A keyboard click (`detail` 0) can't be half a double-click, so only mouse clicks are ignored. The old browser test passed only because its fake timers closed the window early; the core test `clicked from the keyboard during that time still deletes` now proves it directly.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "if (mouse && ignoring()) return;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Double-click on empty Board",
+      "steps": [
+        {
+          "title": "Each pointerdown records whether it was on empty Board",
+          "explain": "On `document`, so a press outside the Board counts as not on empty Board. A `dblclick` only reports where the second press landed, so the first has to be remembered.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "previousOnBoard = lastOnBoard;",
+              "to": "lastOnBoard = target.on === 'board';"
+            }
+          ]
+        },
+        {
+          "title": "dblclick: create only if both presses were on empty Board",
+          "explain": "The DOM side measures the point and the Board's size; the core decides. The core test `whose first press was outside the Board creates nothing` covers the case where nothing should happen.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "function doubleClick(e: MouseEvent) {",
+              "to": "press.doubleClickedBoard(point, measureBoardSize(board));"
+            },
+            {
+              "file": "src/press/press.ts",
+              "from": "doubleClickedBoard(point, board) {",
+              "to": "if (previousOnBoard && lastOnBoard) notes.getState().createNoteAt(point, board);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tab to a Note, then Delete it while another is held mid-Drag",
+      "steps": [
+        {
+          "title": "focusin: keyboard focus Raises, a right-click's focus does not",
+          "explain": "`:focus-visible` is read in the DOM and passed as `keyboard`. Focus in the textarea does nothing, since only Editing focuses it.",
+          "run": [
+            {
+              "file": "src/press/pressDom.ts",
+              "from": "function focusIn(e: FocusEvent) {",
+              "to": "press.focused(id, { keyboard: e.target.matches(':focus-visible'), inText: isInText(e) });"
+            },
+            {
+              "file": "src/press/press.ts",
+              "from": "focused(id, { keyboard, inText }) {",
+              "to": "if (keyboard) notes.getState().raise(id);"
+            }
+          ]
+        },
+        {
+          "title": "A held Note is deleted: its Drag ends at once",
+          "explain": "Before, each Note had its own controller, cancelled when the Note unmounted. With one controller per Board, the core follows the Notes store instead: when the held Note disappears it disposes the session, which saves nothing, so Undo brings the Note back where it was. Found in review; the core test `whose Note is deleted mid-Drag ends the Drag at once` covers it.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "const unsubscribe = notes.subscribe((state) => {",
+              "to": "});"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Browser tests: one import line changed in three files",
+      "detail": "The issue asked for them to pass unchanged. `DOUBLE_CLICK_MS` lived in the deleted `ignorePressesFor.ts`; `delete`, `editing` and `keyboard` now import it from `./press/press`. No test body changed."
+    },
+    {
+      "title": "`dblclick`, not `click` with `detail === 2`",
+      "detail": "The issue lists `focusin` and `click` on the Board. A `dblclick` listener keeps the browser's own double-click timing and matches the old `onDoubleClick`; the core still decides from the two remembered presses."
+    },
+    {
+      "title": "The left-button check lives in the core",
+      "detail": "The issue moves `isPress` to `pressDom.ts`. It is inline in the core instead, so \"only a left-button Press Raises\" is tested in Node. `isInText` is in `pressDom.ts`, as asked."
+    },
+    {
+      "title": "Counter-argument: `pressDom.ts` does two jobs",
+      "detail": "It reads Press targets and it is the Drag controller's real `DragIO`. They share the pressed Note (Preview element, capture, Click caret), which is why they stayed together."
+    },
+    {
+      "title": "Known leftover: the caret after a remount",
+      "detail": "Editing's `caret` stays set while Editing lasts. If the editor remounted mid-Editing, it would put the caret back at the Click's offset. Nothing remounts it today. Not run."
+    },
+    {
+      "title": "Not clicked through",
+      "detail": "I didn't click through this walkthrough in a browser; please do. The builder checked that every highlighted line exists."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "Adds the **Press target** term.",
+    "README.md": "Architecture section and diagram: a new section 1 for the Press module; the Drag section no longer mentions `useDrag` or the Raise.",
+    "vite.config.ts": "`src/press/**` joins the coverage gate; `pressDom.ts` and `caret.ts` are excluded as DOM wiring, replacing `useDrag.ts`.",
+    "src/components/ResizeHandles.tsx": "Plain markup now: `data-press-target=\"handle\"` and `data-handle`, no handler.",
+    "src/components/ignorePressesFor.ts": "Deleted: the ignore window is in the core.",
+    "src/drag/useDrag.ts": "Deleted: its `DragIO`, `listenForDrag` and `writePreview` moved to `pressDom.ts`.",
+    "src/drag/press.ts": "Deleted: `isInText` moved to `pressDom.ts`, the left-button check into the core.",
+    "src/drag/kinds.ts": "`DragKind.press` and `DragSave.raise` removed: kinds differ only in Preview and save.",
+    "src/drag/controller.test.ts": "The two Raise tests became one: a press saves nothing and only starts listening.",
+    "src/press/press.test.ts": "The core's tests, cited in each step.",
+    "src/ui/uiStore.ts": "`startEditing(id, caret = null)`.",
+    "src/ui/uiStore.test.ts": "The caret test cited above.",
+    "test/recordCalls.ts": "`recordingSave` no longer has `raise`.",
+    "src/delete.browser.test.tsx": "One import line.",
+    "src/editing.browser.test.tsx": "One import line.",
+    "src/keyboard.browser.test.tsx": "One import line.",
+    "src/components/caret.ts": "Moved to `src/press/caret.ts`, unchanged.",
+    "src/drag/press.test.ts": "Moved to `src/press/pressDom.test.ts`.",
+    "src/press/pressDom.test.ts": "Moved from `src/drag/press.test.ts`; keeps the `isInText` cases, while the `isPress` cases are covered by the core tests.",
+    "src/press/caret.ts": "Moved from `src/components/caret.ts`, unchanged."
+  }
+}
