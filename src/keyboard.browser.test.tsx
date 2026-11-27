@@ -184,6 +184,7 @@ it('Backspace while Editing only edits the text', async () => {
   await userEvent.keyboard('{Backspace}{Delete}');
 
   await expect.element(editor(noteA)).toHaveValue('hell');
+  // Not a delete of the Note.
   expect(stores.notes.getState().notes[a.id]).toBeDefined();
   expect(stores.ui.getState().editingId).toBe(a.id);
 });
@@ -194,6 +195,7 @@ it('Backspace on a focused × does not act on the Note', async () => {
 
   await userEvent.keyboard('{Backspace}');
 
+  // Not a delete of the Note.
   expect(stores.notes.getState().notes[a.id]).toBeDefined();
   expect(stores.ui.getState().editingId).toBeNull();
 });
@@ -204,6 +206,7 @@ it('Enter with a modifier, or Ctrl+Backspace, on a focused Note does nothing to 
 
   await userEvent.keyboard('{Control>}{Backspace}{Enter}{/Control}{Alt>}{Delete}{/Alt}');
 
+  // Not a delete of the Note.
   expect(stores.notes.getState().notes[a.id]).toBeDefined();
   expect(stores.ui.getState().editingId).toBeNull();
 });

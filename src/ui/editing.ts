@@ -1,7 +1,7 @@
 import type { NoteId } from '../notes/note';
 
 /** Why Editing last ended. `Note` reads it to put focus back on the article after Escape. */
-export type EditingEnd = 'press' | 'escape' | 'delete' | 'pagehide';
+export type EditingEnd = 'press' | 'escape' | 'delete' | 'pageHide';
 
 /**
  * Editing: at most one Note, its Draft text, and the rule for how it ends ("Escape or
@@ -22,14 +22,14 @@ export const NOT_EDITING: EditingState = {
 };
 
 /** Draft text that Editing ending hands over, to be saved to its Note. */
-export interface SavedDraft {
+export interface EndedDraft {
   readonly id: NoteId;
   readonly text: string;
 }
 
 /**
  * The single exit: every way Editing ends comes through here, and leaves the Draft
- * text behind for `savedDraft` to find. Leaves the state as it is when nothing is
+ * text behind for `endedDraft` to find. Leaves the state as it is when nothing is
  * being edited, so a no-op notifies nobody.
  */
 function end(state: EditingState, reason: EditingEnd): EditingState {
@@ -40,7 +40,7 @@ function end(state: EditingState, reason: EditingEnd): EditingState {
  * The Draft text that the transition from `before` to `after` ended Editing with, or
  * `null` when Editing didn't end there or nothing was typed.
  */
-export function savedDraft(before: EditingState, after: EditingState): SavedDraft | null {
+export function endedDraft(before: EditingState, after: EditingState): EndedDraft | null {
   const { editingId, draftText } = before;
   if (editingId === null || draftText === null || after.editingId === editingId) return null;
   return { id: editingId, text: draftText };
@@ -79,5 +79,5 @@ export function deleted(state: EditingState, id: NoteId): EditingState {
 
 /** The page is being hidden or closed: Editing ends, so its Draft text is saved. */
 export function pageHidden(state: EditingState): EditingState {
-  return end(state, 'pagehide');
+  return end(state, 'pageHide');
 }
