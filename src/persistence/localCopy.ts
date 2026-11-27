@@ -3,7 +3,7 @@ import type { NotesState, NotesStore } from '../notes/notesStore';
 import { parseNotes } from './parseNotes';
 
 /** Where the Local copy lives in localStorage. */
-export const LOCAL_COPY_KEY = 'sticky-notes:cache';
+export const LOCAL_COPY_KEY = 'sticky-notes:local-copy';
 
 /** The part of `Storage` the Local copy uses, so tests can pass a fake. */
 export type LocalCopyStorage = Pick<Storage, 'getItem' | 'setItem'>;
