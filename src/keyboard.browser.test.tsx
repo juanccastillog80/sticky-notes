@@ -4,7 +4,7 @@ import { makeNote, testId } from '../test/factories';
 import { drag, press } from '../test/mouse';
 import { recordActions } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
-import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
+import { DOUBLE_CLICK_MS } from './press/press';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);

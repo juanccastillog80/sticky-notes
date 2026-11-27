@@ -9,6 +9,7 @@ const PURE_CORE = [
   'src/notes/**',
   'src/ui/**',
   'src/drag/**',
+  'src/press/**',
   'src/persistence/**',
   'src/geometry.ts',
 ];
@@ -56,7 +57,8 @@ export default defineConfig({
         '**/*.test-d.ts',
         '**/*.browser.test.tsx',
         // DOM wiring with no decisions in it, covered by the browser tests.
-        'src/drag/useDrag.ts',
+        'src/press/pressDom.ts',
+        'src/press/caret.ts',
       ],
       thresholds: { lines: 90, branches: 90 },
     },

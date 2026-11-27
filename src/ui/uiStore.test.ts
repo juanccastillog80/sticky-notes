@@ -15,6 +15,18 @@ describe('Editing', () => {
     expect(ui.getState().editingId).toBe(b);
   });
 
+  it('Editing carries the caret it started with, the end of the text by default', () => {
+    const ui = createUiStore();
+
+    ui.getState().startEditing(a, 4);
+    expect(ui.getState().caret).toBe(4);
+    // Already in Editing: the caret the editor placed stays.
+    ui.getState().startEditing(a, 1);
+    expect(ui.getState().caret).toBe(4);
+    ui.getState().startEditing(b);
+    expect(ui.getState().caret).toBeNull();
+  });
+
   it('a press on the edited Note keeps Editing', () => {
     const ui = createUiStore();
     ui.getState().startEditing(a);

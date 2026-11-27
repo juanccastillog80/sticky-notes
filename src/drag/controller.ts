@@ -45,7 +45,7 @@ export interface DragIO {
   releaseCapture: (pointerId: number) => void;
   /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */
   writePreview: (rect: Rect | null, base: Rect) => void;
-  /** Where a Press's Raise and a released Drag's one save go. */
+  /** Where a released Drag's one save goes. */
   save: DragSave;
   /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */
   click: (pointer: Point) => void;
@@ -84,26 +84,17 @@ interface Session {
   readonly detach: () => void;
 }
 
-export interface PressOptions {
-  /** The Press landed inside text being typed in: it Raises, but never becomes a Drag or a Click. */
-  readonly inText?: boolean;
-}
-
 export interface DragController {
-  press: <From extends Rect>(
-    e: PointerSignal,
-    kind: DragKind<From>,
-    from: From,
-    options?: PressOptions,
-  ) => void;
+  press: <From extends Rect>(e: PointerSignal, kind: DragKind<From>, from: From) => void;
   /** Cancels a running Drag. For unmount. */
   dispose: () => void;
 }
 
 /**
- * The session phase of the Drag lifecycle. Mount and unmount are in `useDrag`.
+ * The session phase of the Drag lifecycle. The Press module (`src/press/`) owns the one
+ * controller per Board, decides which presses reach it, and disposes it on unmount.
  *
- *   press → kind.press saves through io.save, io.attachPointerListeners(sessionHandlers)
+ *   press → io.attachPointerListeners(sessionHandlers)
  *   move / scroll → Dead zone → Preview (io.writePreview)
  *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides
  *   cancel / Escape / dispose → end(false)
@@ -220,10 +211,8 @@ export function createDragController(io: DragIO): DragController {
   };
 
   return {
-    press(e, kind, from, { inText = false } = {}) {
+    press(e, kind, from) {
       end(false);
-      kind.press?.(from, io.save);
-      if (inText) return;
       const pressPoint = { x: e.clientX, y: e.clientY };
       const { overTrash } = kind;
       session = {

@@ -41,5 +41,5 @@ export function recordActions<S extends object>(store: {
 /** A stand-in for the actions a Drag saves through, recording each call. */
 export function recordingSave(record: (call: Call) => void) {
   const noop = () => undefined;
-  return recordCalls({ raise: noop, move: noop, resize: noop, deleteNote: noop }, record);
+  return recordCalls({ move: noop, resize: noop, deleteNote: noop }, record);
 }

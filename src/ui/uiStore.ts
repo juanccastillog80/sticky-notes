@@ -13,8 +13,11 @@ export interface UiState extends editing.EditingState {
 
 export interface UiActions {
   // Editing: callers report what happened, and `./editing` decides whether it ends.
-  /** At most one Note is in Editing: starting it on one Note ends it on any other. */
-  readonly startEditing: (id: NoteId) => void;
+  /**
+   * At most one Note is in Editing: starting it on one Note ends it on any other.
+   * `caret` is where the caret goes: a text offset, or `null` (the default) for the end.
+   */
+  readonly startEditing: (id: NoteId, caret?: number | null) => void;
   /** The edited Note's text, as typed: kept as Draft text until Editing ends. */
   readonly typed: (text: string) => void;
   /** A press on a Note or keyboard focus on it, or (`null`) a press on empty Board. */
@@ -53,8 +56,8 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
       ...INITIAL_UI,
       ...initial,
       // An Editing transition returns its input when nothing changes.
-      startEditing: (id) => {
-        set((state) => editing.startEditing(state, id));
+      startEditing: (id, caret = null) => {
+        set((state) => editing.startEditing(state, id, caret));
       },
       typed: (text) => {
         set((state) => editing.typed(state, text));

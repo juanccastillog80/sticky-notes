@@ -28,6 +28,10 @@ _Avoid_: Snackbar, notification
 The pointer going down on a note. It Raises the note at once; it becomes a drag only if the pointer then leaves the Dead zone.
 _Avoid_: Click (that is a Press released inside the Dead zone), tap
 
+**Press target**:
+What the pointer went down on: a note's body, its Grip strip, a Resize handle, its Delete button, or empty Board. The target decides what the pointer going down does; a note's body, Grip strip and Resize handles make it a Press, its Delete button and empty Board don't.
+_Avoid_: Hit area, part, region
+
 **Click**:
 A Press released inside the Dead zone. It saves nothing; on an idle note it starts Editing. Only a real release counts: a Press that is cancelled, or whose release went unseen, is neither a click nor a drag.
 _Avoid_: Tap, select

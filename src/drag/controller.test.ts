@@ -99,29 +99,17 @@ function setup() {
       board = size;
     },
     of,
-    /** What the Drags saved: every save except the Raise each Press makes. */
-    commits: () => of('save').filter(({ save }) => save[0] !== 'raise'),
+    /** What the Drags saved. */
+    commits: () => of('save'),
   };
 }
 
 describe('the Press', () => {
-  it('raises the Note before anything listens', () => {
+  it('saves nothing at press: it only starts listening', () => {
     const t = setup();
     t.press();
 
-    expect(t.calls.slice(0, 2)).toEqual([
-      { call: 'save', save: ['raise', t.note.id] },
-      { call: 'attachPointerListeners' },
-    ]);
-  });
-
-  it('inside text it only raises: nothing listens, so the caret and selection are left alone', () => {
-    const t = setup();
-    t.controller.press({ pointerId: 1, clientX: 10, clientY: 10 }, moveKind, t.note, {
-      inText: true,
-    });
-
-    expect(t.calls).toEqual([{ call: 'save', save: ['raise', t.note.id] }]);
+    expect(t.calls).toEqual([{ call: 'attachPointerListeners' }]);
   });
 
   it('released inside the Dead zone is a Click at the release point, after everything is let go', () => {
