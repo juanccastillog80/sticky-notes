@@ -13,12 +13,18 @@ export interface EditingState {
   readonly draftText: string | null;
   /** `null` while Editing, or before it ever ended. */
   readonly editingEndedBy: EditingEnd | null;
+  /**
+   * Where Editing put the caret when it started: a text offset, or `null` for the end of
+   * the text. The editor reads it once, when it mounts.
+   */
+  readonly caret: number | null;
 }
 
 export const NOT_EDITING: EditingState = {
   editingId: null,
   draftText: null,
   editingEndedBy: null,
+  caret: null,
 };
 
 /** Draft text that Editing ending hands over, to be saved to its Note. */
@@ -46,10 +52,17 @@ export function endedDraft(before: EditingState, after: EditingState): EndedDraf
   return { id: editingId, text: draftText };
 }
 
-/** At most one: starting it on one Note ends it on any other, through the same exit. */
-export function startEditing(state: EditingState, id: NoteId): EditingState {
+/**
+ * At most one: starting it on one Note ends it on any other, through the same exit.
+ * `caret` is a text offset, or `null` for the end of the text.
+ */
+export function startEditing(
+  state: EditingState,
+  id: NoteId,
+  caret: number | null = null,
+): EditingState {
   if (state.editingId === id) return state;
-  return { ...end(state, 'press'), editingId: id, editingEndedBy: null };
+  return { ...end(state, 'press'), editingId: id, editingEndedBy: null, caret };
 }
 
 /** Text typed into the edited Note. With no Note being edited, it is dropped. */

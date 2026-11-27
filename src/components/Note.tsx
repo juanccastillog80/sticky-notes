@@ -1,56 +1,35 @@
-import {
-  memo,
-  useLayoutEffect,
-  useRef,
-  type FocusEvent,
-  type KeyboardEvent,
-  type PointerEvent,
-  type Ref,
-} from 'react';
-import { useBoardDom } from '../BoardDomContext';
-import type { Point } from '../geometry';
-import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
-import { isInText } from '../drag/press';
-import { useDrag } from '../drag/useDrag';
+import { memo, useLayoutEffect, useRef, type KeyboardEvent, type Ref } from 'react';
 import type { NoteId } from '../notes/note';
 import { useIsEditing, useNotes, useStores, useUi } from '../StoresContext';
-import { caretOffsetAt } from './caret';
-import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';
 import styles from './Note.module.css';
 import { ResizeHandles } from './ResizeHandles';
 
 /**
- * Idle, a press anywhere but a handle starts a move, and a Click starts Editing.
- * While Editing, the body is a textarea, so a press there only Raises (see `isInText`)
- * and Drags start from the Grip strip and the handles alone.
+ * Markup and keys only. What the pointer going down does, on any part of a Note, and
+ * focus arriving on it, are the Press module's (`src/press/`): the parts are marked with
+ * `data-press-target` for it to read.
  *
  * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or
- * Backspace deletes. A left press prevents its default, so it never focuses the article;
- * a right or middle press can, which is why only keyboard focus (`:focus-visible`) Raises.
+ * Backspace deletes.
  */
 export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
-  const { scrollerRef, boardRef, trashRef } = useBoardDom();
   const ref = useRef<HTMLElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  // Where the Click that starts Editing puts the caret; `null` is the end of the text.
-  const pendingCaret = useRef<number | null>(null);
   // Tells the render where Editing ended apart from mounts that start out idle.
   const wasEditing = useRef(editing);
-  const start = useDrag(ref, { scrollerRef, boardRef, trashRef, onClick: startEditingAt });
 
-  // Before paint, so the caret is in place on the first frame of Editing.
+  // Before paint, so the caret is in place on the first frame of Editing. Read once:
+  // where Editing started it (a Click's caret, or `null` for the end of the text).
   useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editing || !editor) return;
-    const offset = pendingCaret.current ?? editor.value.length;
-    pendingCaret.current = null;
+    const offset = ui.getState().caret ?? editor.value.length;
     editor.focus();
     editor.setSelectionRange(offset, offset);
-  }, [editing]);
+  }, [editing, ui]);
 
   // Escape ended Editing: the article takes focus, so Tab carries on from this Note.
   // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.
@@ -61,30 +40,6 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   }, [editing, ui]);
 
   if (!note) return null;
-
-  /** `caret` is a text offset, or `null` for the end of the text. */
-  function startEditing(caret: number | null) {
-    if (editing) return;
-    pendingCaret.current = caret;
-    ui.getState().startEditing(id);
-  }
-
-  function startEditingAt(pointer: Point) {
-    // Measured on the idle text, which the textarea lays out identically.
-    startEditing(caretOffsetAt(textRef.current, pointer));
-  }
-
-  function press(e: PointerEvent<HTMLElement>) {
-    if (!note) return;
-    ui.getState().pressed(id);
-    start(e, moveKind, note);
-  }
-
-  function pressHandle(e: PointerEvent<HTMLElement>, handle: ResizeHandle) {
-    if (!note) return;
-    ui.getState().pressed(id);
-    start(e, resizeKinds[handle], note);
-  }
 
   function keyDownInEditor(e: KeyboardEvent<HTMLTextAreaElement>) {
     // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.
@@ -98,7 +53,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     if (e.key === 'Enter') {
       // Or the textarea, focused before the key's default runs, would get a line break.
       e.preventDefault();
-      startEditing(null);
+      ui.getState().startEditing(id, null);
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       deleteAndFocusNeighbour(e.currentTarget);
@@ -119,17 +74,6 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     next?.focus();
   }
 
-  function focusNote(e: FocusEvent<HTMLElement>) {
-    // The textarea is focused only by Editing, which a Press or Enter already Raised.
-    if (isInText(e)) return;
-    // As a press on this Note: so the focus ring and the Editing outline are never on
-    // two Notes at once.
-    ui.getState().pressed(id);
-    // Raised, so the focus ring is never under another Note. Only keyboard focus: a
-    // right-button press focuses the article too, and must not Raise.
-    if (e.target.matches(':focus-visible')) notes.getState().raise(id);
-  }
-
   const { x, y, width, height, z, colour, text } = note;
   return (
     <article
@@ -137,42 +81,32 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
       aria-label="Note"
       tabIndex={0}
       className={styles.note}
+      data-note-id={id}
+      data-press-target="body"
       data-colour={colour}
       data-editing={editing ? '' : undefined}
       // Geometry only. `transform` is left free for the Drag Preview.
       style={{ left: x, top: y, width, height, zIndex: z }}
-      onPointerDown={press}
       onKeyDown={keyDownOnNote}
-      onFocus={focusNote}
     >
-      <div className={styles.gripStrip} data-grip-strip="" />
+      <div className={styles.gripStrip} data-grip-strip="" data-press-target="grip" />
+      {/* Deletes on click, through the Press module, which also ignores the double-click's second half. */}
       <button
         type="button"
         aria-label="Delete note"
         className={styles.delete}
-        onPointerDown={(e) => {
-          // Not a Press: no Raise, no Drag, and focus stays where it is until the delete.
-          e.stopPropagation();
-          e.preventDefault();
-          // Still ends Editing on any other Note, as pressing anywhere else does.
-          ui.getState().pressed(id);
-        }}
-        onClick={(e) => {
-          notes.getState().deleteNote(id);
-          // A mouse click (not Enter or Space) may be the first half of a double-click.
-          if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);
-        }}
+        data-press-target="delete"
       >
         ×
       </button>
       {editing ? (
         <NoteEditor ref={editorRef} text={text} onKeyDown={keyDownInEditor} />
       ) : (
-        <div ref={textRef} className={styles.text} data-note-text="">
+        <div className={styles.text} data-note-text="">
           {text}
         </div>
       )}
-      <ResizeHandles onPress={pressHandle} />
+      <ResizeHandles />
     </article>
   );
 });

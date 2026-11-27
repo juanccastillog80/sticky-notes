@@ -21,16 +21,14 @@ export interface DragContext {
 }
 
 /** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */
-export type DragSave = Pick<NotesActions, 'raise' | 'move' | 'resize' | 'deleteNote'>;
+export type DragSave = Pick<NotesActions, 'move' | 'resize' | 'deleteNote'>;
 
 /**
  * What a Drag does: what it shows while it runs and what it saves at release.
  * `preview` is pure, and `commit` saves a rect computed the same way, so they agree
- * by construction.
+ * by construction. The Raise is the Press's, not the kind's (`src/press/`).
  */
 export interface DragKind<From extends Rect> {
-  /** What a Press saves at once, before it is known to be a Drag or a Click. */
-  press?: (from: From, save: DragSave) => void;
   preview: (from: From, delta: Point, ctx: DragContext) => Rect;
   commit: (from: From, delta: Point, ctx: DragContext, save: DragSave) => void;
   /** Only for a kind that can delete: whether a release now would drop the Note on the Trash zone. */
@@ -40,11 +38,6 @@ export interface DragKind<From extends Rect> {
 /** The rect a move shows, which is exactly the rect it saves. */
 function moved(from: Rect, delta: Point, { board }: DragContext): Rect {
   return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y }, board);
-}
-
-/** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */
-function raise(from: Note, save: DragSave) {
-  save.raise(from.id);
 }
 
 /**
@@ -61,7 +54,6 @@ function noteOverTrash(from: Rect, delta: Point, ctx: DragContext): boolean {
 }
 
 export const moveKind: DragKind<Note> = {
-  press: raise,
   preview: moved,
   overTrash: noteOverTrash,
   commit(from, delta, ctx, save) {
@@ -89,7 +81,6 @@ export type ResizeHandle = (typeof RESIZE_HANDLES)[number];
 
 function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {
-    press: raise,
     preview: (from, delta, { board }) => resizeRect(from, delta, handle, board),
     commit(from, delta, { board }, save) {
       save.resize(from.id, resizeRect(from, delta, handle, board));

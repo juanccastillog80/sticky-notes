@@ -5,7 +5,7 @@ import { makeNote, testId } from '../test/factories';
 import { press } from '../test/mouse';
 import { recordActions } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
-import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
+import { DOUBLE_CLICK_MS } from './press/press';
 import { UNDO_TOAST_MS } from './components/UndoToast';
 
 beforeEach(async () => {

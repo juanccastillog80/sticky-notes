@@ -1,15 +1,8 @@
-import {
-  memo,
-  Profiler,
-  useEffect,
-  useRef,
-  type MouseEvent,
-  type ProfilerOnRenderCallback,
-  type RefObject,
-} from 'react';
-import { notesExtent, toBoardPoint } from '../geometry';
+import { memo, Profiler, useEffect, type ProfilerOnRenderCallback, type RefObject } from 'react';
+import { notesExtent } from '../geometry';
 import type { NoteId } from '../notes/note';
-import { measureBoardSize, useBoardDom } from '../BoardDomContext';
+import { useBoardDom } from '../BoardDomContext';
+import { attachPress } from '../press/pressDom';
 import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
@@ -25,41 +18,16 @@ export function Board({
   onNoteRender?: ProfilerOnRenderCallback;
 }) {
   const ids = useNotes((state) => state.ids);
-  const { notes, ui } = useStores();
+  const stores = useStores();
   // The Board is at least as big as its Notes; CSS makes it at least the visible area too.
   // Numbers, so only a change of the furthest edges re-renders the Board.
   const extentWidth = useNotes((state) => notesExtent(Object.values(state.notes)).width);
   const extentHeight = useNotes((state) => notesExtent(Object.values(state.notes)).height);
 
-  const { boardRef } = useBoardDom();
-  // A `dblclick` reports only where the second press landed, so the first is remembered:
-  // the last two presses anywhere on the page, and whether each landed on empty Board.
-  const lastTwoPresses = useRef({ previousWasOnEmptyBoard: false, lastWasOnEmptyBoard: false });
-
-  useEffect(() => {
-    // On the document, as a double-click can start outside the Board.
-    function rememberPress(event: PointerEvent) {
-      lastTwoPresses.current = {
-        previousWasOnEmptyBoard: lastTwoPresses.current.lastWasOnEmptyBoard,
-        lastWasOnEmptyBoard: event.target === boardRef.current,
-      };
-    }
-    document.addEventListener('pointerdown', rememberPress, { capture: true });
-    return () => {
-      document.removeEventListener('pointerdown', rememberPress, { capture: true });
-    };
-  }, [boardRef]);
-
-  function createAtPointer(event: MouseEvent<HTMLElement>) {
-    // Both presses must be on empty Board: either one anywhere else creates nothing.
-    const { previousWasOnEmptyBoard, lastWasOnEmptyBoard } = lastTwoPresses.current;
-    if (!previousWasOnEmptyBoard || !lastWasOnEmptyBoard) return;
-    const pointer = toBoardPoint(
-      { x: event.clientX, y: event.clientY },
-      event.currentTarget.getBoundingClientRect(),
-    );
-    notes.getState().createNoteAt(pointer, measureBoardSize(event.currentTarget));
-  }
+  const boardDom = useBoardDom();
+  const { boardRef } = boardDom;
+  // Everything the pointer going down does, on Notes and on empty Board (`src/press/`).
+  useEffect(() => attachPress(stores, boardDom), [stores, boardDom]);
 
   return (
     <main className={styles.viewport}>
@@ -71,11 +39,6 @@ export function Board({
           tabIndex={-1}
           className={styles.board}
           style={{ width: extentWidth, height: extentHeight }}
-          onDoubleClick={createAtPointer}
-          onPointerDown={(event) => {
-            // A press on empty Board: Editing decides whether that ends it.
-            if (event.target === event.currentTarget) ui.getState().pressed(null);
-          }}
         >
           {ids.map((id) =>
             onNoteRender ? (

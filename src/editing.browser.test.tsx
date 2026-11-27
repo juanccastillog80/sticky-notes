@@ -4,7 +4,7 @@ import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
 import { drag, press, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
-import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
+import { DOUBLE_CLICK_MS } from './press/press';
 import type { Stores } from './StoresContext';
 
 beforeEach(async () => {
