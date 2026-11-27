@@ -5,9 +5,9 @@ import styles from './Note.module.css';
 import { ResizeHandles } from './ResizeHandles';
 
 /**
- * Markup and keys only. What the pointer going down does, on any part of a Note, and
- * focus arriving on it, are the Press module's (`src/press/`): the parts are marked with
- * `data-press-target` for it to read.
+ * Markup and keys only. What the pointer going down does, on any of a Note's Press
+ * targets, and focus arriving on it, are the Press module's (`src/press/`): each Press
+ * target is marked with `data-press-target` for it to read.
  *
  * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or
  * Backspace deletes.

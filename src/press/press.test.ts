@@ -98,6 +98,17 @@ describe('a Press on a Note', () => {
     expect(t.editing()).toBeNull();
   });
 
+  it('whose Note is deleted mid-Drag ends the Drag at once, saving nothing', () => {
+    const t = setup();
+    t.down({ on: 'body', id: a.id });
+    t.move(60, 30);
+    t.stores.notes.getState().deleteNote(a.id);
+
+    expect(t.dragging()).toBe(false);
+    t.stores.notes.getState().undoDelete();
+    expect(t.stores.notes.getState().notes[a.id]).toMatchObject({ x: 100, y: 100 });
+  });
+
   it('moved past the Dead zone is a move, and starts no Editing', () => {
     const t = setup();
     t.down({ on: 'grip', id: a.id });
@@ -211,13 +222,13 @@ describe('focus arriving on a Note', () => {
 describe('the ×', () => {
   it('clicked with the mouse deletes its Note, then ignores presses on Notes for a double-click’s time', () => {
     const t = setup();
-    t.press.clickedDelete(b.id, { mouse: true });
+    t.press.deleteButtonClicked(b.id, { mouse: true });
     expect(t.stores.notes.getState().ids).toEqual([a.id]);
 
     // The second half of the double-click lands on the Note that was under the ×.
     expect(t.down({ on: 'body', id: a.id })).toBe('prevent');
     expect(t.down({ on: 'delete', id: a.id })).toBe('prevent');
-    t.press.clickedDelete(a.id, { mouse: true });
+    t.press.deleteButtonClicked(a.id, { mouse: true });
 
     expect(t.stores.notes.getState().notes[a.id]).toEqual(a);
     expect(t.dragging()).toBe(false);
@@ -225,7 +236,7 @@ describe('the ×', () => {
 
   it('ignores presses on Notes only: one on empty Board still ends Editing', () => {
     const t = setup();
-    t.press.clickedDelete(b.id, { mouse: true });
+    t.press.deleteButtonClicked(b.id, { mouse: true });
     t.stores.ui.getState().startEditing(a.id);
 
     t.down({ on: 'board' });
@@ -235,7 +246,7 @@ describe('the ×', () => {
 
   it('after the double-click’s time, presses on Notes work again', () => {
     const t = setup();
-    t.press.clickedDelete(b.id, { mouse: true });
+    t.press.deleteButtonClicked(b.id, { mouse: true });
     t.later(DOUBLE_CLICK_MS);
 
     expect(t.down({ on: 'body', id: a.id })).toBe('drag');
@@ -243,16 +254,16 @@ describe('the ×', () => {
 
   it('clicked from the keyboard during that time still deletes: Enter can’t be half a double-click', () => {
     const t = setup();
-    t.press.clickedDelete(b.id, { mouse: true });
+    t.press.deleteButtonClicked(b.id, { mouse: true });
 
-    t.press.clickedDelete(a.id, { mouse: false });
+    t.press.deleteButtonClicked(a.id, { mouse: false });
 
     expect(t.stores.notes.getState().ids).toEqual([]);
   });
 
   it('clicked with Enter or Space deletes without ignoring anything after', () => {
     const t = setup();
-    t.press.clickedDelete(b.id, { mouse: false });
+    t.press.deleteButtonClicked(b.id, { mouse: false });
 
     expect(t.down({ on: 'body', id: a.id })).toBe('drag');
   });

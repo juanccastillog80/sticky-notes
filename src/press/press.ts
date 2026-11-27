@@ -50,14 +50,16 @@ export interface Press {
     how: { readonly keyboard: boolean; readonly inText: boolean },
   ) => void;
   /** A click on Note `id`'s ×. `mouse`: not Enter or Space, so maybe half a double-click. */
-  readonly clickedDelete: (id: NoteId, how: { readonly mouse: boolean }) => void;
+  readonly deleteButtonClicked: (id: NoteId, how: { readonly mouse: boolean }) => void;
   /** The browser's double-click on empty Board, at `point` on the Board, whose size is `board`. */
   readonly doubleClickedBoard: (point: Point, board: Size) => void;
+  /** Stops following the Notes store and cancels a running Drag. For unmount. */
+  readonly dispose: () => void;
 }
 
 /**
- * Everything that happens when the pointer goes down, in one place, so a new part of a
- * Note can't skip a rule:
+ * Everything that happens when the pointer goes down, in one place, so a new Press
+ * target can't skip a rule:
  * - a Press (a Note's body, Grip strip or Resize handle, left button) Raises the Note at
  *   once, then goes to the Drag controller, which makes it a Drag or a Click. Inside
  *   text it only Raises. A Click starts Editing with the caret where it landed.
@@ -66,9 +68,11 @@ export interface Press {
  * - keyboard focus arriving on a Note Raises it and ends Editing elsewhere, like a Press.
  * - a double-click on empty Board creates a Note, but only if both presses were on
  *   empty Board: one on a Note or outside the Board creates nothing.
- * - after a mouse click on a × deleted its Note, presses and mouse clicks on a × are
- *   ignored for `DOUBLE_CLICK_MS`, so the second half of a double-click can't land on
- *   the Note that was under the ×.
+ * - after a mouse click on a × deleted its Note, presses on any Press target of a Note,
+ *   and mouse clicks on a ×, are ignored for `DOUBLE_CLICK_MS`, so the second half of
+ *   a double-click can't land on the Note that was under the ×.
+ * - a Note deleted while it is held (from the keyboard) ends its Drag at once, saving
+ *   nothing, so Undo brings it back where it was.
  *
  * `now` is in milliseconds, as `performance.now()`.
  */
@@ -86,6 +90,13 @@ export function createPress(
   let ignoreUntil = -Infinity;
 
   const ignoring = () => now() < ignoreUntil;
+
+  const unsubscribe = notes.subscribe((state) => {
+    if (pressedId !== null && !state.notes[pressedId]) {
+      pressedId = null;
+      drag.dispose();
+    }
+  });
 
   return {
     pointerDown(target, pointer) {
@@ -115,8 +126,7 @@ export function createPress(
     clicked(caret) {
       const id = pressedId;
       pressedId = null;
-      // The Note may have been deleted (from the keyboard) while it was held.
-      if (id !== null && notes.getState().notes[id]) ui.getState().startEditing(id, caret);
+      if (id !== null) ui.getState().startEditing(id, caret);
     },
 
     focused(id, { keyboard, inText }) {
@@ -128,7 +138,7 @@ export function createPress(
       if (keyboard) notes.getState().raise(id);
     },
 
-    clickedDelete(id, { mouse }) {
+    deleteButtonClicked(id, { mouse }) {
       // Only a mouse click can be the second half of a double-click.
       if (mouse && ignoring()) return;
       notes.getState().deleteNote(id);
@@ -137,6 +147,11 @@ export function createPress(
 
     doubleClickedBoard(point, board) {
       if (previousOnBoard && lastOnBoard) notes.getState().createNoteAt(point, board);
+    },
+
+    dispose() {
+      unsubscribe();
+      drag.dispose();
     },
   };
 }

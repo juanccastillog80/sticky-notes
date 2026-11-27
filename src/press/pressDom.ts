@@ -21,7 +21,7 @@ export function isInText({ target }: { readonly target: EventTarget | null }): b
  *
  * Markup it reads:
  * - `data-press-target`: `body` (the Note's article), `grip`, `handle` (with
- *   `data-handle`) or `delete`, on a Note's parts;
+ *   `data-handle`) or `delete`, on each Press target of a Note;
  * - `data-note-id` on the article, and `data-note-text` on its idle text;
  * - the Board itself (`boardRef`) is empty Board, and anything outside it is outside.
  *
@@ -30,7 +30,8 @@ export function isInText({ target }: { readonly target: EventTarget | null }): b
  * - `focusin`, `click` and `dblclick`, captured on the Board.
  *
  * It also owns the one Drag controller and its real `DragIO`: window listeners for the
- * session, pointer capture on the pressed Note, and the Preview drawn on that Note.
+ * session, pointer capture (on the Resize handle for a resize, so its cursor stays, and
+ * on the Note otherwise), and the Preview drawn on the pressed Note.
  */
 export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }: BoardDom) {
   const root = boardRef.current;
@@ -114,9 +115,12 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     const note = noteOf(e.target);
     pressedNote = note;
     // So neighbours get no hover or double-click during the Drag.
-    if (note) {
-      captured = note;
-      note.setPointerCapture(e.pointerId);
+    const handle =
+      e.target instanceof Element ? e.target.closest('[data-press-target="handle"]') : null;
+    const holder = handle ?? note;
+    if (holder) {
+      captured = holder;
+      holder.setPointerCapture(e.pointerId);
     }
   }
 
@@ -131,7 +135,7 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     if (!id || !(e.target instanceof Element)) return;
     if (!e.target.closest('[data-press-target="delete"]')) return;
     // `detail` 0: Enter or Space, which can't be half a double-click.
-    press.clickedDelete(id, { mouse: e.detail > 0 });
+    press.deleteButtonClicked(id, { mouse: e.detail > 0 });
   }
 
   function doubleClick(e: MouseEvent) {
@@ -151,7 +155,7 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     board.removeEventListener('click', click, capture);
     board.removeEventListener('dblclick', doubleClick, capture);
     // A running Drag is cancelled and its listeners removed.
-    drag.dispose();
+    press.dispose();
   };
 }
 
@@ -173,11 +177,11 @@ function pressTargetOf(target: EventTarget | null, board: HTMLElement): PressTar
   if (target === board) return { on: 'board' };
   if (!(target instanceof Element) || !board.contains(target)) return { on: 'outside' };
   const id = noteIdOf(target);
-  const part = target.closest<HTMLElement>('[data-press-target]');
-  if (!id || !part) return { on: 'outside' };
-  const on = part.dataset.pressTarget;
+  const marked = target.closest<HTMLElement>('[data-press-target]');
+  if (!id || !marked) return { on: 'outside' };
+  const on = marked.dataset.pressTarget;
   if (on === 'handle') {
-    const handle = part.dataset.handle;
+    const handle = marked.dataset.handle;
     return isResizeHandle(handle) ? { on, id, handle } : { on: 'body', id };
   }
   return on === 'grip' || on === 'delete' ? { on, id } : { on: 'body', id };

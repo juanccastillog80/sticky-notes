@@ -96,10 +96,10 @@ Solid arrows are calls. Dotted arrows are selector subscriptions, which decide w
 
 ### 1. One Press module decides what the pointer going down means
 
-Everything that happens when the pointer goes down is in `src/press/`, so a new part of a Note can't skip a rule (#51 was a part that forgot one).
+Everything that happens when the pointer goes down is in `src/press/`, so a new Press target can't skip a rule (#51 was the × forgetting to end Editing).
 
 - **A pure core** (`createPress` in `src/press/press.ts`) takes three inputs: the pointer going down on a Press target (a Note's body, Grip strip or Resize handle, its ×, empty Board) or outside the Board; focus arriving on a Note, with whether it came from the keyboard; a click on a ×, with whether it was a mouse click. It owns the Raise (on a Press, and on keyboard focus only), ending Editing on a press anywhere on the Board but the edited Note (the × included, though it is no Press), a press inside text that only Raises, the Click's caret offset (carried by Editing, read once by the editor), the double-click on empty Board that creates a Note, and the window after a mouse click on a × in which presses on Notes are ignored. It is unit-tested in Node with the real stores, the real Drag controller and a fake `DragIO`.
-- **The DOM side** (`src/press/pressDom.ts`), attached once by the Board in an effect, is the only module that listens on `document`: a capture-phase `pointerdown` there, and `focusin`, `click` and `dblclick` on the Board. It reads the Press target from `data-press-target`, `data-note-id` and `data-handle`, so `Note` renders markup and handles keys only. It also owns the one Drag controller and its real `DragIO`.
+- **The DOM side** (`src/press/pressDom.ts`), attached once by the Board in an effect, is the only module that listens on `document`: a capture-phase `pointerdown` there, and `focusin`, `click` and `dblclick` on the Board. It reads the Press target from `data-press-target`, `data-note-id` and `data-handle`, so `Note` renders markup and handles keys only. It also owns the one Drag controller and its real `DragIO`. A Note deleted while it is held (from the keyboard) ends its Drag at once.
 
 ### 2. One Drag engine, specialised by pure Drag kinds
 
