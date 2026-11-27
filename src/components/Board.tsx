@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
-import { DEFAULT_NOTE_SIZE, type NoteId } from '../notes/note';
+import { NOTE_SIZE_PRESETS, type NoteId } from '../notes/note';
 import { useBoardDom } from '../BoardDomContext';
 import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
@@ -54,7 +54,8 @@ export function Board({
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
     );
-    notes.getState().createNote(placeCentredAt(pointer, DEFAULT_NOTE_SIZE));
+    const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
+    notes.getState().createNote(placeCentredAt(pointer, size));
   }
 
   return (

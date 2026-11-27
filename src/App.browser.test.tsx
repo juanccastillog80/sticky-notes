@@ -33,17 +33,32 @@ function expectWithinAPixel(actual: number, expected: number) {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
 }
 
-it('double-clicking empty Board creates a default-size Note centred on the pointer', async () => {
+it('with no size picked, double-clicking empty Board creates a medium Note centred on the pointer', async () => {
   const { board, notes } = await setup();
 
   await userEvent.dblClick(board, { position: { x: 400, y: 300 } });
 
   await expect.element(notes).toBeVisible();
   const note = rectOnBoard(notes.element(), board);
-  // 220×170 is the default (Medium) size.
+  // 220×170 is Medium.
   expect(note).toMatchObject({ width: 220, height: 170 });
   expectWithinAPixel(note.x + 110, 400);
   expectWithinAPixel(note.y + 85, 300);
+});
+
+it('after clicking L, double-clicking empty Board creates a large Note centred on the pointer', async () => {
+  const { screen, stores, board, notes } = await setup();
+  await userEvent.click(screen.getByRole('button', { name: 'New large note' }));
+  // Clear the Note the button made, so only the double-click's Note remains.
+  stores.notes.getState().load([]);
+
+  await userEvent.dblClick(board, { position: { x: 400, y: 300 } });
+
+  await expect.element(notes).toBeVisible();
+  const note = rectOnBoard(notes.element(), board);
+  expect(note).toMatchObject({ width: 300, height: 230 });
+  expectWithinAPixel(note.x + 150, 400);
+  expectWithinAPixel(note.y + 115, 300);
 });
 
 it('double-clicking a scrolled Board still centres the Note on the pointer', async () => {
@@ -123,7 +138,7 @@ it('a Note created near the edge is pushed fully inside the Board', async () => 
 
 it('shows the empty hint only while there are no Notes', async () => {
   const { screen, stores, board } = await setup();
-  const hint = screen.getByText('Double-click anywhere to add a note');
+  const hint = screen.getByText('Double-click anywhere to add a note of the current size');
   await expect.element(hint).toBeVisible();
 
   await userEvent.dblClick(board, { position: { x: 100, y: 100 } });
@@ -135,7 +150,7 @@ it('shows the empty hint only while there are no Notes', async () => {
 
 it('a double-click on the empty hint reaches the Board under it', async () => {
   const { screen, board, notes } = await setup();
-  const hint = screen.getByText('Double-click anywhere to add a note');
+  const hint = screen.getByText('Double-click anywhere to add a note of the current size');
   await expect.element(hint).toBeVisible();
   const { x, y, width, height } = rectOnBoard(hint.element(), board);
 
@@ -167,6 +182,25 @@ it.each([
     expectWithinAPixel(note.y + height / 2, 200 + 352);
   },
 );
+
+it('the Current size button is pressed, and looks it without hovering', async () => {
+  const { screen } = await setup();
+  const button = (size: string) => screen.getByRole('button', { name: `New ${size} note` });
+  const pressed = () =>
+    ['small', 'medium', 'large'].map((size) => button(size).element().getAttribute('aria-pressed'));
+  expect(pressed()).toEqual(['false', 'true', 'false']);
+
+  await userEvent.click(button('small'));
+  // Move the pointer off the buttons, so no hover style is in play.
+  await userEvent.hover(screen.getByRole('region', { name: 'Board' }), {
+    position: { x: 400, y: 400 },
+  });
+
+  expect(pressed()).toEqual(['true', 'false', 'false']);
+  const style = (size: string) => getComputedStyle(button(size).element());
+  expect(style('small').boxShadow).not.toBe(style('large').boxShadow);
+  expect(style('small').borderColor).not.toBe(style('large').borderColor);
+});
 
 it('pressing a size button again cascades the new Note by (24, 24)', async () => {
   const { screen, board, notes } = await setup();

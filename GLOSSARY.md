@@ -68,6 +68,10 @@ _Avoid_: Header, handle, title bar
 The colour the next new note gets. Picking a colour in the toolbar sets it, whether or not that pick also recolours the note being edited.
 _Avoid_: Default colour, selected colour, active colour
 
+**Current size**:
+The size (small, medium or large) a double-click on empty Board gives the next note. Clicking S, M or L in the toolbar sets it, as well as adding a note of that size; it starts at medium.
+_Avoid_: Default size, selected size, active size
+
 **Raise**:
 Bring a note to the front of the stacking order.
 _Avoid_: Bring to front, focus, activate

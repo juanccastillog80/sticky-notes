@@ -39,4 +39,4 @@ export const NOTE_SIZE_PRESETS = {
   large: { width: 300, height: 230 },
 } as const satisfies Record<string, Size>;
 
-export const DEFAULT_NOTE_SIZE = NOTE_SIZE_PRESETS.medium;
+export type NoteSize = keyof typeof NOTE_SIZE_PRESETS;

@@ -8,7 +8,7 @@ A single-page desktop app for placing, arranging and resizing sticky notes on a 
 
 | Feature                                              | Status                                                                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons     |
+| 1. Create a note of a given size at a given position | Done: S/M/L add a Note and set the Current size; double-click empty Board adds one at the pointer       |
 | 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges               |
 | 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                   |
 | 4. Remove a note on a trash zone                     | Done: drop a Note so it overlaps the bottom-right Trash zone; Undo restores it                          |

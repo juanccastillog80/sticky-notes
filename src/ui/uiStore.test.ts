@@ -130,6 +130,20 @@ describe('Current colour', () => {
   });
 });
 
+describe('Current size', () => {
+  it('starts medium; setCurrentSize sets it, and leaves the same state when it does not change', () => {
+    const ui = createUiStore();
+    expect(ui.getState().currentSize).toBe('medium');
+
+    ui.getState().setCurrentSize('large');
+    const large = ui.getState();
+    ui.getState().setCurrentSize('large');
+
+    expect(large.currentSize).toBe('large');
+    expect(ui.getState()).toBe(large);
+  });
+});
+
 describe('the UI store', () => {
   it('tells subscribers about a change, but not about a no-op', () => {
     const ui = createUiStore();
