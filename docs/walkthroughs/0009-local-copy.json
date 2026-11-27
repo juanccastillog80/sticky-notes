@@ -228,6 +228,7 @@
     "package-lock.json": "Follows `package.json`.",
     "eslint.config.js": "No longer ignores the deleted service worker.",
     ".prettierignore": "No longer ignores the deleted service worker.",
-    "test/renderApp.tsx": "Comment no longer mentions MSW."
+    "test/renderApp.tsx": "Comment no longer mentions MSW.",
+    "docs/adr/0002-local-first-persistence-msw.md": "Renamed to `0002-local-copy.md`."
   }
 }
