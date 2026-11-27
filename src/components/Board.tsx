@@ -16,7 +16,6 @@ import { Note } from './Note';
 import { TrashZone } from './TrashZone';
 import { UndoToast } from './UndoToast';
 import styles from './Board.module.css';
-import { useStopEditing } from './useStopEditing';
 
 export function Board({
   scrollerRef,
@@ -26,8 +25,7 @@ export function Board({
   onNoteRender?: ProfilerOnRenderCallback;
 }) {
   const ids = useNotes((state) => state.ids);
-  const { notes } = useStores();
-  const stopEditing = useStopEditing();
+  const { notes, ui } = useStores();
 
   const { boardRef } = useBoardDom();
   // A `dblclick` reports only where the second press landed, so the first is remembered:
@@ -71,8 +69,8 @@ export function Board({
           style={BOARD_SIZE}
           onDoubleClick={createAtPointer}
           onPointerDown={(event) => {
-            // A press on empty Board ends Editing.
-            if (event.target === event.currentTarget) stopEditing();
+            // A press on empty Board: Editing decides whether that ends it.
+            if (event.target === event.currentTarget) ui.getState().pressed(null);
           }}
         >
           {ids.map((id) =>

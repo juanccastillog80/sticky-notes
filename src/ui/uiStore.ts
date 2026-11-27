@@ -1,8 +1,8 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { Note, NoteColour, NoteId } from '../notes/note';
+import * as editing from './editing';
 
-export interface UiState {
-  readonly editingId: NoteId | null;
+export interface UiState extends editing.EditingState {
   /** The colour the next new Note gets. */
   readonly currentColour: NoteColour;
   /** The Note that Undo would bring back. */
@@ -10,9 +10,15 @@ export interface UiState {
 }
 
 export interface UiActions {
+  // Editing: callers report what happened, and `./editing` decides whether it ends.
   /** At most one Note is in Editing: starting it on one Note ends it on any other. */
   readonly startEditing: (id: NoteId) => void;
-  readonly stopEditing: () => void;
+  /** A press on a Note or keyboard focus on it, or (`null`) a press on empty Board. */
+  readonly pressed: (target: NoteId | null) => void;
+  /** Escape in the edited Note's text, unless it cancelled a Drag. */
+  readonly escaped: () => void;
+  /** A Note was deleted: ends Editing only if it was that Note. */
+  readonly deleted: (id: NoteId) => void;
   readonly showUndo: (note: Note) => void;
   readonly hideUndo: () => void;
   readonly setCurrentColour: (colour: NoteColour) => void;
@@ -20,7 +26,7 @@ export interface UiActions {
 
 export type UiStore = StoreApi<UiState & UiActions>;
 
-const INITIAL_UI: UiState = { editingId: null, currentColour: 'yellow', lastDeleted: null };
+const INITIAL_UI: UiState = { ...editing.NOT_EDITING, currentColour: 'yellow', lastDeleted: null };
 
 /**
  * An action that changes nothing leaves the state reference the same, and notifies
@@ -34,11 +40,18 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
     return {
       ...INITIAL_UI,
       ...initial,
+      // An Editing transition returns its input when nothing changes.
       startEditing: (id) => {
-        setField('editingId', id);
+        set((state) => editing.startEditing(state, id));
       },
-      stopEditing: () => {
-        setField('editingId', null);
+      pressed: (target) => {
+        set((state) => editing.pressed(state, target));
+      },
+      escaped: () => {
+        set(editing.escaped);
+      },
+      deleted: (id) => {
+        set((state) => editing.deleted(state, id));
       },
       showUndo: (note) => {
         setField('lastDeleted', note);

@@ -203,7 +203,7 @@ export function createNotesStore(ui: UiStore): NotesStore {
       deleteNote: (id) => {
         const note = get().notes[id];
         if (!note) return;
-        if (ui.getState().editingId === id) ui.getState().stopEditing();
+        ui.getState().deleted(id);
         ui.getState().showUndo(note);
         set((state) => withoutNote(state, id));
       },

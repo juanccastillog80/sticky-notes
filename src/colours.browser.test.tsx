@@ -36,7 +36,7 @@ it('each colour has its own background, strip and Editing-strip shade', async ()
   const seen = new Set<string>();
 
   for (const colour of NOTE_COLOURS) {
-    stores.ui.getState().stopEditing();
+    stores.ui.getState().pressed(null);
     stores.notes.getState().setColour(a.id, colour);
     await expect.element(noteA).toHaveAttribute('data-colour', colour);
     const idle = [background(noteA.element()), background(strip(noteA))];

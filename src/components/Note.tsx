@@ -16,7 +16,6 @@ import { useIsEditing, useNotes, useStores } from '../StoresContext';
 import { caretOffsetAt } from './caret';
 import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';
 import styles from './Note.module.css';
-import { useStopEditing } from './useStopEditing';
 import { ResizeHandles } from './ResizeHandles';
 
 /**
@@ -32,15 +31,14 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
-  const stopEditing = useStopEditing();
   const { scrollerRef, boardRef, trashRef } = useBoardDom();
   const ref = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   // Where the Click that starts Editing puts the caret; `null` is the end of the text.
   const pendingCaret = useRef<number | null>(null);
-  // Escape ended Editing: the article takes focus once the textarea is gone.
-  const refocusWhenIdle = useRef(false);
+  // Tells the render where Editing ended apart from mounts that start out idle.
+  const wasEditing = useRef(editing);
   const start = useDrag(ref, { scrollerRef, boardRef, trashRef, onClick: startEditingAt });
 
   // Before paint, so the caret is in place on the first frame of Editing.
@@ -53,12 +51,13 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     editor.setSelectionRange(offset, offset);
   }, [editing]);
 
+  // Escape ended Editing: the article takes focus, so Tab carries on from this Note.
   // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.
   useLayoutEffect(() => {
-    if (editing || !refocusWhenIdle.current) return;
-    refocusWhenIdle.current = false;
-    ref.current?.focus();
-  }, [editing]);
+    const ended = wasEditing.current && !editing;
+    wasEditing.current = editing;
+    if (ended && ui.getState().editingEndedBy === 'escape') ref.current?.focus();
+  }, [editing, ui]);
 
   if (!note) return null;
 
@@ -76,23 +75,19 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 
   function press(e: PointerEvent<HTMLElement>) {
     if (!note) return;
-    // A press on another Note, handles included, ends Editing wherever it is.
-    if (!editing) stopEditing();
+    ui.getState().pressed(id);
     start(e, moveKind, note);
   }
 
   function pressHandle(e: PointerEvent<HTMLElement>, handle: ResizeHandle) {
     if (!note) return;
-    if (!editing) stopEditing();
+    ui.getState().pressed(id);
     start(e, resizeKinds[handle], note);
   }
 
   function keyDownInEditor(e: KeyboardEvent<HTMLTextAreaElement>) {
     // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.
-    if (e.key !== 'Escape' || e.defaultPrevented) return;
-    // So Tab carries on from this Note.
-    refocusWhenIdle.current = true;
-    stopEditing();
+    if (e.key === 'Escape' && !e.defaultPrevented) ui.getState().escaped();
   }
 
   /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */
@@ -126,9 +121,9 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   function focusNote(e: FocusEvent<HTMLElement>) {
     // The textarea is focused only by Editing, which a Press or Enter already Raised.
     if (isInText(e)) return;
-    // Focus arriving from another Note's Editing ends it, as a press on this Note would,
-    // so the focus ring and the Editing outline are never on two Notes at once.
-    if (!editing) stopEditing();
+    // As a press on this Note: so the focus ring and the Editing outline are never on
+    // two Notes at once.
+    ui.getState().pressed(id);
     // Raised, so the focus ring is never under another Note. Only keyboard focus: a
     // right-button press focuses the article too, and must not Raise.
     if (e.target.matches(':focus-visible')) notes.getState().raise(id);
