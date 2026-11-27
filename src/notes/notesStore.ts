@@ -1,8 +1,22 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import { toStoredRect, type Point, type Rect } from '../geometry';
+import {
+  placeCentredAt,
+  placeInVisibleBoard,
+  toStoredRect,
+  type Point,
+  type Rect,
+  type Size,
+} from '../geometry';
 import { endedDraft } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
-import { newNoteId, type Note, type NoteColour, type NoteId } from './note';
+import {
+  NOTE_SIZE_PRESETS,
+  newNoteId,
+  type Note,
+  type NoteColour,
+  type NoteId,
+  type NoteSize,
+} from './note';
 
 export interface NotesState {
   readonly notes: Readonly<Record<NoteId, Note>>;
@@ -134,8 +148,15 @@ export const transitions = {
 export interface NotesActions {
   /** Replaces every Note, as a load from storage does. */
   readonly load: (notes: readonly Note[]) => void;
-  /** A new empty Note in the Current colour, which opens straight into Editing. */
-  readonly createNote: (rect: Rect) => void;
+  // A new Note is empty, in the Current colour, inside `board` (the Board's current
+  // size, ADR 0003), and opens straight into Editing.
+  /** A double-click on empty Board: a Note of the Current size, centred on `point`. */
+  readonly createNoteAt: (point: Point, board: Size) => void;
+  /**
+   * An S/M/L button: makes `size` the Current size, then places a Note of that size in
+   * `view` (the part of the Board scrolled into view), past the spots Notes already take.
+   */
+  readonly createNoteInView: (size: NoteSize, view: Rect, board: Size) => void;
   readonly move: (id: NoteId, x: number, y: number) => void;
   readonly resize: (id: NoteId, rect: Rect) => void;
   readonly raise: (id: NoteId) => void;
@@ -169,16 +190,26 @@ export function createNotesStore(ui: UiStore): NotesStore {
       ui.getState().setCurrentColour(colour);
     }
 
+    function createNote({ x, y, width, height }: Rect) {
+      const id = newNoteId();
+      const colour = ui.getState().currentColour;
+      set((state) => create(state, { id, x, y, width, height, text: '', colour }));
+      ui.getState().startEditing(id);
+    }
+
     return {
       ...EMPTY_NOTES,
       load: (notes) => {
         set((state) => load(state, notes));
       },
-      createNote: ({ x, y, width, height }) => {
-        const id = newNoteId();
-        const colour = ui.getState().currentColour;
-        set((state) => create(state, { id, x, y, width, height, text: '', colour }));
-        ui.getState().startEditing(id);
+      createNoteAt: (point, board) => {
+        const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
+        createNote(placeCentredAt(point, size, board));
+      },
+      createNoteInView: (size, view, board) => {
+        ui.getState().setCurrentSize(size);
+        const taken = Object.values(get().notes);
+        createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));
       },
       move: (id, x, y) => {
         set((state) => move(state, id, { x, y }));
