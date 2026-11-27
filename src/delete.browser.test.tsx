@@ -66,6 +66,25 @@ it('deleting the Note being edited ends Editing', async () => {
   expect(stores.notes.getState().notes[a.id]).toBeUndefined();
 });
 
+it('pressing another Note’s × ends Editing and saves the Draft text, with no Raise', async () => {
+  const { stores, actions, noteA, noteB } = await setup();
+  stores.ui.getState().startEditing(a.id);
+  const editor = noteA.getByRole('textbox');
+  await expect.element(editor).toHaveFocus();
+  await userEvent.keyboard('!');
+
+  await press(deleteButton(noteB));
+
+  expect(stores.notes.getState().ids).toEqual([a.id]);
+  expect(actions).toEqual([
+    ['setText', a.id, 'keep me!'],
+    ['deleteNote', b.id],
+  ]);
+  expect(stores.ui.getState().editingId).toBeNull();
+  expect(stores.notes.getState().notes[a.id]?.text).toBe('keep me!');
+  await expect.element(editor).not.toBeInTheDocument();
+});
+
 it('the toast hides after its time, and a newer delete restarts the timer', async () => {
   const { noteA, noteB, toast } = await setup();
   const deleteB = page.elementLocator(deleteButton(noteB).element());

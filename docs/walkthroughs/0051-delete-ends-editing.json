@@ -1,0 +1,184 @@
+{
+  "issue": 51,
+  "title": "Pressing another Note's × ends Editing",
+  "lede": "The × cancels its own `pointerdown`, so it is not a **Press**: it never Raises or drags. But that also meant the press never reached `ui.pressed`, so while Note A was in **Editing**, clicking the × on Note B deleted B and left A in Editing, with its **Draft text** unsaved. The glossary says pressing anywhere else ends Editing. Now the × reports the press itself. One line of runtime code; the rest is a test and wording.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What does a press on the × do?",
+      "summary": "The ×'s `onPointerDown` still stops the press reaching the article, and now calls `ui.getState().pressed(id)` itself.",
+      "owns": "Turning DOM events on a Note into what happened: a Press, a press on the ×, keyboard focus.",
+      "never": "Decides whether Editing ends: it only reports, and `src/ui/editing.ts` decides.",
+      "tested": "`src/delete.browser.test.tsx`: `pressing another Note’s × ends Editing and saves the Draft text, with no Raise`."
+    },
+    {
+      "path": "src/ui/editing.ts",
+      "question": "Which presses end Editing?",
+      "summary": "Unchanged logic: `pressed` ends Editing unless the target is the Note being edited. Its comment now lists the ×.",
+      "owns": "The rule for how Editing ends, and the single exit `end` that every way out goes through.",
+      "never": "Knows about the DOM or saves text itself.",
+      "tested": "`src/ui/uiStore.test.ts`, unchanged."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "How is the Draft text saved before B is deleted?",
+      "summary": "Unchanged. A subscriber on the UI store saves the Draft text synchronously whenever Editing ends; `deleteNote` then removes B.",
+      "owns": "Saving the Draft text, and deleting with an Undo snapshot.",
+      "never": "Reads the DOM.",
+      "tested": "`src/notes/notesActions.test.ts` (`every way Editing ends saves it`), unchanged."
+    },
+    {
+      "path": "src/delete.browser.test.tsx",
+      "question": "How is the bug proved fixed?",
+      "summary": "A real mouse press on B's × while A is being edited with typed text.",
+      "owns": "The scenario from the issue, end to end in a browser.",
+      "never": "Calls `pressed` directly: it goes through the real `pointerdown` and `click`.",
+      "tested": "Is the test. It failed before the fix with `editingId` still `\"a\"`."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/ui/editing.ts", "src/notes/notesStore.ts"],
+    ["src/components/Note.tsx", "src/notes/notesStore.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Note A is in Editing; click the × on Note B",
+      "steps": [
+        {
+          "title": "pointerdown on B's ×",
+          "explain": "`stopPropagation` keeps the article's `press` from running, so B is not Raised and no Drag starts. `preventDefault` keeps focus in A's textarea, so the textarea never blurs. Before this PR nothing else ran, and nothing told the UI store that the user had pressed somewhere else. Now the × reports `pressed(b)` itself.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "onPointerDown={(e) => {",
+              "to": "ui.getState().pressed(id);"
+            }
+          ]
+        },
+        {
+          "title": "The UI store ends Editing on A",
+          "explain": "The target is B, not the Note being edited, so Editing ends through the single exit `end`, with the reason `press`.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function pressed(state: EditingState, target: NoteId | null): EditingState {",
+              "to": "}"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "function end(state: EditingState, reason: EditingEnd): EditingState {",
+              "to": "}"
+            }
+          ]
+        },
+        {
+          "title": "A's Draft text is saved, still inside pointerdown",
+          "explain": "The subscriber sees Editing end and calls `setText(a, draft)` synchronously. This happens before the click, so the text is already saved when B is deleted.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "ui.subscribe((after, before) => {",
+              "to": "if (draft) store.getState().setText(draft.id, draft.text);"
+            }
+          ]
+        },
+        {
+          "title": "click on B's ×",
+          "explain": "`deleteNote(b)` calls `ui.deleted(b)`, which does nothing now: Editing has already ended. B is removed and the Undo toast shows.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "onClick={(e) => {",
+              "to": "if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "deleteNote: (id) => {",
+              "to": "set((state) => withoutNote(state, id));"
+            }
+          ]
+        },
+        {
+          "title": "The test checks it",
+          "explain": "It types `!` into A, presses B's × with the real mouse, and expects exactly two Notes actions, `setText` then `deleteNote` (no `raise`), Editing ended, A's text `keep me!`, and the textarea gone. Before the fix it failed on `editingId`, which was still `\"a\"`.",
+          "run": [
+            {
+              "file": "src/delete.browser.test.tsx",
+              "from": "it('pressing another Note’s × ends Editing and saves the Draft text, with no Raise', async () => {",
+              "to": "await expect.element(editor).not.toBeInTheDocument();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Note A is in Editing; click A's own ×",
+      "steps": [
+        {
+          "title": "pointerdown on A's ×: nothing changes",
+          "explain": "The same new line runs, but the target is the Note being edited, so `pressed` returns the state unchanged and nobody is notified. A stays in Editing until the click.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "// Still ends Editing on any other Note, as pressing anywhere else does.",
+              "to": "ui.getState().pressed(id);"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "return target === state.editingId ? state : end(state, 'press');"
+            }
+          ]
+        },
+        {
+          "title": "click: the delete ends Editing",
+          "explain": "As before this PR, `deleteNote(a)` calls `ui.deleted(a)` first, which ends Editing with the reason `delete`. The Draft text is saved before the Undo snapshot is read, so Undo brings back the typed text. The existing test `deleting the Note being edited ends Editing` covers this.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function deleted(state: EditingState, id: NoteId): EditingState {",
+              "to": "}"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "// Ending Editing saves its Draft text, so the Undo snapshot is read after it.",
+              "to": "const note = get().notes[id];"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "From the keyboard: Tab to B's ×, then Enter",
+      "steps": [
+        {
+          "title": "focus moves to B's ×",
+          "explain": "Unchanged, and the reason only the mouse path was broken. Focus leaving A's textarea and arriving on B's × bubbles to B's article as a React `focus` event. `focusNote` reports `pressed(b)`, which ends Editing on A. No `pointerdown` happens, so the new line doesn't run.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function focusNote(e: FocusEvent<HTMLElement>) {",
+              "to": "ui.getState().pressed(id);"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Why report the press, and not end Editing on every delete",
+      "detail": "Changing `deleted` to end Editing whatever Note is deleted would also fix this, but it changes the documented rule (\"ends only if it was that Note\") and would end Editing for deletes that no press caused. Reporting the press keeps the glossary's rule as the single reason. The counter-argument: `pressed(id)` is now called in four places in `Note.tsx`."
+    },
+    {
+      "title": "Right or middle button on the ×",
+      "detail": "`pointerdown` fires for every button, so a right-click on another Note's × now ends Editing without deleting anything (no `click` follows). That matches the article's own `press`, which also reports every button. Read in the code, not run."
+    },
+    {
+      "title": "Where focus goes",
+      "detail": "`preventDefault` keeps focus in A's textarea, which unmounts when Editing ends, so focus falls to `<body>`. A press on empty Board ends the same way today. Not changed here."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "The Delete button entry now says the × ends Editing on any other note, as pressing anywhere else does."
+  }
+}

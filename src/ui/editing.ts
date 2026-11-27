@@ -60,7 +60,7 @@ export function typed(state: EditingState, text: string): EditingState {
 }
 
 /**
- * A press on a Note (handles included) or keyboard focus arriving on it, or with
+ * A press on a Note (handles and × included) or keyboard focus arriving on it, or with
  * `null`, a press on empty Board. Anywhere but the edited Note ends Editing.
  */
 export function pressed(state: EditingState, target: NoteId | null): EditingState {
