@@ -212,6 +212,6 @@
     "src/components/useStopEditing.ts": "Deleted: the module decides, and unmounting the textarea moves focus.",
     "src/ui/uiStore.test.ts": "The Node tests, cited in the files table.",
     "src/colours.browser.test.tsx": "One setup line, see notes.",
-    "README.md": "Architecture: the ui store paragraph describes the Editing module."
+    "README.md": "Architecture: the ui store paragraph describes the Editing module, and the diagram gains the Board, which reports a Press on empty Board."
   }
 }

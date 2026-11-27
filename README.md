@@ -61,6 +61,7 @@ The UI layer is thin. The decisions are made in a pure core that never touches t
 ```mermaid
 flowchart LR
   subgraph UI["React components (thin)"]
+    Board["Board"]
     Note["Note<br/>(useDrag)"]
     Bar["Toolbar · swatches · Undo toast"]
   end
@@ -76,8 +77,11 @@ flowchart LR
   Ctrl --> Kinds --> Geo
   Ctrl -- "Raise on Press,<br/>one action on release" --> NS
   Note -- "Editing · text · ×" --> NS & US
+  Board -- "new Note on double-click" --> NS
+  Board -- "Press on empty Board" --> US
   Bar --> NS & US
   NS -- "Undo · Editing · Current colour" --> US
+  NS -. "ids" .-> Board
   NS -. "notes[id]" .-> Note
   US -. "editingId === id" .-> Note
 ```
