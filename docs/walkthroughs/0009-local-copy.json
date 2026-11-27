@@ -215,7 +215,7 @@
   "omitted": {
     "src/persistence/localCopy.test.ts": "The tests, described in the steps.",
     "src/persistence/parseNotes.test.ts": "The tests, described in the steps.",
-    "README.md": "Bonus IV marked done; how to start over with an empty Board; REST listed as not built; MSW lines removed; Known limits updated.",
+    "README.md": "Bonus IV marked done; how to start over with an empty Board; the × listed as an extra, apart from the Trash zone; REST listed as not built; MSW lines removed; Known limits updated.",
     "GLOSSARY.md": "Local copy redefined; Unsaved change removed.",
     "docs/adr/0002-local-copy.md": "Renamed from `0002-local-first-persistence-msw.md` and rewritten to record only the Local copy; REST saving is one rejected option.",
     "src/mocks/browser.ts": "Deleted: the MSW worker setup.",
