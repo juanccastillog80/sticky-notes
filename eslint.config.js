@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint';
 
 export default defineConfig([
   // `.wayfinder/` holds local, git-ignored planning artifacts.
-  globalIgnores(['dist', 'coverage', '.wayfinder', 'public/mockServiceWorker.js']),
+  globalIgnores(['dist', 'coverage', '.wayfinder']),
   {
     linterOptions: { reportUnusedDisableDirectives: 'error' },
   },

@@ -6,17 +6,21 @@ A single-page desktop app for placing, arranging and resizing sticky notes on a 
 
 ## What it does
 
-| Feature                                              | Status                                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons    |
-| 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges              |
-| 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                  |
-| 4. Remove a note on a trash zone                     | Done: drop a Note so it overlaps the bottom-right Trash zone, or click its ×; both offer Undo          |
-| Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                    |
-| Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                        |
-| Bonus III: note colours                              | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note |
+| Feature                                              | Status                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 1. Create a note of a given size at a given position | Done: double-click empty Board (default size, centred on the pointer), or the S/M/L toolbar buttons     |
+| 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges               |
+| 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                   |
+| 4. Remove a note on a trash zone                     | Done: drop a Note so it overlaps the bottom-right Trash zone; Undo restores it                          |
+| Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                     |
+| Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                         |
+| Bonus III: note colours                              | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note  |
+| Bonus IV: save to localStorage                       | Done: the Board survives a reload; changes are saved 300 ms after the last one, and when the tab closes |
+| Extra (not in the brief): × on each Note             | Deletes the Note in one click, with Undo. Quicker than dragging it across the Board                     |
 
 **Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Moving and resizing from the keyboard aren't built. In Safari, Tab skips buttons unless "Press Tab to highlight each item on a webpage" is on (Settings → Advanced), or use Option+Tab.
+
+**Starting over.** The Board is kept in this browser's localStorage. To clear it, clear the site's data (DevTools → Application → Storage → Clear site data) and reload, or use a private window, which starts empty and forgets the Board when it closes.
 
 The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead zone, Raise…) are defined in [`GLOSSARY.md`](GLOSSARY.md).
 
@@ -24,7 +28,7 @@ The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead
 
 The brief asks for 3 of the 4 features; all 4 are built. The bonuses are being added one at a time, to the same standard, since they make the UI better.
 
-- **localStorage and REST saving (bonuses IV, V)** are not built yet. The persistence design is recorded in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md). The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup. It doesn't save anything yet, so notes are lost on reload. The planned `?fail=&latency=` URL parameters for demoing failed and slow saves belong to that work and don't exist yet.
+- **REST saving (bonus V)** is not built. Notes are kept only in this browser's Local copy.
 
 ## Setup
 
@@ -104,11 +108,11 @@ Moving and resizing share everything except what they show and what they save.
 - Enter starts Editing, and Escape returns focus to the Note. Delete deletes the Note and moves focus to the next one, so the user keeps their place.
 - The × is not a Press: it never Raises or drags. After it deletes a Note, `ignorePressesFor` swallows the second half of a double-click, so it can't land on the Note that was underneath.
 
-### 4. A fixed Board; persistence planned as local-first
+### 4. A fixed Board; the Local copy
 
 - The Board is a fixed 1920×1080 surface that scrolls under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can never become invalid when the window shrinks. A Drag adds the scroll delta, so the Note stays under the pointer while the wheel scrolls.
-- `main.tsx` is the composition root. It builds the stores, renders, and only then starts the MSW worker. The worker is loaded as a separate chunk, so the first paint never waits on the network.
-- The planned persistence ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in state rather than living inside the UI. The Local copy shows first, and a real HTTP client talks to a mocked backend (`src/mocks/`) that can be deleted without touching the client.
+- `main.tsx` is the composition root. It builds the stores, loads the Local copy into them, starts saving, and only then renders, so a reload never flashes an empty Board.
+- The Local copy ([ADR 0002](docs/adr/0002-local-copy.md)) follows changes in the Notes store rather than living inside the UI: `saveLocalCopy` subscribes to it and writes the whole Board 300 ms after the last change, flushing on `pagehide`. `parseNotes` guards what is read back, so a damaged copy is discarded with a warning instead of crashing the app.
 
 ### Testing
 
@@ -118,8 +122,7 @@ Each merged PR has an interactive code walkthrough, listed at https://juanccasti
 
 ## Known limits
 
-- Notes are kept in memory only: a reload starts from an empty Board (see "Not included").
-- Once persistence exists, syncing several tabs won't be handled: across tabs, the last save wins.
+- Notes are saved only in this browser. Syncing several tabs isn't handled: across tabs, the last save wins. If the browser blocks site data, Notes are kept in memory only, with a warning in the console.
 - Browser tests run in Chromium and Firefox on every PR, and also in Chrome and Edge on real Windows and macOS runners. None are skipped or retried. Any Firefox flakiness found will be recorded here rather than silenced.
 - Desktop pointer input only. Touch and pen aren't targeted, per the brief.
 
