@@ -13,12 +13,16 @@ export interface UiActions {
   // Editing: callers report what happened, and `./editing` decides whether it ends.
   /** At most one Note is in Editing: starting it on one Note ends it on any other. */
   readonly startEditing: (id: NoteId) => void;
+  /** The edited Note's text, as typed: kept as Draft text until Editing ends. */
+  readonly typed: (text: string) => void;
   /** A press on a Note or keyboard focus on it, or (`null`) a press on empty Board. */
   readonly pressed: (target: NoteId | null) => void;
   /** Escape in the edited Note's text, unless it cancelled a Drag. */
   readonly escaped: () => void;
   /** A Note was deleted: ends Editing only if it was that Note. */
   readonly deleted: (id: NoteId) => void;
+  /** The page is being hidden or closed (`pagehide`). */
+  readonly pageHidden: () => void;
   readonly showUndo: (note: Note) => void;
   readonly hideUndo: () => void;
   readonly setCurrentColour: (colour: NoteColour) => void;
@@ -44,6 +48,9 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
       startEditing: (id) => {
         set((state) => editing.startEditing(state, id));
       },
+      typed: (text) => {
+        set((state) => editing.typed(state, text));
+      },
       pressed: (target) => {
         set((state) => editing.pressed(state, target));
       },
@@ -52,6 +59,9 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
       },
       deleted: (id) => {
         set((state) => editing.deleted(state, id));
+      },
+      pageHidden: () => {
+        set(editing.pageHidden);
       },
       showUndo: (note) => {
         setField('lastDeleted', note);

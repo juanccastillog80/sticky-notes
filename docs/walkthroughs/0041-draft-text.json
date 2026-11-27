@@ -1,0 +1,223 @@
+{
+  "issue": 41,
+  "title": "Note text: keep Draft text while Editing, save it when Editing ends",
+  "lede": "Typing in a Note used to call `setText` on the Notes store on every key, so every keystroke re-ran the Local copy's save timer. Now typing changes only the **Draft text**, held in the Editing module (`src/ui/editing.ts`) next to `editingId`. Editing's single exit, `end`, clears it, and the Notes store, which follows the UI store, **saves it to the Note once**, however Editing ended: a press anywhere else, Escape, focus arriving on another Note, a new Note, a delete, or the page being hidden.",
+  "files": [
+    {
+      "path": "src/ui/editing.ts",
+      "question": "Where does the Draft text live, and what hands it over?",
+      "summary": "`draftText` sits in the Editing state; `typed` sets it, `end` clears it, and `endedDraft(before, after)` says which text a transition ended Editing with.",
+      "owns": "The Draft text, and the rule that every way Editing ends hands it over (including the new `pageHidden`).",
+      "never": "Touches the Notes store: it only reports what Editing ended with.",
+      "tested": "`src/notes/notesActions.test.ts`, describe `Draft text`: every ending saves it, nothing typed saves nothing, typing while not Editing is dropped."
+    },
+    {
+      "path": "src/ui/uiStore.ts",
+      "question": "How do callers report typing and the page being hidden?",
+      "summary": "Two new actions, `typed` and `pageHidden`, each one `set` of an Editing transition.",
+      "owns": "The public interface of Editing.",
+      "never": "Needs the Notes store: it still doesn't import it.",
+      "tested": "Through the Notes store tests above and the browser tests."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Who saves the Draft text, and when does Undo see it?",
+      "summary": "A `ui.subscribe` callback saves the ended Draft text with `setText`; `deleteNote` reads the Note for Undo only after reporting `deleted(id)`.",
+      "owns": "Writing the Draft text into the Note, synchronously, before the action that ended Editing carries on.",
+      "never": "Runs on a keystroke: typing doesn't change the UI store's `editingId`, so `endedDraft` returns `null`.",
+      "tested": "`notesActions.test.ts`: one store update per Editing, and delete then Undo brings the typed text back."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Which component re-renders while typing?",
+      "summary": "While Editing, the textarea is `NoteEditor`, the only subscriber to `draftText`; it shows the Note's saved text until something is typed.",
+      "owns": "Reporting each change as `typed`, and caret and focus as before.",
+      "never": "Calls `setText` any more.",
+      "tested": "`editing.browser.test.tsx`, describe `Draft text`, in Chromium and Firefox."
+    },
+    {
+      "path": "src/main.tsx",
+      "question": "What happens to the Draft text when the tab closes?",
+      "summary": "On `pagehide`, Editing ends first, which saves the Draft text, and then the Local copy's scheduled write is flushed.",
+      "owns": "The order of those two calls.",
+      "never": "Runs in tests: `renderApp` leaves the Local copy out.",
+      "tested": "Only the store side (`pageHidden` saves the Draft text) is unit-tested; the listener itself isn't, see notes."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/ui/uiStore.ts", "src/ui/editing.ts"],
+    ["src/ui/uiStore.ts", "src/notes/notesStore.ts", "src/ui/editing.ts"],
+    ["src/main.tsx", "src/ui/uiStore.ts", "src/notes/notesStore.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Type, then Escape",
+      "steps": [
+        {
+          "title": "input in Note a's textarea",
+          "explain": "The textarea is `NoteEditor`, mounted only while a is in Editing. Each change is reported as `typed`; nothing calls the Notes store.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const draftText = useUi((state) => state.draftText);",
+              "to": "ui.getState().typed(e.target.value);"
+            }
+          ]
+        },
+        {
+          "title": "The Editing module keeps it as Draft text",
+          "explain": "Only while a Note is in Editing; the same text twice keeps the state reference, so nobody is notified.",
+          "run": [
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "typed: (text) => {",
+              "to": "set((state) => editing.typed(state, text));"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function typed(",
+              "to": ": { ...state, draftText: text };"
+            }
+          ]
+        },
+        {
+          "title": "Only NoteEditor re-renders",
+          "explain": "`draftText` is selected by `NoteEditor` alone, so other Notes, the Board and the toolbar don't re-render. The UI store's subscribers run, including the Notes store's, but `endedDraft` sees `editingId` unchanged and returns `null`: the browser test counts zero Notes store updates while typing.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function endedDraft(",
+              "to": "return { id: editingId, text: draftText };"
+            }
+          ]
+        },
+        {
+          "title": "keydown Escape: Editing ends through the single exit",
+          "explain": "`end` returns `NOT_EDITING` plus the reason, so the Draft text is cleared in the same transition that ends Editing.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function escaped(",
+              "to": "return end(state, 'escape');"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "function end(state",
+              "to": "return state.editingId === null ? state"
+            }
+          ]
+        },
+        {
+          "title": "The Notes store saves the ended Draft text, once",
+          "explain": "Zustand calls subscribers synchronously inside `set`, with the state before and after. `before` had a's id and its Draft text; `after` has none, so `setText` runs once. Exactly one Notes store update, which the Local copy saves 300 ms later.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "ui.subscribe((after, before) => {",
+              "to": "if (draft) store.getState().setText(draft.id, draft.text);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Delete the Note being edited, then Undo",
+      "steps": [
+        {
+          "title": "click on Note a's × with Draft text typed",
+          "explain": "`deleted(id)` ends Editing first. Its `set` runs the subscriber, which saves the Draft text into a. Only then is a read for the Undo snapshot, so the snapshot has the typed text. Reading it before `deleted`, as the code did before this PR, would make Undo bring back the old text.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "deleteNote: (id) => {",
+              "to": "set((state) => withoutNote(state, id));"
+            }
+          ]
+        },
+        {
+          "title": "Undo",
+          "explain": "`undoDelete` restores the snapshot unchanged. The browser test checks the restored Note equals a with the typed text, `z` included. A drop on the Trash zone calls the same `deleteNote`.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "undoDelete: () => {",
+              "to": "ui.getState().hideUndo();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The tab closes while Editing",
+      "steps": [
+        {
+          "title": "pagehide",
+          "explain": "`pageHidden` ends Editing, so the subscriber saves the Draft text and schedules a Local copy write; `flush` then writes it at once. In the other order, the flush would find nothing scheduled and the text would be lost. This order is not covered by a test.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "stores.ui.getState().pageHidden();",
+              "to": "saving.flush();"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function pageHidden(",
+              "to": "return end(state, 'pageHide');"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nothing should happen",
+      "steps": [
+        {
+          "title": "Click a Note and leave it without typing",
+          "explain": "`draftText` stays `null`, so `endedDraft` returns `null` and the Notes store isn't touched. Typing a change and then typing back to the original text does call `setText`, which returns the same state, so again nobody is notified and nothing is saved.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "if (editingId === null || draftText === null",
+              "to": "return { id: editingId, text: draftText };"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "function setText(state",
+              "to": "if (!note || note.text === text) return state;"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "A subscription, not an explicit hand-off",
+      "detail": "The issue said `deleted(id)` must make the saved text available to `deleteNote`. Instead the Notes store follows the UI store and saves on every Editing ending, so delete needs nothing special: it only reads the Note after `deleted`. Counter-argument: the README says rules spanning both stores are Notes actions, and this one is a subscription that reacts to any UI store `set`. The README now describes it; an ADR could make it official."
+    },
+    {
+      "title": "\"Blur\" means focus arriving on another Note",
+      "detail": "The issue lists blur among the endings. It's tested as Tab to the next Note. Switching windows or tabbing to the toolbar doesn't end Editing, as before this PR; the Draft text then stays until Editing ends, or the page is hidden."
+    },
+    {
+      "title": "The Note shows its saved text until something is typed",
+      "detail": "`draftText` is `null` until the first change, so starting Editing needs no copy of the text, and the UI store never reads the Notes store."
+    },
+    {
+      "title": "Existing tests changed",
+      "detail": "Two keyboard tests and \"keeps text exactly as typed\" checked the stored text while still in Editing. They now check the textarea's value, or end Editing first."
+    },
+    {
+      "title": "Glossary",
+      "detail": "Draft text is defined. Preview keeps \"draft\" on its avoid list, as the issue says: the two terms are different things."
+    }
+  ],
+  "omitted": {
+    "src/notes/notesActions.test.ts": "Node tests, cited in the files table.",
+    "src/editing.browser.test.tsx": "Browser tests, cited in the files table.",
+    "src/keyboard.browser.test.tsx": "Two assertions now read the textarea, see notes.",
+    "GLOSSARY.md": "Defines Draft text.",
+    "README.md": "Architecture: the ui store holds the Draft text, and the diagram shows the Notes store saving it when Editing ends.",
+    "docs/adr/0002-local-copy.md": "No longer says typing changes the Notes on every keystroke; `pagehide` ends Editing before the flush."
+  }
+}
