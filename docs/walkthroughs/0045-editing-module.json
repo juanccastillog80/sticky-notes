@@ -1,0 +1,217 @@
+{
+  "issue": 45,
+  "title": "Editing: one module owns when Editing ends",
+  "lede": "The Editing rule (\"Escape or pressing anywhere else ends it\") used to be enforced by each caller, in 7 places across 5 files. Now callers only **report what happened** (`startEditing`, `pressed`, `escaped`, `deleted`) and the pure transitions in `src/ui/editing.ts` **decide whether Editing ends**, through one private `end`, and record why. Behaviour doesn't change; this is the single exit #41 will save its Draft text at.",
+  "files": [
+    {
+      "path": "src/ui/editing.ts",
+      "question": "When does Editing end?",
+      "summary": "Pure transitions over `{ editingId, editingEndedBy }`; every ending goes through `end`, which records the reason.",
+      "owns": "At most one Note in Editing, which events end it, and why it last ended.",
+      "never": "Touches the DOM: focus, caret and blur stay in `Note`.",
+      "tested": "Node tests in `src/ui/uiStore.test.ts`, through the ui store's actions, including that a no-op leaves the state reference the same."
+    },
+    {
+      "path": "src/ui/uiStore.ts",
+      "question": "How do callers reach Editing?",
+      "summary": "Four actions, each one `set` of an Editing transition; the state carries `editingId` and `editingEndedBy`.",
+      "owns": "The public interface of Editing, next to the Current colour and Undo.",
+      "never": "Decides anything about Editing itself: that is `editing.ts`.",
+      "tested": "`uiStore.test.ts`."
+    },
+    {
+      "path": "src/components/Note.tsx",
+      "question": "What does a Note report, and how does it react?",
+      "summary": "Presses, keyboard focus and Escape are reported unconditionally; focus goes back to the article only when Editing ended by Escape.",
+      "owns": "The DOM side: caret placement, refocus after Escape, and ignoring an Escape that cancelled a Drag.",
+      "never": "Checks whether it is the edited Note before reporting: the module does.",
+      "tested": "The existing `editing`, `keyboard` and `drag` browser tests, unchanged."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "What does a press on empty Board do?",
+      "summary": "Reports `pressed(null)`.",
+      "owns": "Telling an empty-Board press from one on a Note.",
+      "never": "Ends Editing itself.",
+      "tested": "`editing.browser.test.tsx`: pressing empty Board ends Editing."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "What does a delete tell Editing?",
+      "summary": "`deleteNote` reports `deleted(id)`, then records Undo, then removes the Note.",
+      "owns": "The order of the cross-store update.",
+      "never": "Checks which Note is being edited: `deleted` does.",
+      "tested": "`notesActions.test.ts`: deleting another Note keeps Editing, deleting the edited one ends it."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/ui/uiStore.ts", "src/ui/editing.ts"],
+    ["src/components/Board.tsx", "src/ui/uiStore.ts", "src/ui/editing.ts"],
+    ["src/notes/notesStore.ts", "src/ui/uiStore.ts", "src/ui/editing.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Press another Note while Editing",
+      "steps": [
+        {
+          "title": "pointerdown on Note b while Note a is in Editing",
+          "explain": "`press` reports the press without asking whether this Note is the edited one. Before, it called `stopEditing` only `if (!editing)`: the rule lived here.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "function press(e",
+              "to": "start(e, moveKind, note);"
+            }
+          ]
+        },
+        {
+          "title": "The ui store runs the transition",
+          "explain": "One `set`: a transition that returns its input leaves the state reference the same, so Zustand notifies nobody.",
+          "run": [
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "pressed: (target) => {",
+              "to": "set((state) => editing.pressed(state, target));"
+            }
+          ]
+        },
+        {
+          "title": "The module decides: b isn't the edited Note, so Editing ends",
+          "explain": "`end` is the only place Editing ends. It records `'press'`; #41 will save the Draft text here.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function pressed(",
+              "to": "return target === state.editingId"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "function end(state",
+              "to": "return state.editingId === null"
+            }
+          ]
+        },
+        {
+          "title": "Note a re-renders without its textarea",
+          "explain": "`useIsEditing(a)` flips, the textarea unmounts and focus leaves it. That is why the explicit blur in `useStopEditing` could go: all browser tests pass in Chromium and Firefox without it. `editingEndedBy` is `'press'`, so a doesn't take focus.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const ended = wasEditing.current && !editing;",
+              "to": "if (ended && ui.getState().editingEndedBy === 'escape')"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Escape, and the Escape that cancels a Drag",
+      "steps": [
+        {
+          "title": "keydown Escape in the textarea",
+          "explain": "If the Drag engine prevented it (it cancelled a Drag), nothing is reported and Editing stays on. Otherwise `escaped()`.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "if (e.key === 'Escape' && !e.defaultPrevented)"
+            }
+          ]
+        },
+        {
+          "title": "Editing ends with reason 'escape'",
+          "explain": "Same single exit.",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function escaped(",
+              "to": "return end(state, 'escape');"
+            }
+          ]
+        },
+        {
+          "title": "The article takes focus after the textarea is gone",
+          "explain": "`wasEditing` tells a real ending from a Note that mounts idle (e.g. one brought back by Undo while an old `'escape'` is still recorded). So Tab carries on from this Note.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const ended = wasEditing.current && !editing;",
+              "to": "ref.current?.focus();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nothing should happen",
+      "steps": [
+        {
+          "title": "pointerdown on empty Board while not Editing",
+          "explain": "The Board reports `pressed(null)` without checking anything; with no Note in Editing, `end` returns the state unchanged, so nobody is notified.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "if (event.target === event.currentTarget) ui.getState().pressed(null);"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "return state.editingId === null ? state"
+            }
+          ]
+        },
+        {
+          "title": "A press on the edited Note's own Grip strip",
+          "explain": "`pressed(a)` while a is edited returns the same state: no notify, no re-render, Editing stays on. Covered by the test \"a press on the edited Note keeps Editing\".",
+          "run": [
+            {
+              "file": "src/ui/editing.ts",
+              "from": "return target === state.editingId ? state"
+            }
+          ]
+        },
+        {
+          "title": "Deleting a Note that isn't being edited",
+          "explain": "`deleteNote` always reports; `deleted` ends Editing only for that Note.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "ui.getState().deleted(id);"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "export function deleted(",
+              "to": "return state.editingId === id"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "`deleted(id)` instead of a generic `end(reason)`",
+      "detail": "The issue sketched `end(reason)` for delete and `pagehide`. Deleting a Note that isn't edited must not end Editing, so the module needs the id: `deleted(id)` keeps that decision inside. #41 adds its own event for `pagehide`."
+    },
+    {
+      "title": "`startEditing` keeps its name",
+      "detail": "On the ui store a bare `start` would be ambiguous next to Undo and the Current colour, and keeping it leaves most tests untouched. It now goes through `end` when another Note is being edited."
+    },
+    {
+      "title": "`pressed` also covers keyboard focus",
+      "detail": "Focus arriving on another Note already ended Editing; it is reported as `pressed(id)`, though the glossary's Press is a pointer going down. Counter-argument: a separate name (`focused`) would say it more exactly but behave identically."
+    },
+    {
+      "title": "One browser test line changed",
+      "detail": "`colours.browser.test.tsx` ended Editing with `stopEditing()`, which no longer exists; it now reports `pressed(null)`, a press on empty Board."
+    },
+    {
+      "title": "Only `'escape'` is read today",
+      "detail": "`'press'` and `'delete'` are recorded for the tests and for #41."
+    }
+  ],
+  "omitted": {
+    "src/components/useStopEditing.ts": "Deleted: the module decides, and unmounting the textarea moves focus.",
+    "src/ui/uiStore.test.ts": "The Node tests, cited in the files table.",
+    "src/colours.browser.test.tsx": "One setup line, see notes.",
+    "README.md": "Architecture: the ui store paragraph describes the Editing module, and the diagram gains the Board, which reports a Press on empty Board."
+  }
+}

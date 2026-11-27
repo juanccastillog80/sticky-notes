@@ -15,19 +15,69 @@ describe('Editing', () => {
     expect(ui.getState().editingId).toBe(b);
   });
 
-  it('stopEditing ends it', () => {
+  it('a press on the edited Note keeps Editing', () => {
+    const ui = createUiStore();
+    ui.getState().startEditing(a);
+    const editingA = ui.getState();
+
+    ui.getState().pressed(a);
+
+    expect(ui.getState()).toBe(editingA);
+  });
+
+  it('a press on another Note, or on empty Board, ends Editing', () => {
+    const ui = createUiStore();
+
+    ui.getState().startEditing(a);
+    ui.getState().pressed(b);
+    expect(ui.getState().editingId).toBeNull();
+    expect(ui.getState().editingEndedBy).toBe('press');
+
+    ui.getState().startEditing(a);
+    ui.getState().pressed(null);
+    expect(ui.getState().editingId).toBeNull();
+    expect(ui.getState().editingEndedBy).toBe('press');
+  });
+
+  it('Escape ends Editing, and says so', () => {
     const ui = createUiStore();
     ui.getState().startEditing(a);
 
-    ui.getState().stopEditing();
+    ui.getState().escaped();
 
     expect(ui.getState().editingId).toBeNull();
+    expect(ui.getState().editingEndedBy).toBe('escape');
+  });
+
+  it('deleting the edited Note ends Editing; deleting another Note does not', () => {
+    const ui = createUiStore();
+    ui.getState().startEditing(a);
+
+    ui.getState().deleted(b);
+    expect(ui.getState().editingId).toBe(a);
+
+    ui.getState().deleted(a);
+    expect(ui.getState().editingId).toBeNull();
+    expect(ui.getState().editingEndedBy).toBe('delete');
+  });
+
+  it('starting Editing again forgets how it last ended', () => {
+    const ui = createUiStore();
+    ui.getState().startEditing(a);
+    ui.getState().escaped();
+
+    ui.getState().startEditing(b);
+
+    expect(ui.getState().editingEndedBy).toBeNull();
   });
 
   it('leaves the same state when nothing changes', () => {
     const ui = createUiStore();
     const idle = ui.getState();
-    ui.getState().stopEditing();
+    ui.getState().pressed(a);
+    ui.getState().pressed(null);
+    ui.getState().escaped();
+    ui.getState().deleted(a);
     expect(ui.getState()).toBe(idle);
 
     ui.getState().startEditing(a);
