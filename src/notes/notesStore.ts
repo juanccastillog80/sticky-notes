@@ -148,13 +148,17 @@ export const transitions = {
 export interface NotesActions {
   /** Replaces every Note, as a load from storage does. */
   readonly load: (notes: readonly Note[]) => void;
-  // A new Note is empty, in the Current colour, inside `board` (the Board's current
-  // size, ADR 0003), and opens straight into Editing.
-  /** A double-click on empty Board: a Note of the Current size, centred on `point`. */
+  /**
+   * A double-click on empty Board: a new empty Note in the Current colour and size,
+   * centred on `point` and kept inside `board` (the Board's current size, ADR 0003).
+   * It opens straight into Editing.
+   */
   readonly createNoteAt: (point: Point, board: Size) => void;
   /**
-   * An S/M/L button: makes `size` the Current size, then places a Note of that size in
-   * `view` (the part of the Board scrolled into view), past the spots Notes already take.
+   * An S/M/L button: makes `size` the Current size, then creates a new empty Note of
+   * that size in the Current colour, in `view` (the part of the Board scrolled into
+   * view) past the spots Notes already take, kept inside `board`. It opens straight
+   * into Editing.
    */
   readonly createNoteInView: (size: NoteSize, view: Rect, board: Size) => void;
   readonly move: (id: NoteId, x: number, y: number) => void;
@@ -177,7 +181,7 @@ export type NotesStore = StoreApi<NotesState & NotesActions>;
 
 /**
  * The Notes, and the actions that change them. The UI store is passed in for the
- * rules that span both stores (Undo, Editing, the Current colour); it never needs
+ * rules that span both stores (Undo, Editing, the Current colour and size); it never needs
  * the Notes store back.
  */
 export function createNotesStore(ui: UiStore): NotesStore {

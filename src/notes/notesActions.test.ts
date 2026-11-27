@@ -4,6 +4,8 @@ import { createUiStore } from '../ui/uiStore';
 import type { Note } from './note';
 import { createNotesStore } from './notesStore';
 
+type Setup = ReturnType<typeof setup>;
+
 /** The two stores, wired as the app wires them, with `loaded` on the Board. */
 function setup(loaded: Note[] = [], ui = createUiStore()) {
   const notes = createNotesStore(ui);
@@ -11,7 +13,7 @@ function setup(loaded: Note[] = [], ui = createUiStore()) {
   return { ...notes.getState(), notes, ui };
 }
 
-const created = (notes: ReturnType<typeof setup>['notes']) => Object.values(notes.getState().notes);
+const created = (notes: Setup['notes']) => Object.values(notes.getState().notes);
 /** The Board an empty 1024×768 window shows. */
 const board = { width: 1000, height: 696 };
 
@@ -68,10 +70,10 @@ describe('createNoteInView, the S/M/L buttons', () => {
 
 describe('a new Note, however it is created', () => {
   const ways = {
-    createNoteAt: (store: ReturnType<typeof setup>) => {
+    createNoteAt: (store: Setup) => {
       store.createNoteAt({ x: 400, y: 300 }, board);
     },
-    createNoteInView: (store: ReturnType<typeof setup>) => {
+    createNoteInView: (store: Setup) => {
       store.createNoteInView('medium', { x: 0, y: 0, ...board }, board);
     },
   };
