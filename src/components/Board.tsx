@@ -7,8 +7,8 @@ import {
   type ProfilerOnRenderCallback,
   type RefObject,
 } from 'react';
-import { notesExtent, placeCentredAt, toBoardPoint } from '../geometry';
-import { NOTE_SIZE_PRESETS, type NoteId } from '../notes/note';
+import { notesExtent, toBoardPoint } from '../geometry';
+import type { NoteId } from '../notes/note';
 import { measureBoardSize, useBoardDom } from '../BoardDomContext';
 import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
@@ -58,9 +58,7 @@ export function Board({
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
     );
-    const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
-    const board = measureBoardSize(event.currentTarget);
-    notes.getState().createNote(placeCentredAt(pointer, size, board));
+    notes.getState().createNoteAt(pointer, measureBoardSize(event.currentTarget));
   }
 
   return (

@@ -4,6 +4,8 @@ import { createUiStore } from '../ui/uiStore';
 import type { Note } from './note';
 import { createNotesStore } from './notesStore';
 
+type Setup = ReturnType<typeof setup>;
+
 /** The two stores, wired as the app wires them, with `loaded` on the Board. */
 function setup(loaded: Note[] = [], ui = createUiStore()) {
   const notes = createNotesStore(ui);
@@ -11,45 +13,97 @@ function setup(loaded: Note[] = [], ui = createUiStore()) {
   return { ...notes.getState(), notes, ui };
 }
 
-describe('createNote', () => {
-  const rect = { x: 290, y: 215, width: 220, height: 170 };
-  const created = (notes: ReturnType<typeof setup>['notes']) =>
-    Object.values(notes.getState().notes);
+const created = (notes: Setup['notes']) => Object.values(notes.getState().notes);
+/** The Board an empty 1024×768 window shows. */
+const board = { width: 1000, height: 696 };
 
-  it('creates an empty Note at the rect, yellow to start with', () => {
-    const { notes, createNote } = setup();
+describe('createNoteAt, a double-click on empty Board', () => {
+  it('creates an empty yellow Note of the Current size, centred on the point', () => {
+    const { notes, createNoteAt } = setup();
 
-    createNote(rect);
+    createNoteAt({ x: 400, y: 300 }, board);
 
     expect(created(notes)).toEqual([
-      { id: expect.any(String) as string, ...rect, text: '', colour: 'yellow', z: 1 },
+      {
+        id: expect.any(String) as string,
+        x: 290,
+        y: 215,
+        width: 220,
+        height: 170,
+        text: '',
+        colour: 'yellow',
+        z: 1,
+      },
     ]);
   });
 
-  it('uses the Current colour', () => {
-    const { notes, createNote } = setup([], createUiStore({ currentColour: 'blue' }));
+  it('uses the Current size, and keeps the Note inside the Board', () => {
+    const { notes, createNoteAt } = setup([], createUiStore({ currentSize: 'large' }));
 
-    createNote(rect);
+    createNoteAt({ x: 990, y: 10 }, board);
 
-    expect(created(notes)[0]?.colour).toBe('blue');
+    expect(created(notes)[0]).toMatchObject({ x: 700, y: 0, width: 300, height: 230 });
+  });
+});
+
+describe('createNoteInView, the S/M/L buttons', () => {
+  const view = { x: 0, y: 0, width: 1000, height: 696 };
+
+  it('creates a Note of that size centred in the view, and makes it the Current size', () => {
+    const { notes, ui, createNoteInView } = setup();
+
+    createNoteInView('small', { ...view, x: 100 }, { width: 1400, height: 696 });
+
+    expect(created(notes)[0]).toMatchObject({ x: 520, y: 288, width: 160, height: 120 });
+    expect(ui.getState().currentSize).toBe('small');
   });
 
-  it('gives each Note its own id', () => {
-    const { notes, createNote } = setup();
+  it('steps past spots already taken', () => {
+    const taken = makeNote({ id: testId('a'), x: 390, y: 263, z: 1 });
+    const { notes, createNoteInView } = setup([taken]);
 
-    createNote(rect);
-    createNote(rect);
+    createNoteInView('medium', view, board);
 
-    expect(new Set(created(notes).map((note) => note.id)).size).toBe(2);
+    expect(created(notes).find((note) => note.id !== taken.id)).toMatchObject({ x: 414, y: 287 });
   });
+});
 
-  it('opens the new Note straight into Editing', () => {
-    const { notes, ui, createNote } = setup();
+describe('a new Note, however it is created', () => {
+  const ways = {
+    createNoteAt: (store: Setup) => {
+      store.createNoteAt({ x: 400, y: 300 }, board);
+    },
+    createNoteInView: (store: Setup) => {
+      store.createNoteInView('medium', { x: 0, y: 0, ...board }, board);
+    },
+  };
 
-    createNote(rect);
+  for (const [name, createOne] of Object.entries(ways)) {
+    it(`${name} uses the Current colour`, () => {
+      const store = setup([], createUiStore({ currentColour: 'blue' }));
 
-    expect(ui.getState().editingId).toBe(created(notes)[0]?.id);
-  });
+      createOne(store);
+
+      expect(created(store.notes)[0]?.colour).toBe('blue');
+    });
+
+    it(`${name} opens the new Note straight into Editing`, () => {
+      const store = setup();
+
+      createOne(store);
+
+      expect(store.ui.getState().editingId).toBe(created(store.notes)[0]?.id);
+    });
+
+    it(`${name} gives each Note its own id`, () => {
+      const store = setup();
+
+      createOne(store);
+      createOne(store);
+
+      expect(new Set(created(store.notes).map((note) => note.id)).size).toBe(2);
+    });
+  }
 });
 
 describe('deleteNote and undoDelete', () => {
@@ -214,7 +268,7 @@ describe('Draft text', () => {
         ui.getState().pageHidden();
       },
       'new Note': () => {
-        notes.getState().createNote({ x: 0, y: 0, width: 220, height: 170 });
+        notes.getState().createNoteAt({ x: 400, y: 300 }, board);
       },
     };
     for (const [ending, end] of Object.entries(endings)) {

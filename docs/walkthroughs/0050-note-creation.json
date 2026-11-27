@@ -1,0 +1,168 @@
+{
+  "issue": 50,
+  "title": "Note creation: the Notes store owns Current size and placement",
+  "lede": "Before this PR, the Notes store gave a new Note only its **Current colour**. The two components that create Notes each looked up the **Current size**, called the placement geometry and passed `createNote` a finished rect. Now the store has two named actions, `createNoteAt` (double-click) and `createNoteInView` (S/M/L), and it decides size and place itself. The components only measure the page and pass plain values. What the user sees does not change, and the creation rules are now tested without a browser.",
+  "files": [
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Who decides a new Note's size, colour and place?",
+      "summary": "Two public actions pick the size and the placement, then call one private `createNote(rect)` helper that adds the Note in the Current colour and starts Editing.",
+      "owns": "Every rule for a new Note: the Current size (read for a double-click, set by S/M/L), the Current colour, centring or stepping past taken spots, staying inside the Board's current size, and opening in Editing.",
+      "never": "Touches the DOM. It is given the pointer as a Board point, the view and the Board size as plain numbers.",
+      "tested": "`src/notes/notesActions.test.ts`: describes `createNoteAt…`, `createNoteInView…` and `a new Note, however it is created`."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "What does a double-click on empty Board pass to the store?",
+      "summary": "`createAtPointer` still decides whether the double-click counts. It turns the pointer into a Board point, measures the Board, and calls `createNoteAt`.",
+      "owns": "Whether a double-click counts (both presses on empty Board), and the DOM work: `toBoardPoint` and `measureBoardSize`.",
+      "never": "Reads the Current size or calls the placement geometry any more.",
+      "tested": "The existing browser tests in `src/App.browser.test.tsx` and `src/board.browser.test.tsx`, unchanged."
+    },
+    {
+      "path": "src/components/NewNoteButtons.tsx",
+      "question": "What does clicking S, M or L pass to the store?",
+      "summary": "`createInView` reads the visible part of the Board from the scroll container, measures the Board, and calls `createNoteInView` with the button's size.",
+      "owns": "The DOM work: reading the scroll offset and client size, and measuring the Board. It still subscribes to `currentSize`, only to show which button is pressed.",
+      "never": "Calls `setCurrentSize` or reads the Notes to find taken spots: the store does both.",
+      "tested": "The existing browser tests in `src/App.browser.test.tsx`, unchanged."
+    },
+    {
+      "path": "src/geometry.ts",
+      "question": "Where does the Note actually go?",
+      "summary": "Unchanged. `placeCentredAt` and `placeInVisibleBoard` are pure functions; only their caller moved.",
+      "owns": "The placement maths: centring, the cascade of 24 px steps, and clamping to the Board.",
+      "never": "Knows about stores or size names.",
+      "tested": "`src/geometry.test.ts`, unchanged."
+    },
+    {
+      "path": "src/notes/notesActions.test.ts",
+      "question": "How do the tests prove the rules without a browser?",
+      "summary": "They wire the two real stores together, call the new actions with plain points and rects, and check the Notes and UI state.",
+      "owns": "The acceptance criteria for both actions, with expected positions worked out by hand from the presets.",
+      "never": "Mocks the geometry or the UI store.",
+      "tested": "Is the test."
+    }
+  ],
+  "flow": [
+    ["src/components/Board.tsx", "src/notes/notesStore.ts", "src/geometry.ts"],
+    ["src/components/NewNoteButtons.tsx", "src/notes/notesStore.ts", "src/geometry.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Click S with a Note already in the centre",
+      "steps": [
+        {
+          "title": "click on S",
+          "explain": "The button passes `small`. The component reads which part of the Board is scrolled into view and measures the Board: that is all the DOM work there is. It no longer sets the Current size itself.",
+          "run": [
+            { "file": "src/components/NewNoteButtons.tsx", "from": "createInView(size);" },
+            {
+              "file": "src/components/NewNoteButtons.tsx",
+              "from": "function createInView(size: NoteSize) {",
+              "to": "notes.getState().createNoteInView(size, view, measureBoardSize(boardRef.current));"
+            }
+          ]
+        },
+        {
+          "title": "The store sets the Current size, then places the Note",
+          "explain": "The Current size is set **before** the Note is created, so the S button shows as pressed and the next double-click makes a small Note. The taken spots are read from the store's own Notes at this moment, which is why the component no longer needs to read them.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "createNoteInView: (size, view, board) => {",
+              "to": "createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));"
+            }
+          ]
+        },
+        {
+          "title": "The centre is taken, so the Note steps down and right",
+          "explain": "`placeInVisibleBoard` tries the centre of the view first, then 24 px steps. The test `steps past spots already taken` puts a Note at the centre spot (390, 263) of a 1000×696 Board and expects the new one at (414, 287).",
+          "run": [
+            {
+              "file": "src/geometry.ts",
+              "from": "for (const spot of cascadeSpots(centred, view, corner, board)) {",
+              "to": "return corner;"
+            }
+          ]
+        },
+        {
+          "title": "The Note is added and opens in Editing",
+          "explain": "One private helper does this for both actions. It is not on `NotesActions`, so no caller can create a Note that skips the Current size or placement.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "function createNote({ x, y, width, height }: Rect) {",
+              "to": "ui.getState().startEditing(id);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Double-click on empty Board",
+      "steps": [
+        {
+          "title": "dblclick on empty Board",
+          "explain": "The double-click check stays in the component: it decides **whether** to create a Note. If either press landed on a Note or outside the Board, it returns and the store is never called. Otherwise the pointer becomes a Board point and the Board is measured.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "function createAtPointer(event: MouseEvent<HTMLElement>) {",
+              "to": "notes.getState().createNoteAt(pointer, measureBoardSize(event.currentTarget));"
+            }
+          ]
+        },
+        {
+          "title": "The store reads the Current size and centres the Note",
+          "explain": "The Current size is read when the double-click happens, as before. The test `uses the Current size, and keeps the Note inside the Board` double-clicks at (990, 10) with a large Current size: centring would put the Note's left edge at 840, past the Board, so it is pulled back to (700, 0).",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "createNoteAt: (point, board) => {",
+              "to": "createNote(placeCentredAt(point, size, board));"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "export function placeCentredAt(",
+              "to": "return toCommittedRect("
+            }
+          ]
+        },
+        {
+          "title": "The Note being edited is saved first",
+          "explain": "Starting Editing on the new Note ends Editing on the old one, and its Draft text is saved. The test `every way Editing ends saves it` now uses `createNoteAt` for its `new Note` case.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "ui.getState().startEditing(id);"
+            },
+            {
+              "file": "src/notes/notesActions.test.ts",
+              "from": "'new Note': () => {",
+              "to": "},"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "S/M/L before the scroll container exists",
+      "detail": "Issue #39 set the Current size **before** checking for the scroll container, so a click with no scroller would still change it. Now `createNoteInView` runs only after that check, so such a click changes nothing. It can't happen in practice: `TopBar` and `Board` mount in the same render, and refs are set before any click. Keeping the old order would mean the component calling `setCurrentSize` again, which the issue rules out."
+    },
+    {
+      "title": "NewNoteButtons still reads currentSize",
+      "detail": "The acceptance criterion says the components no longer read `currentSize`. `NewNoteButtons` still subscribes to it, but only for `aria-pressed`, which is display, not creation."
+    },
+    {
+      "title": "Why two actions and not one with an options object",
+      "detail": "The two entry points differ in whether they **set** the Current size and in how they place the Note. Two named actions say that in their names. The counter-argument is that `view` and `board` travel together; with two parameters, bundling them isn't worth a new type yet."
+    }
+  ],
+  "omitted": {
+    "README.md": "The architecture section names the new actions and the Current size.",
+    "src/persistence/localCopy.test.ts": "One test creates its Note with `createNoteAt` instead of `createNote`."
+  }
+}
