@@ -17,6 +17,12 @@
 
 .board {
   position: relative;
+  /*
+   * The visible area, or the Notes' extent (the inline width and height) if that is larger.
+   * So an empty Board has no scrollbars, and a Note outside a shrunken window is scrolled to.
+   */
+  min-width: 100%;
+  min-height: 100%;
   /* Keeps the Stacking order inside the Board, below whatever is drawn over it. */
   isolation: isolate;
   background-color: var(--color-board);

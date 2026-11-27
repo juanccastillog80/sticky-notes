@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
-import { makeNote, testId } from '../test/factories';
+import { farCornerNote, makeNote, testId } from '../test/factories';
 import { drag, press, pressAndMove, release } from '../test/mouse';
 import { recordActions, type Call } from '../test/recordCalls';
 import { renderApp } from '../test/renderApp';
@@ -56,6 +56,8 @@ it('while dragging, the Note follows the pointer and is lifted', async () => {
 
 it('scrolling the container mid-drag still lands the Note under the pointer', async () => {
   const { stores, noteA, scroller } = await setup();
+  // A Board larger than the window, to scroll.
+  stores.notes.getState().load([a, b, farCornerNote]);
 
   await pressAndMove(noteA, { dx: 100, dy: 50, position: { x: 30, y: 30 } });
   const scrolled = new Promise((resolve) => {

@@ -5,7 +5,7 @@ A single-page desktop app for placing, arranging and removing sticky notes on a 
 ## Language
 
 **Board**:
-The bounded surface on which all notes live.
+The bounded surface on which all notes live. It fills the visible area, and grows only as far as needed to hold notes that reach beyond it.
 _Avoid_: Canvas, tablero, workspace
 
 **Note**:

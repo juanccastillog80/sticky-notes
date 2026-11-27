@@ -28,3 +28,9 @@ export function makeState(...notes: Note[]): NotesState {
     topZ: Math.max(0, ...notes.map((note) => note.z)),
   };
 }
+
+/**
+ * A Note in the far corner of a 1920×1080 area. The Board grows to hold it, so a test
+ * in a smaller window has a Board to scroll.
+ */
+export const farCornerNote = makeNote({ id: testId('far'), x: 1700, y: 910 });

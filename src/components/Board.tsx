@@ -7,9 +7,9 @@ import {
   type ProfilerOnRenderCallback,
   type RefObject,
 } from 'react';
-import { BOARD_SIZE, placeCentredAt, toBoardPoint } from '../geometry';
+import { notesExtent, placeCentredAt, toBoardPoint } from '../geometry';
 import { NOTE_SIZE_PRESETS, type NoteId } from '../notes/note';
-import { useBoardDom } from '../BoardDomContext';
+import { measureBoardSize, useBoardDom } from '../BoardDomContext';
 import { useNotes, useStores } from '../StoresContext';
 import { EmptyHint } from './EmptyHint';
 import { Note } from './Note';
@@ -26,6 +26,10 @@ export function Board({
 }) {
   const ids = useNotes((state) => state.ids);
   const { notes, ui } = useStores();
+  // The Board is at least as big as its Notes; CSS makes it at least the visible area too.
+  // Numbers, so only a change of the furthest edges re-renders the Board.
+  const extentWidth = useNotes((state) => notesExtent(Object.values(state.notes)).width);
+  const extentHeight = useNotes((state) => notesExtent(Object.values(state.notes)).height);
 
   const { boardRef } = useBoardDom();
   // A `dblclick` reports only where the second press landed, so the first is remembered:
@@ -55,7 +59,8 @@ export function Board({
       event.currentTarget.getBoundingClientRect(),
     );
     const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
-    notes.getState().createNote(placeCentredAt(pointer, size));
+    const board = measureBoardSize(event.currentTarget);
+    notes.getState().createNote(placeCentredAt(pointer, size, board));
   }
 
   return (
@@ -67,7 +72,7 @@ export function Board({
           // Focusable by script only: where focus goes when the last Note is deleted.
           tabIndex={-1}
           className={styles.board}
-          style={BOARD_SIZE}
+          style={{ width: extentWidth, height: extentHeight }}
           onDoubleClick={createAtPointer}
           onPointerDown={(event) => {
             // A press on empty Board: Editing decides whether that ends it.

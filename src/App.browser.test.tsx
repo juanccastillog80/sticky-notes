@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
-import { makeNote } from '../test/factories';
+import { farCornerNote, makeNote } from '../test/factories';
 import { renderApp } from '../test/renderApp';
 
 beforeEach(async () => {
@@ -62,13 +62,16 @@ it('after clicking L, double-clicking empty Board creates a large Note centred o
 });
 
 it('double-clicking a scrolled Board still centres the Note on the pointer', async () => {
-  const { board, scroller, notes } = await setup();
+  const { stores, board, scroller, notes } = await setup();
+  stores.notes.getState().load([farCornerNote]);
+  await expect.element(notes).toBeVisible();
   scroller.scrollTo(500, 200);
 
   await userEvent.dblClick(board, { position: { x: 900, y: 500 } });
 
-  await expect.element(notes).toBeVisible();
-  const note = rectOnBoard(notes.element(), board);
+  // Listed after the far Note.
+  await expect.element(notes.nth(1)).toBeVisible();
+  const note = rectOnBoard(notes.nth(1).element(), board);
   expectWithinAPixel(note.x + 110, 900);
   expectWithinAPixel(note.y + 85, 500);
 });
@@ -166,7 +169,9 @@ it.each([
 ])(
   'the $size button creates a Note centred in the visible part of the Board',
   async ({ size, width, height }) => {
-    const { screen, board, scroller, notes } = await setup();
+    const { screen, stores, board, scroller, notes } = await setup();
+    stores.notes.getState().load([farCornerNote]);
+    await expect.element(notes).toBeVisible();
     // Headless scrollbars take no space, so borders stand in for 16 px ones.
     (scroller as HTMLElement).style.border = 'solid transparent';
     (scroller as HTMLElement).style.borderWidth = '0 16px 16px 0';
@@ -174,8 +179,9 @@ it.each([
 
     await userEvent.click(screen.getByRole('button', { name: `New ${size} note` }));
 
-    await expect.element(notes).toBeVisible();
-    const note = rectOnBoard(notes.element(), board);
+    // Listed after the far Note.
+    await expect.element(notes.nth(1)).toBeVisible();
+    const note = rectOnBoard(notes.nth(1).element(), board);
     expect(note).toMatchObject({ width, height });
     // 1024×768, less the 48 px top bar and the scrollbars: 1008×704 is visible.
     expectWithinAPixel(note.x + width / 2, 500 + 504);
@@ -217,8 +223,10 @@ it('pressing a size button again cascades the new Note by (24, 24)', async () =>
   expect([third.x - second.x, third.y - second.y]).toEqual([24, 24]);
 });
 
-it('the 1920×1080 Board scrolls in its container while the top bar stays put', async () => {
-  const { screen, board, scroller } = await setup();
+it('a Board larger than the window scrolls in its container while the top bar stays put', async () => {
+  const { screen, stores, board, scroller, notes } = await setup();
+  stores.notes.getState().load([farCornerNote]);
+  await expect.element(notes).toBeVisible();
   const topBar = screen.getByRole('banner');
 
   expect(board.element().getBoundingClientRect()).toMatchObject({

@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import { toCommittedRect, type Point, type Rect } from '../geometry';
+import { toStoredRect, type Point, type Rect } from '../geometry';
 import { endedDraft } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
 import { newNoteId, type Note, type NoteColour, type NoteId } from './note';
@@ -17,7 +17,7 @@ function create(state: NotesState, note: Omit<Note, 'z'>): NotesState {
   if (state.notes[note.id]) return state;
   const z = state.topZ + 1;
   return {
-    notes: { ...state.notes, [note.id]: { ...note, ...toCommittedRect(note), z } },
+    notes: { ...state.notes, [note.id]: { ...note, ...toStoredRect(note), z } },
     ids: [...state.ids, note.id],
     topZ: z,
   };
@@ -26,7 +26,7 @@ function create(state: NotesState, note: Omit<Note, 'z'>): NotesState {
 function move(state: NotesState, id: NoteId, to: Point): NotesState {
   const note = state.notes[id];
   if (!note) return state;
-  const { x, y } = toCommittedRect({ ...note, x: to.x, y: to.y });
+  const { x, y } = toStoredRect({ ...note, x: to.x, y: to.y });
   if (x === note.x && y === note.y) return state;
   return withNote(state, { ...note, x, y });
 }
@@ -34,7 +34,7 @@ function move(state: NotesState, id: NoteId, to: Point): NotesState {
 function resize(state: NotesState, id: NoteId, to: Rect): NotesState {
   const note = state.notes[id];
   if (!note) return state;
-  const { x, y, width, height } = toCommittedRect(to);
+  const { x, y, width, height } = toStoredRect(to);
   if (x === note.x && y === note.y && width === note.width && height === note.height) return state;
   return withNote(state, { ...note, x, y, width, height });
 }
@@ -93,7 +93,7 @@ function load(state: NotesState, incoming: readonly Note[]): NotesState {
   // A Map, so an id that arrives twice is listed once.
   const byId = new Map<NoteId, Note>();
   for (const raw of incoming) {
-    const note = { ...raw, ...toCommittedRect(raw) };
+    const note = { ...raw, ...toStoredRect(raw) };
     const current = state.notes[note.id];
     byId.set(note.id, current && sameNote(current, note) ? current : note);
   }

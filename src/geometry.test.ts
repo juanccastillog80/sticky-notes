@@ -3,35 +3,52 @@ import { describe, expect, it } from 'vitest';
 import {
   clampToBoard,
   intersects,
+  notesExtent,
   placeCentredAt,
   placeInVisibleBoard,
   resizeRect,
   toBoardPoint,
+  toCommittedRect,
+  toStoredRect,
   type Edges,
   type Rect,
 } from './geometry';
 
 const rect = (x: number, y: number, width = 220, height = 170): Rect => ({ x, y, width, height });
+/** The Board's size in most tests: a large window. */
+const board = { width: 1920, height: 1080 };
 
 describe('clampToBoard', () => {
   it('leaves a rect that is inside the Board as it is', () => {
-    expect(clampToBoard(rect(300, 200))).toEqual(rect(300, 200));
+    expect(clampToBoard(rect(300, 200), board)).toEqual(rect(300, 200));
   });
 
   it('pushes a rect past the top-left fully inside', () => {
-    expect(clampToBoard(rect(-50, -1))).toEqual(rect(0, 0));
+    expect(clampToBoard(rect(-50, -1), board)).toEqual(rect(0, 0));
   });
 
   it('pushes a rect past the bottom-right fully inside', () => {
-    expect(clampToBoard(rect(1900, 1079))).toEqual(rect(1700, 910));
+    expect(clampToBoard(rect(1900, 1079), board)).toEqual(rect(1700, 910));
   });
 
   it('grows a rect to the minimum Note size', () => {
-    expect(clampToBoard(rect(10, 10, 5, 99))).toEqual(rect(10, 10, 140, 100));
+    expect(clampToBoard(rect(10, 10, 5, 99), board)).toEqual(rect(10, 10, 140, 100));
   });
 
   it('shrinks a rect larger than the Board to the Board', () => {
-    expect(clampToBoard(rect(10, 10, 5000, 5000))).toEqual(rect(0, 0, 1920, 1080));
+    expect(clampToBoard(rect(10, 10, 5000, 5000), board)).toEqual(rect(0, 0, 1920, 1080));
+  });
+
+  it('uses the Board size it is given', () => {
+    const window1024 = { width: 1000, height: 696 };
+
+    expect(clampToBoard(rect(900, 600), window1024)).toEqual(rect(780, 526));
+  });
+
+  it('keeps a Note at the minimum size in the top-left of a Board smaller than a Note', () => {
+    const tiny = { width: 100, height: 50 };
+
+    expect(clampToBoard(rect(30, 20, 220, 170), tiny)).toEqual(rect(0, 0, 140, 100));
   });
 
   describe('for any rect', () => {
@@ -41,7 +58,7 @@ describe('clampToBoard', () => {
     it('ends inside the Board', () => {
       fc.assert(
         fc.property(anyRect, (input) => {
-          const { x, y, width, height } = clampToBoard(input);
+          const { x, y, width, height } = clampToBoard(input, board);
           expect(x).toBeGreaterThanOrEqual(0);
           expect(y).toBeGreaterThanOrEqual(0);
           expect(x + width).toBeLessThanOrEqual(1920);
@@ -53,7 +70,7 @@ describe('clampToBoard', () => {
     it('is at least the minimum Note size', () => {
       fc.assert(
         fc.property(anyRect, (input) => {
-          const { width, height } = clampToBoard(input);
+          const { width, height } = clampToBoard(input, board);
           expect(width).toBeGreaterThanOrEqual(140);
           expect(height).toBeGreaterThanOrEqual(100);
         }),
@@ -63,11 +80,46 @@ describe('clampToBoard', () => {
     it('is unchanged by clamping again', () => {
       fc.assert(
         fc.property(anyRect, (input) => {
-          const once = clampToBoard(input);
-          expect(clampToBoard(once)).toEqual(once);
+          const once = clampToBoard(input, board);
+          expect(clampToBoard(once, board)).toEqual(once);
         }),
       );
     });
+  });
+});
+
+describe('toCommittedRect', () => {
+  it('rounds, then keeps the rect inside the Board it is given', () => {
+    const small = { width: 600, height: 400 };
+
+    expect(toCommittedRect(rect(500.4, 10.6), small)).toEqual(rect(380, 11));
+  });
+
+  it('gives a minimum-size Note at the top-left on a Board smaller than a Note', () => {
+    expect(toCommittedRect(rect(10, 10), { width: 0, height: 0 })).toEqual(rect(0, 0, 140, 100));
+  });
+});
+
+describe('toStoredRect', () => {
+  it('never pulls a Note back from past any Board edge', () => {
+    expect(toStoredRect(rect(5000, 3000))).toEqual(rect(5000, 3000));
+  });
+
+  it('keeps the Note off negative coordinates, at the minimum size, in whole pixels', () => {
+    expect(toStoredRect(rect(-10, 20.6, 5.2, 300.4))).toEqual(rect(0, 21, 140, 300));
+  });
+});
+
+describe('notesExtent', () => {
+  it('is nothing for no Notes', () => {
+    expect(notesExtent([])).toEqual({ width: 0, height: 0 });
+  });
+
+  it('reaches the furthest right and the furthest bottom edges, which may be different Notes', () => {
+    const right = rect(1200, 100, 300, 170); // right edge 1500
+    const low = rect(100, 900, 220, 250); // bottom edge 1150
+
+    expect(notesExtent([right, low, rect(0, 0)])).toEqual({ width: 1500, height: 1150 });
   });
 });
 
@@ -114,19 +166,25 @@ describe('placeCentredAt', () => {
   const size = { width: 220, height: 170 };
 
   it('centres the Note on the pointer', () => {
-    expect(placeCentredAt({ x: 400, y: 300 }, size)).toEqual(rect(290, 215));
+    expect(placeCentredAt({ x: 400, y: 300 }, size, board)).toEqual(rect(290, 215));
   });
 
   it('pushes a Note by the top-left fully inside the Board', () => {
-    expect(placeCentredAt({ x: 5, y: 9 }, size)).toEqual(rect(0, 0));
+    expect(placeCentredAt({ x: 5, y: 9 }, size, board)).toEqual(rect(0, 0));
   });
 
   it('pushes a Note by the bottom-right fully inside the Board', () => {
-    expect(placeCentredAt({ x: 1915, y: 1075 }, size)).toEqual(rect(1700, 910));
+    expect(placeCentredAt({ x: 1915, y: 1075 }, size, board)).toEqual(rect(1700, 910));
+  });
+
+  it('pushes it inside the Board it is given', () => {
+    const window1024 = { width: 1000, height: 696 };
+
+    expect(placeCentredAt({ x: 995, y: 690 }, size, window1024)).toEqual(rect(780, 526));
   });
 
   it('rounds to whole pixels', () => {
-    expect(placeCentredAt({ x: 400.4, y: 300.7 }, size)).toEqual(rect(290, 216));
+    expect(placeCentredAt({ x: 400.4, y: 300.7 }, size, board)).toEqual(rect(290, 216));
   });
 });
 
@@ -137,69 +195,72 @@ describe('placeInVisibleBoard', () => {
   const nearCorner = { x: 1652, y: 862, width: 268, height: 218 };
 
   it('centres the Note in the visible part of the Board', () => {
-    expect(placeInVisibleBoard(view, size, [])).toEqual(rect(402, 275));
+    expect(placeInVisibleBoard(view, size, [], board)).toEqual(rect(402, 275));
   });
 
   it('follows the scroll', () => {
-    expect(placeInVisibleBoard({ ...view, x: 500, y: 200 }, size, [])).toEqual(rect(902, 475));
+    expect(placeInVisibleBoard({ ...view, x: 500, y: 200 }, size, [], board)).toEqual(
+      rect(902, 475),
+    );
   });
 
   it('ignores the backdrop when the window is larger than the Board', () => {
     const largeView = { x: 0, y: 0, width: 2560, height: 1400 };
 
-    expect(placeInVisibleBoard(largeView, size, [])).toEqual(rect(850, 455));
+    expect(placeInVisibleBoard(largeView, size, [], board)).toEqual(rect(850, 455));
   });
 
   it('ignores the backdrop past the edge when scrolled to the end', () => {
     const endView = { x: 920, y: 400, width: 1024, height: 704 };
 
-    expect(placeInVisibleBoard(endView, size, [])).toEqual(rect(1310, 655));
+    expect(placeInVisibleBoard(endView, size, [], board)).toEqual(rect(1310, 655));
   });
 
   it('pushes a Note fully inside the Board when little of it is visible', () => {
     const cornerView = { x: 1800, y: 1000, width: 300, height: 300 };
 
-    expect(placeInVisibleBoard(cornerView, size, [])).toEqual(rect(1700, 910));
+    expect(placeInVisibleBoard(cornerView, size, [], board)).toEqual(rect(1700, 910));
   });
 
   it('cascades by (24, 24) while a Note sits at that exact spot', () => {
     const taken = [rect(402, 275), rect(426, 299)];
 
-    expect(placeInVisibleBoard(view, size, taken)).toEqual(rect(450, 323));
+    expect(placeInVisibleBoard(view, size, taken, board)).toEqual(rect(450, 323));
   });
 
   it('takes the first free spot of the cascade', () => {
     const taken = [rect(402, 275), rect(450, 323)];
 
-    expect(placeInVisibleBoard(view, size, taken)).toEqual(rect(426, 299));
+    expect(placeInVisibleBoard(view, size, taken, board)).toEqual(rect(426, 299));
   });
 
   it('does not cascade for a Note that is only nearby', () => {
-    expect(placeInVisibleBoard(view, size, [rect(403, 275)])).toEqual(rect(402, 275));
+    expect(placeInVisibleBoard(view, size, [rect(403, 275)], board)).toEqual(rect(402, 275));
   });
 
   it('cascades along an edge it has reached', () => {
     const rightView = { x: 1700, y: 0, width: 220, height: 720 };
 
-    expect(placeInVisibleBoard(rightView, size, [rect(1700, 275)])).toEqual(rect(1700, 299));
+    expect(placeInVisibleBoard(rightView, size, [rect(1700, 275)], board)).toEqual(rect(1700, 299));
   });
 
   it('jumps back from the corner to the top-left of the visible Board', () => {
     const taken = [rect(1676, 886), rect(1700, 910)];
 
-    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1652, 862));
+    expect(placeInVisibleBoard(nearCorner, size, taken, board)).toEqual(rect(1652, 862));
   });
 
   it('starts each further jump back a step to the right', () => {
     const taken = [rect(1676, 886), rect(1700, 910), rect(1652, 862)];
 
-    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1676, 862));
+    expect(placeInVisibleBoard(nearCorner, size, taken, board)).toEqual(rect(1676, 862));
   });
 
   it('never stacks 100 Notes when scrolled to the end', () => {
     const endView = { x: 920, y: 400, width: 1024, height: 704 };
     const taken: Rect[] = [];
-    for (let press = 0; press < 100; press++) taken.push(placeInVisibleBoard(endView, size, taken));
+    for (let press = 0; press < 100; press++)
+      taken.push(placeInVisibleBoard(endView, size, taken, board));
 
     expect(new Set(taken.map(({ x, y }) => `${String(x)},${String(y)}`)).size).toBe(100);
     // Jumping back must not take a Note out of view, either.
@@ -217,19 +278,20 @@ describe('placeInVisibleBoard', () => {
       rect(1700, 862),
     ];
 
-    expect(placeInVisibleBoard(nearCorner, size, taken)).toEqual(rect(1700, 910));
+    expect(placeInVisibleBoard(nearCorner, size, taken, board)).toEqual(rect(1700, 910));
   });
 
   it('jumps back at the edge of the visible Board, before the Board ends', () => {
     const smallView = { x: 100, y: 100, width: 268, height: 218 };
     const taken = [rect(124, 124), rect(148, 148)];
 
-    expect(placeInVisibleBoard(smallView, size, taken)).toEqual(rect(100, 100));
+    expect(placeInVisibleBoard(smallView, size, taken, board)).toEqual(rect(100, 100));
   });
 
   it('keeps 100 Notes in view when scrolled to the top-left', () => {
     const taken: Rect[] = [];
-    for (let press = 0; press < 100; press++) taken.push(placeInVisibleBoard(view, size, taken));
+    for (let press = 0; press < 100; press++)
+      taken.push(placeInVisibleBoard(view, size, taken, board));
 
     expect(new Set(taken.map(({ x, y }) => `${String(x)},${String(y)}`)).size).toBe(100);
     expect(Math.max(...taken.map(({ x, width }) => x + width))).toBeLessThanOrEqual(1024);
@@ -239,25 +301,36 @@ describe('placeInVisibleBoard', () => {
   it('stacks in the visible corner when every visible spot is taken', () => {
     const exactView = { x: 100, y: 100, width: 220, height: 170 };
 
-    expect(placeInVisibleBoard(exactView, size, [rect(100, 100)])).toEqual(rect(100, 100));
+    expect(placeInVisibleBoard(exactView, size, [rect(100, 100)], board)).toEqual(rect(100, 100));
   });
 
   it('still cascades when the window is smaller than the Note', () => {
     const tinyView = { x: 100, y: 100, width: 200, height: 150 };
 
-    expect(placeInVisibleBoard(tinyView, size, [rect(90, 90)])).toEqual(rect(114, 114));
+    expect(placeInVisibleBoard(tinyView, size, [rect(90, 90)], board)).toEqual(rect(114, 114));
+  });
+
+  it('stops at the edge of the Board it is given', () => {
+    const fitted = { width: 1000, height: 696 };
+    const wholeView = { x: 0, y: 0, width: 1024, height: 720 };
+
+    expect(placeInVisibleBoard(wholeView, size, [], fitted)).toEqual(rect(390, 263));
+    expect(placeInVisibleBoard(wholeView, size, [rect(390, 263)], fitted)).toEqual(rect(414, 287));
   });
 
   it('stops in the corner when there is no room to jump back', () => {
     const cornerView = { x: 1700, y: 910, width: 220, height: 170 };
 
-    expect(placeInVisibleBoard(cornerView, size, [rect(1700, 910)])).toEqual(rect(1700, 910));
+    expect(placeInVisibleBoard(cornerView, size, [rect(1700, 910)], board)).toEqual(
+      rect(1700, 910),
+    );
   });
 });
 
 // x 100..320, y 100..270.
 const from = rect(100, 100, 220, 170);
-const resize = (edges: Edges, dx: number, dy: number) => resizeRect(from, { x: dx, y: dy }, edges);
+const resize = (edges: Edges, dx: number, dy: number) =>
+  resizeRect(from, { x: dx, y: dy }, edges, board);
 
 describe('resizeRect', () => {
   it('se grows the width and height, keeping the top-left', () => {
@@ -292,6 +365,20 @@ describe('resizeRect', () => {
     expect(resize('se', 5000, 5000)).toEqual({ x: 100, y: 100, width: 1820, height: 980 });
   });
 
+  it('stops growing at the edges of the Board it is given', () => {
+    const small = { width: 600, height: 400 };
+
+    expect(resizeRect(from, { x: 5000, y: 5000 }, 'se', small)).toEqual(rect(100, 100, 500, 300));
+  });
+
+  it('keeps the minimum size on a Board smaller than a Note', () => {
+    const tiny = { width: 100, height: 50 };
+
+    expect(resizeRect(rect(0, 0, 140, 100), { x: 40, y: 40 }, 'se', tiny)).toEqual(
+      rect(0, 0, 140, 100),
+    );
+  });
+
   it('rounds to whole pixels', () => {
     expect(resize('sw', -10.4, 10.6)).toEqual({ x: 90, y: 100, width: 230, height: 181 });
   });
@@ -317,7 +404,7 @@ describe('resizeRect', () => {
     it('stays inside the Board, at least the minimum size, in whole pixels', () => {
       fc.assert(
         fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
-          const { x, y, width, height } = resizeRect(from, delta, edges);
+          const { x, y, width, height } = resizeRect(from, delta, edges, board);
           expect(x).toBeGreaterThanOrEqual(0);
           expect(y).toBeGreaterThanOrEqual(0);
           expect(x + width).toBeLessThanOrEqual(1920);
@@ -332,7 +419,7 @@ describe('resizeRect', () => {
     it('never moves the opposite edges', () => {
       fc.assert(
         fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
-          const to = resizeRect(from, delta, edges);
+          const to = resizeRect(from, delta, edges, board);
           if (!edges.includes('w')) expect(to.x).toBe(from.x);
           if (!edges.includes('e')) expect(to.x + to.width).toBe(from.x + from.width);
           if (!edges.includes('n')) expect(to.y).toBe(from.y);
@@ -344,8 +431,8 @@ describe('resizeRect', () => {
     it('is idempotent: resizing the result by the same edges with no delta changes nothing', () => {
       fc.assert(
         fc.property(anyRect, anyEdges, anyDelta, (from, edges, delta) => {
-          const once = resizeRect(from, delta, edges);
-          const again = resizeRect(once, { x: 0, y: 0 }, edges);
+          const once = resizeRect(from, delta, edges, board);
+          const again = resizeRect(once, { x: 0, y: 0 }, edges, board);
           expect(again).toEqual(once);
         }),
       );

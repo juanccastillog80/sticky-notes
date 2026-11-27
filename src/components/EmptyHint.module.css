@@ -1,6 +1,7 @@
 .hint {
   position: absolute;
-  inset: 0;
+  /* The empty Board: the scroll container less the backdrop past its right and bottom edges. */
+  inset: 0 var(--board-end-gap) var(--board-end-gap) 0;
   display: grid;
   place-content: center;
   gap: 2px;

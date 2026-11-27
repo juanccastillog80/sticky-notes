@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { measureBoardSize, useBoardDom } from '../BoardDomContext';
 import { placeInVisibleBoard } from '../geometry';
 import { NOTE_SIZE_PRESETS, type NoteSize } from '../notes/note';
 import { useStores, useUi } from '../StoresContext';
@@ -12,6 +13,7 @@ const BUTTONS = [
 
 export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement | null> }) {
   const { notes, ui } = useStores();
+  const { boardRef } = useBoardDom();
   const currentColour = useUi((state) => state.currentColour);
   const currentSize = useUi((state) => state.currentSize);
 
@@ -23,9 +25,9 @@ export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDiv
     const { scrollLeft: x, scrollTop: y, clientWidth: width, clientHeight: height } = scroller;
     // Read at press time, not subscribed: the buttons don't re-render as Notes change.
     const taken = Object.values(notes.getState().notes);
-    notes
-      .getState()
-      .createNote(placeInVisibleBoard({ x, y, width, height }, NOTE_SIZE_PRESETS[size], taken));
+    const view = { x, y, width, height };
+    const board = measureBoardSize(boardRef.current);
+    notes.getState().createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));
   }
 
   return (
