@@ -17,7 +17,7 @@ A fixed region of the screen, always visible however far the board is scrolled; 
 _Avoid_: Bin, delete area, papelera
 
 **Delete button**:
-The × at the right end of every note's grip strip, always visible. Clicking it deletes the note at once; it is not a Press, so it never Raises or drags.
+The × at the right end of every note's grip strip, always visible. Clicking it deletes the note at once; it is not a Press, so it never Raises or drags, but like any press elsewhere it ends Editing on another note.
 _Avoid_: Close button, remove
 
 **Undo toast**:
