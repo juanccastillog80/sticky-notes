@@ -25,7 +25,7 @@ The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead
 
 The brief asks for 3 of the 4 features; all 4 are built. The bonuses are being added one at a time, to the same standard, since they make the UI better.
 
-- **REST saving (bonus V)** is not built. It is proposed in [ADR 0002](docs/adr/0002-local-first-persistence-msw.md), which also records the built Local copy. The groundwork is in place: an MSW service worker intercepts real `fetch` calls on the deployed site, and the app sends one `GET /notes` at startup and only logs the answer. Nothing is sent to the server, and the `?fail=&latency=` URL parameters for demoing failed and slow saves don't exist.
+- **REST saving (bonus V)** is not built. Notes are kept only in this browser's Local copy.
 
 ## Setup
 
@@ -108,8 +108,8 @@ Moving and resizing share everything except what they show and what they save.
 ### 4. A fixed Board; the Local copy
 
 - The Board is a fixed 1920×1080 surface that scrolls under the toolbar ([ADR 0001](docs/adr/0001-fixed-scrolling-board.md)). A Note's stored position can never become invalid when the window shrinks. A Drag adds the scroll delta, so the Note stays under the pointer while the wheel scrolls.
-- `main.tsx` is the composition root. It builds the stores, loads the Local copy into them, renders, and only then starts the MSW worker. The worker is loaded as a separate chunk, so the first paint never waits on the network.
-- The Local copy ([ADR 0002](docs/adr/0002-local-first-persistence-msw.md)) follows changes in the Notes store rather than living inside the UI: `saveLocalCopy` subscribes to it and writes the whole Board 300 ms after the last change, flushing on `pagehide`. `parseNotes` guards what is read back, so a damaged copy is discarded with a warning instead of crashing the app.
+- `main.tsx` is the composition root. It builds the stores, loads the Local copy into them, starts saving, and only then renders, so a reload never flashes an empty Board.
+- The Local copy ([ADR 0002](docs/adr/0002-local-copy.md)) follows changes in the Notes store rather than living inside the UI: `saveLocalCopy` subscribes to it and writes the whole Board 300 ms after the last change, flushing on `pagehide`. `parseNotes` guards what is read back, so a damaged copy is discarded with a warning instead of crashing the app.
 
 ### Testing
 

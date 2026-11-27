@@ -1,4 +1,4 @@
-import type { Note, NoteId } from '../notes/note';
+import type { Note } from '../notes/note';
 import type { NotesState, NotesStore } from '../notes/notesStore';
 import { parseNotes } from './parseNotes';
 
@@ -17,14 +17,10 @@ export interface Timers {
 /** How long the Board must be still before it is saved. */
 export const SAVE_DELAY_MS = 300;
 
-/**
- * What is stored. `unsaved` is the ids of Notes with an Unsaved change; it stays
- * empty until saving to a server exists (ADR 0002).
- */
+/** What is stored. `v` lets a later format be told apart from this one. */
 interface LocalCopyV1 {
   readonly v: 1;
   readonly notes: readonly Note[];
-  readonly unsaved: readonly NoteId[];
 }
 
 /**
@@ -93,7 +89,7 @@ export function saveLocalCopy(
 }
 
 function write(storage: LocalCopyStorage, { notes, ids }: NotesState) {
-  const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []), unsaved: [] };
+  const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []) };
   try {
     storage.setItem(LOCAL_COPY_KEY, JSON.stringify(copy));
   } catch {

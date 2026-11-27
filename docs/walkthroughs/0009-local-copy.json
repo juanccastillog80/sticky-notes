@@ -14,7 +14,7 @@
     {
       "path": "src/persistence/localCopy.ts",
       "question": "What is stored, and when is it written?",
-      "summary": "`readLocalCopy` reads and checks the `{ v: 1, notes, unsaved }` envelope; `saveLocalCopy` debounces writes off the store's subscription and returns `flush`.",
+      "summary": "`readLocalCopy` reads and checks the `{ v: 1, notes }` envelope; `saveLocalCopy` debounces writes off the store's subscription and returns `flush`.",
       "owns": "The storage key, the format, the 300 ms debounce, and swallowing storage errors.",
       "never": "Touches `window`: storage and timers are passed in.",
       "tested": "Node tests in `localCopy.test.ts` with a fake storage and fake timers the test moves on itself."
@@ -129,7 +129,7 @@
             },
             {
               "file": "src/persistence/localCopy.ts",
-              "from": "const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []), unsaved: [] };",
+              "from": "const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []) };",
               "to": "storage.setItem(LOCAL_COPY_KEY, JSON.stringify(copy));"
             }
           ]
@@ -204,19 +204,30 @@
       "detail": "It would remove `saveLocalCopy`, but the format, the `parseNotes` guard and the flush on `pagehide` are the parts worth controlling. Recorded in ADR 0002."
     },
     {
-      "title": "`unsaved` is always empty",
-      "detail": "It is in the format now so the proposed REST saving won't need a version 2. ADR 0002 says plainly that nothing writes to it yet."
-    },
-    {
       "title": "No browser test for a reload",
       "detail": "The round trip (save, read, load, identical state) is a Node test, and the reload was checked by hand in Chromium. `renderApp` deliberately has no persistence, so the browser tests start empty."
+    },
+    {
+      "title": "No REST saving, and no traces of it",
+      "detail": "The MSW worker, its handler and the one `GET /notes` that `main.tsx` sent at startup and only logged are deleted, with the `msw` dependency and `apiBaseUrl`. The Local copy has no `unsaved` field: REST saving (bonus V) is out of scope, so nothing in the code or docs is built for it. The app is now one chunk with no top-level `await`."
     }
   ],
   "omitted": {
     "src/persistence/localCopy.test.ts": "The tests, described in the steps.",
     "src/persistence/parseNotes.test.ts": "The tests, described in the steps.",
-    "docs/adr/0002-local-first-persistence-msw.md": "Split into Built (the Local copy) and Proposed (REST), so it no longer describes unbuilt code as built.",
-    "README.md": "Bonus IV marked done; REST listed as not built; Known limits updated.",
-    "GLOSSARY.md": "Local copy redefined; Unsaved change marked as proposed."
+    "README.md": "Bonus IV marked done; REST listed as not built; MSW lines removed; Known limits updated.",
+    "GLOSSARY.md": "Local copy redefined; Unsaved change removed.",
+    "docs/adr/0002-local-copy.md": "Renamed from `0002-local-first-persistence-msw.md` and rewritten to record only the Local copy; REST saving is one rejected option.",
+    "src/mocks/browser.ts": "Deleted: the MSW worker setup.",
+    "src/mocks/handlers.ts": "Deleted: the one `GET /notes` handler.",
+    "public/mockServiceWorker.js": "Deleted: MSW's generated service worker.",
+    "src/persistence/apiBaseUrl.ts": "Deleted: only the MSW startup used it.",
+    "src/persistence/apiBaseUrl.test.ts": "Deleted with `apiBaseUrl.ts`.",
+    "src/persistence/apiBaseUrl.test-d.ts": "Deleted with `apiBaseUrl.ts`.",
+    "package.json": "`msw` dependency and its `workerDirectory` config removed.",
+    "package-lock.json": "Follows `package.json`.",
+    "eslint.config.js": "No longer ignores the deleted service worker.",
+    ".prettierignore": "No longer ignores the deleted service worker.",
+    "test/renderApp.tsx": "Comment no longer mentions MSW."
   }
 }

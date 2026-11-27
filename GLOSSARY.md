@@ -75,7 +75,3 @@ _Avoid_: Z-order, z-index, layer
 **Local copy**:
 The Notes saved in this browser's localStorage, loaded before the first paint so the Board survives a reload.
 _Avoid_: Cache, snapshot, offline store
-
-**Unsaved change**:
-Proposed with REST saving (ADR 0002); not built. A change to a note (including deleting it) that the server hasn't confirmed yet. It would be retried until it succeeds, and would survive a reload.
-_Avoid_: Pending, dirty, unsynced

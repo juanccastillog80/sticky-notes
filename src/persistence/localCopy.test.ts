@@ -53,7 +53,7 @@ afterEach(() => {
 describe('readLocalCopy', () => {
   it('returns the saved Notes in their saved order', () => {
     const storage = fakeStorage({
-      [LOCAL_COPY_KEY]: JSON.stringify({ v: 1, notes: [a, b], unsaved: [] }),
+      [LOCAL_COPY_KEY]: JSON.stringify({ v: 1, notes: [a, b] }),
     });
 
     expect(readLocalCopy(storage)).toEqual([a, b]);
@@ -69,9 +69,9 @@ describe('readLocalCopy', () => {
     ['is not JSON', '{"v":1,'],
     ['is not an object', '[]'],
     ['is null', 'null'],
-    ['has no version', JSON.stringify({ notes: [a], unsaved: [] })],
-    ['has another version', JSON.stringify({ v: 2, notes: [a], unsaved: [] })],
-    ['has no Notes', JSON.stringify({ v: 1, unsaved: [] })],
+    ['has no version', JSON.stringify({ notes: [a] })],
+    ['has another version', JSON.stringify({ v: 2, notes: [a] })],
+    ['has no Notes', JSON.stringify({ v: 1 })],
     ['holds an invalid Note', JSON.stringify({ v: 1, notes: [a, { ...b, colour: 'red' }] })],
   ])('discards a copy that %s, with a warning', (_, raw) => {
     expect(readLocalCopy(fakeStorage({ [LOCAL_COPY_KEY]: raw }))).toEqual([]);
@@ -129,7 +129,6 @@ describe('saveLocalCopy', () => {
           { ...a, x: 300, y: 200 },
           { ...b, text: 'second' },
         ],
-        unsaved: [],
       },
     ]);
   });
@@ -139,7 +138,7 @@ describe('saveLocalCopy', () => {
 
     store.getState().setColour(a.id, 'green');
     saving.flush();
-    expect(writes).toEqual([{ v: 1, notes: [{ ...a, colour: 'green' }], unsaved: [] }]);
+    expect(writes).toEqual([{ v: 1, notes: [{ ...a, colour: 'green' }] }]);
 
     timers.advance(300);
     saving.flush();
