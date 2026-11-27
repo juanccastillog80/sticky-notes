@@ -1,5 +1,6 @@
 import { beforeEach, expect, it } from 'vitest';
 import { page, type Locator } from 'vitest/browser';
+import type { Note } from './notes/note';
 import { makeNote, testId } from '../test/factories';
 import { drag } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
@@ -13,7 +14,7 @@ beforeEach(async () => {
 });
 
 /** The App with `notes` loaded. */
-async function setup(...notes: ReturnType<typeof makeNote>[]) {
+async function setup(...notes: Note[]) {
   const { screen, stores } = await renderApp();
   stores.notes.getState().load(notes);
   const board = screen.getByRole('region', { name: 'Board' });

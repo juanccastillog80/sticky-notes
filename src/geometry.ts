@@ -83,8 +83,9 @@ export type Edges = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 /**
  * `from` with the named edges moved by `delta`, as it will be stored. Each moving edge
- * stops at `MIN_NOTE_SIZE` from the opposite edge and at the edge of `board`
- * (unless that would make the Note smaller than the minimum); the opposite edge never moves. The delta is rounded first, so the result is whole pixels.
+ * stops at `MIN_NOTE_SIZE` from the opposite edge and at the edge of `board` (unless
+ * that would make the Note smaller than the minimum); the opposite edge never moves.
+ * The delta is rounded first, so the result is whole pixels.
  */
 export function resizeRect(from: Rect, delta: Point, edges: Edges, board: Size): Rect {
   const dx = Math.round(delta.x);

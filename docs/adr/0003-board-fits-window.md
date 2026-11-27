@@ -26,6 +26,7 @@ The Board's size is the larger of two things: **the visible area** (the scroll c
 ## Consequences
 
 - A Drag measures the Board's size once at press. A window resized mid-drag doesn't change what that Drag allows.
-- Shrinking the window can leave Notes past the visible area. The Board then scrolls to them, as the fixed Board did.
+- Shrinking the window can leave Notes past the visible area. The Board then scrolls to them, as the fixed Board did. While it is that big, any Note can be dragged anywhere inside it, up to the furthest Note's edges, since that is the Board's current size; dragging the far Note back in shrinks the Board again.
+- Nothing bounds how far a stored Note can sit. A hand-edited Local copy with a Note at x 10,000,000 makes a Board that wide; `parseNotes` checks only that the numbers are finite.
 - The empty-Board hint is centred on the Board by CSS alone, with no Board size to read.
 - Tests that need a Board larger than the window load a Note in the far corner (`farCornerNote` in `test/factories.ts`), which makes the Board grow to hold it.

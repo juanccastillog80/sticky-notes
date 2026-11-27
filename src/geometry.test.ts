@@ -17,6 +17,8 @@ import {
 const rect = (x: number, y: number, width = 220, height = 170): Rect => ({ x, y, width, height });
 /** The Board's size in most tests: a large window. */
 const board = { width: 1920, height: 1080 };
+/** The Board an empty 1024×768 window shows: less the 48 px top bar and the 24 px backdrop. */
+const fittedBoard = { width: 1000, height: 696 };
 
 describe('clampToBoard', () => {
   it('leaves a rect that is inside the Board as it is', () => {
@@ -40,9 +42,7 @@ describe('clampToBoard', () => {
   });
 
   it('uses the Board size it is given', () => {
-    const window1024 = { width: 1000, height: 696 };
-
-    expect(clampToBoard(rect(900, 600), window1024)).toEqual(rect(780, 526));
+    expect(clampToBoard(rect(900, 600), fittedBoard)).toEqual(rect(780, 526));
   });
 
   it('keeps a Note at the minimum size in the top-left of a Board smaller than a Note', () => {
@@ -178,9 +178,7 @@ describe('placeCentredAt', () => {
   });
 
   it('pushes it inside the Board it is given', () => {
-    const window1024 = { width: 1000, height: 696 };
-
-    expect(placeCentredAt({ x: 995, y: 690 }, size, window1024)).toEqual(rect(780, 526));
+    expect(placeCentredAt({ x: 995, y: 690 }, size, fittedBoard)).toEqual(rect(780, 526));
   });
 
   it('rounds to whole pixels', () => {
@@ -204,7 +202,7 @@ describe('placeInVisibleBoard', () => {
     );
   });
 
-  it('ignores the backdrop when the window is larger than the Board', () => {
+  it('ignores the view past the Board, over the backdrop', () => {
     const largeView = { x: 0, y: 0, width: 2560, height: 1400 };
 
     expect(placeInVisibleBoard(largeView, size, [], board)).toEqual(rect(850, 455));
@@ -311,11 +309,12 @@ describe('placeInVisibleBoard', () => {
   });
 
   it('stops at the edge of the Board it is given', () => {
-    const fitted = { width: 1000, height: 696 };
     const wholeView = { x: 0, y: 0, width: 1024, height: 720 };
 
-    expect(placeInVisibleBoard(wholeView, size, [], fitted)).toEqual(rect(390, 263));
-    expect(placeInVisibleBoard(wholeView, size, [rect(390, 263)], fitted)).toEqual(rect(414, 287));
+    expect(placeInVisibleBoard(wholeView, size, [], fittedBoard)).toEqual(rect(390, 263));
+    expect(placeInVisibleBoard(wholeView, size, [rect(390, 263)], fittedBoard)).toEqual(
+      rect(414, 287),
+    );
   });
 
   it('stops in the corner when there is no room to jump back', () => {
