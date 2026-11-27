@@ -1,0 +1,68 @@
+{
+  "title": "README: bonus numbering and a short architecture section",
+  "lede": "No runtime code changes. A mock review against the brief found three README problems: bonuses III and IV were numbered the other way round from the brief, 'Not included' said the bonuses were still being added, and the Architecture section was about 1,760 words where the brief asks for 2 or 3 paragraphs. The detail now lives in `docs/architecture.md`.",
+  "files": [
+    {
+      "path": "README.md",
+      "question": "What does a reviewer read first?",
+      "summary": "The feature table numbered as in the brief, a finished 'Not included', and three paragraphs plus the diagram for the architecture.",
+      "owns": "The short version a reviewer grades: what's built, how to run it, and the architecture in three paragraphs.",
+      "never": "Per-module responsibilities: those are in `docs/architecture.md`.",
+      "tested": "Not tested: check the table and the diagram render in GitHub's file view."
+    },
+    {
+      "path": "docs/architecture.md",
+      "question": "Where did the detail go?",
+      "summary": "The former Architecture section, unchanged apart from a new heading, sections promoted one level, and ADR links made relative to `docs/`.",
+      "owns": "What each module owns and why: Press, Drag engine, stores, keyboard, Board and Local copy, testing.",
+      "never": "Anything not already in the README before this PR.",
+      "tested": "Not tested: the ADR links were rewritten from `docs/adr/` to `adr/`."
+    }
+  ],
+  "flow": [],
+  "scenarios": [
+    {
+      "name": "A reviewer reads the README",
+      "steps": [
+        {
+          "title": "They check the bonuses against the brief",
+          "explain": "The brief numbers local storage III and colours IV, so the rows are swapped to match. 'Not included' now states that all 4 features and bonuses I to IV are built, instead of saying the bonuses are being added one at a time.",
+          "run": [
+            {
+              "file": "README.md",
+              "from": "Bonus III: save to localStorage",
+              "to": "Bonus IV: note colours"
+            },
+            { "file": "README.md", "from": "all 4 are built, along with bonuses I to IV" }
+          ]
+        },
+        {
+          "title": "They read the Architecture section",
+          "explain": "Three paragraphs, one for each claim: one Drag engine specialised by pure **Drag kinds**, small stores read through selectors so one Note re-renders, and a **Local copy** that follows the Notes store. The last paragraph links to the detailed page. The diagram from the previous PR is kept as it is.",
+          "run": [
+            {
+              "file": "README.md",
+              "from": "## Architecture",
+              "to": "interactive code walkthrough"
+            },
+            {
+              "file": "docs/architecture.md",
+              "from": "# Architecture in detail",
+              "to": "The README gives the short version"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The diagram stays in the README",
+      "detail": "Three paragraphs plus a diagram is still short, and the diagram was simplified for the README in the previous PR. The counter-argument: a strict reading of 'a short description (2-3 paragraphs)' would move it too."
+    },
+    {
+      "title": "Every sentence was checked against the code, but not rendered",
+      "detail": "I didn't open the README or `docs/architecture.md` on GitHub to see them render; please do."
+    }
+  ]
+}

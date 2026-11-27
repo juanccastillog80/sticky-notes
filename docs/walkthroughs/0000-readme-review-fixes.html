@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"README: bonus numbering and a short architecture section","lede":"No runtime code changes. A mock review against the brief found three README problems: bonuses III and IV were numbered the other way round from the brief, 'Not included' said the bonuses were still being added, and the Architecture section was about 1,760 words where the brief asks for 2 or 3 paragraphs. The detail now lives in `docs/architecture.md`.","files":[{"path":"README.md","question":"What does a reviewer read first?","summary":"The feature table numbered as in the brief, a finished 'Not included', and three paragraphs plus the diagram for the architecture.","owns":"The short version a reviewer grades: what's built, how to run it, and the architecture in three paragraphs.","never":"Per-module responsibilities: those are in `docs/architecture.md`.","tested":"Not tested: check the table and the diagram render in GitHub's file view.","lines":["# Sticky Notes","","A single-page desktop app for placing, arranging and resizing sticky notes on a board. It is written in React and TypeScript, with no component libraries.","","**Live app:** https://juanccastillog80.github.io/sticky-notes/ (deployed from `main` on every merge)","","## What it does","","| Feature                                              | Status                                                                                                  |","| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |","| 1. Create a note of a given size at a given position | Done: S/M/L add a Note and set the Current size; double-click empty Board adds one at the pointer       |","| 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges               |","| 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                   |","| 4. Remove a note on a trash zone                     | Done: drop a Note so it overlaps the bottom-right Trash zone; Undo restores it                          |","| Bonus I: edit note text                              | Done: click a Note to type, caret where you clicked; a new Note opens ready to type                     |","| Bonus II: bring to front                             | Done: pressing a Note Raises it                                                                         |","| Bonus III: save to localStorage                      | Done: the Board survives a reload; changes are saved 300 ms after the last one, and when the tab closes |","| Bonus IV: note colours                               | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note  |","| Extra (not in the brief): × on each Note             | Deletes the Note in one click, with Undo. Quicker than dragging it across the Board                     |","","**Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Moving and resizing from the keyboard aren't built. In Safari, Tab skips buttons unless \"Press Tab to highlight each item on a webpage\" is on (Settings → Advanced), or use Option+Tab.","","**Starting over.** The Board is kept in this browser's localStorage. To clear it, clear the site's data (DevTools → Application → Storage → Clear site data) and reload, or use a private window, which starts empty and forgets the Board when it closes.","","The words used here and in the code (Board, Note, Drag, Drag kind, Preview, Dead zone, Raise…) are defined in [`GLOSSARY.md`](GLOSSARY.md).","","### Not included","","The brief asks for 3 of the 4 features; all 4 are built, along with bonuses I to IV.","","- **REST saving (bonus V)** is not built. Notes are kept only in this browser's Local copy.","","## Setup","","Requires Node 26 (see `.nvmrc`).","","```sh","npm ci","npx playwright install chromium firefox   # for the browser tests","npm run dev                                # http://localhost:5173/sticky-notes/","```","","| Script                 | What it does                                                                  |","| ---------------------- | ----------------------------------------------------------------------------- |","| `npm run dev`          | Vite dev server                                                               |","| `npm run build`        | Typecheck, then production build into `dist/`                                 |","| `npm run preview`      | Serve the production build                                                    |","| `npm run typecheck`    | `tsc -b`                                                                      |","| `npm run lint`         | ESLint and Prettier check                                                     |","| `npm test`             | All tests: unit (Node) and browser (Chromium and Firefox, through Playwright) |","| `npm run test:unit`    | Unit tests only, including type-level tests                                   |","| `npm run test:browser` | Browser tests only. `BROWSERS=chrome,msedge,firefox` picks the browsers       |","| `npm run coverage`     | Unit coverage, with a 90% gate on the pure core                               |","","CI runs every check on each PR, and runs the browser tests again in Chrome, Edge and Firefox on Windows and in Chrome and Firefox on macOS. A merge to `main` deploys to GitHub Pages.","","## Architecture","","The UI is thin, and the decisions live in a pure core that never touches the DOM. One Press module (`src/press/`) decides what the pointer going down means: Raise, end Editing, start a Drag, or create a Note on a double-click. Moving and resizing share one Drag controller, written once, that talks to the DOM only through a narrow `DragIO` interface. Each Drag kind (`src/drag/kinds.ts`) is a pair of pure functions: `preview` for what you see while dragging, and `commit` for what is saved, computed from the same geometry, so what you release is exactly what you saw. During a Drag the Preview is written straight to the Note's style, and React renders nothing until release. A drop deletes the Note when its rect overlaps the Trash zone, which is the same question the zone's highlight asks.","","State lives in two small [Zustand](https://zustand.docs.pmnd.rs) stores: **notes** (position, size, text, colour, Stacking order) and **ui** (the Note being edited and its Draft text, the Current colour and size, Undo). Every action is a pure transition that keeps unchanged Notes at the same reference, and each component subscribes to only its own slice, so moving or typing in one Note re-renders that Note alone. Browser tests with `\u003cProfiler>` check this. The Board fills the window and grows only to hold Notes that reach past it ([ADR 0003](docs/adr/0003-board-fits-window.md)).","","The Board is saved to a Local copy in localStorage that follows the Notes store from outside the UI: it writes 300 ms after the last change and again on `pagehide`, and it is loaded before the first render, so a reload never flashes an empty Board ([ADR 0002](docs/adr/0002-local-copy.md)). The pure core is unit-tested in Node behind a 90% coverage gate, and the components are tested in real browsers. Each module's responsibilities are described in [`docs/architecture.md`](docs/architecture.md), and every merged PR has an [interactive code walkthrough](https://juanccastillog80.github.io/sticky-notes/walkthroughs/).","","```mermaid","flowchart LR","  subgraph UI[\"React components and DOM wiring (thin)\"]","    Comp[\"Board · Note · Toolbar\"]","    PDom[\"Press DOM side\u003cbr/>(pressDom.ts)\"]","  end","  subgraph Core[\"Pure core: unit-tested, 90% coverage gate\"]","    Press[\"Press\"]","    Ctrl[\"Drag controller\u003cbr/>+ kinds\"]","    Geo[\"geometry\"]","    NS[(\"notes store\")]","    US[(\"ui store\")]","  end","  PDom -- \"pointer, focus, click\" --> Press","  Press --> Ctrl --> Geo","  Ctrl -- \"DragIO: Preview, Trash zone\" --> PDom","  Press & Ctrl -- \"actions\" --> NS","  Press -- \"ends Editing\" --> US","  Comp -- \"actions\" --> NS & US","  NS & US -. \"selectors\" .-> Comp","  US == \"Editing ended:\u003cbr/>save Draft text\" ==> NS","```","","Solid arrows are calls, dotted arrows are selector subscriptions, and the thick arrow is the Notes store saving the Draft text whenever Editing ends.","","## Known limits","","- Notes are saved only in this browser. Syncing several tabs isn't handled: across tabs, the last save wins. If the browser blocks site data, Notes are kept in memory only, with a warning in the console.","- Browser tests run in Chromium and Firefox on every PR, and also in Chrome and Edge on real Windows and macOS runners. None are skipped or retried. Any Firefox flakiness found will be recorded here rather than silenced.","- Desktop pointer input only. Touch and pen aren't targeted, per the brief.","","## Cross-browser sign-off","","Manual pass at 1024×768 and on a large monitor, in the latest Chrome, Edge and Firefox: see [`docs/cross-browser-checklist.md`](docs/cross-browser-checklist.md)."],"added":[16,17,28,58,59,60,61,62,87]},{"path":"docs/architecture.md","question":"Where did the detail go?","summary":"The former Architecture section, unchanged apart from a new heading, sections promoted one level, and ADR links made relative to `docs/`.","owns":"What each module owns and why: Press, Drag engine, stores, keyboard, Board and Local copy, testing.","never":"Anything not already in the README before this PR.","tested":"Not tested: the ADR links were rewritten from `docs/adr/` to `adr/`.","lines":["# Architecture in detail","","The README gives the short version. This page has the full design: what each module owns, and why.","","The UI layer is thin. The decisions are made in a pure core that never touches the DOM, and that core holds them all: what a press means, how a Drag behaves, the geometry, and the state changes.","","```mermaid","flowchart LR","  subgraph UI[\"React components and DOM wiring (thin)\"]","    Comp[\"Board · Note · Toolbar\"]","    PDom[\"Press DOM side\u003cbr/>(pressDom.ts)\"]","  end","  subgraph Core[\"Pure core: unit-tested, 90% coverage gate\"]","    Press[\"Press\"]","    Ctrl[\"Drag controller\u003cbr/>+ kinds\"]","    Geo[\"geometry\"]","    NS[(\"notes store\")]","    US[(\"ui store\")]","  end","  PDom -- \"pointer, focus, click\" --> Press","  Press --> Ctrl --> Geo","  Ctrl -- \"DragIO: Preview, Trash zone\" --> PDom","  Press & Ctrl -- \"actions\" --> NS","  Press -- \"ends Editing\" --> US","  Comp -- \"actions\" --> NS & US","  NS & US -. \"selectors\" .-> Comp","  US == \"Editing ended:\u003cbr/>save Draft text\" ==> NS","```","","Solid arrows are calls. Dotted arrows are selector subscriptions, which decide what re-renders. The thick arrow is the Notes store following the UI store: however Editing ends, it saves the Draft text to the Note.","","## 1. One Press module decides what the pointer going down means","","Everything that happens when the pointer goes down is in `src/press/`, so a new Press target can't skip a rule (#51 was the × forgetting to end Editing).","","- **A pure core** (`createPress` in `src/press/press.ts`) takes three inputs: the pointer going down on a Press target (a Note's body, Grip strip or Resize handle, its ×, empty Board) or outside the Board; focus arriving on a Note, with whether it came from the keyboard; a click on a ×, with whether it was a mouse click. It owns the Raise (on a Press, and on keyboard focus only), ending Editing on a press anywhere on the Board but the edited Note (the × included, though it is no Press), a press inside text that only Raises, the Click's caret offset (carried by Editing, read once by the editor), the double-click on empty Board that creates a Note, and the window after a mouse click on a × in which presses on Notes are ignored. It is unit-tested in Node with the real stores, the real Drag controller and a fake `DragIO`.","- **The DOM side** (`src/press/pressDom.ts`), attached once by the Board in an effect, is the only module that listens on `document`: a capture-phase `pointerdown` there, and `focusin`, `click` and `dblclick` on the Board. It reads the Press target from `data-press-target`, `data-note-id` and `data-handle`, so `Note` renders markup and handles keys only. It also owns the one Drag controller and its real `DragIO`. A Note deleted while it is held (from the keyboard) ends its Drag at once.","","## 2. One Drag engine, specialised by pure Drag kinds","","Moving and resizing share everything except what they show and what they save.","","- **Lifecycle.** _Mount_: the Press module creates one controller for the Board. _Session_: a Press (already Raised by the Press module) attaches the listeners. The Dead zone then decides whether it is a Click or a Drag, moves and scrolls update the Preview, and release or cancel ends it. _Unmount_: a running Drag is cancelled.","- **No DOM in the controller.** `createDragController` (`src/drag/controller.ts`) talks to the DOM through two narrow interfaces, one for each direction. `DragIO` goes from the controller to the DOM: read scroll, the Board's size and the Board's and Trash zone's place on screen, attach listeners, write the Preview, draw the Trash zone, save through the Notes store's actions, report a Click. `DragHandlers` goes from the DOM to the controller: move, up, cancel, scroll, key. `pressDom.ts` passes the real DOM, with the pressed Note as the Preview element. The unit tests pass a recording fake.","- **Kinds are small and stateless** (`src/drag/kinds.ts`): `preview` and `commit`, over the same geometry, and nothing else: the Raise is the Press's. `preview` is pure, and `commit` saves the rect it computes the same way, through the `save` it is given (`move`, `resize`, `deleteNote`). What you release is therefore exactly what you saw. Resize was added as a second kind without changing the controller. The Trash zone belongs to the move kind: its `commit` calls `deleteNote` when the Note's Preview rect, placed on screen by the Board's origin (measured at press, less the scroll since), overlaps the zone. The zone's highlight asks the same question, so it always predicts what a release does.","- **React stays out of the hot path.** During a Drag the Preview is written straight to the Note's style. After the Raise, React renders nothing until release, when one action is called.","- **A Click starts Editing.** A Press released inside the Dead zone is a Click, which puts the caret where you clicked. A Press inside text only Raises, so typing and selecting work normally. The Grip strip always moves the Note.","","## 3. Two small stores, read through selectors","","- **Two [Zustand](https://zustand.docs.pmnd.rs) vanilla stores** with named actions, so tests and the Drag engine can read and write them outside React: `notes.getState().move(id, x, y)`. The **notes** store (`src/notes/notesStore.ts`) holds each Note's position, size, text, colour and place in the Stacking order. The **ui** store (`src/ui/uiStore.ts`) holds the Note being edited and its Draft text, the Current colour and size, and the Note that Undo would bring back. Editing's rule (Escape or pressing anywhere else ends it) lives in one place, `src/ui/editing.ts`: callers only report what happened (`startEditing`, `typed`, `pressed`, `escaped`, `deleted`, `pageHidden`), and its pure transitions decide whether Editing ends and record why (`editingEndedBy`), so `Note` puts focus back on the article only after Escape. Typing changes only the Draft text; however Editing ends, `endedDraft` hands it over and the Notes store saves it to the Note, once. Components subscribe with Zustand's `useStore(store, selector)`, wrapped as `useNotes` and `useUi`, and call actions from event handlers.","- **Re-render only what changed.** Each Notes action runs a pure transition (`transitions` in `notesStore.ts`, unit-tested on its own) that keeps every unchanged Note and the `ids` array at the same reference. A no-op returns the same state, so Zustand notifies nobody. The Board subscribes to `ids` and each Note to `notes[id]`, so moving one Note re-renders only that Note. `useIsEditing(id)` is a boolean per Note, so a change of Editing re-renders only the two Notes involved. Only the edited Note's textarea subscribes to the Draft text, so typing re-renders it alone.","- **Rules that span both stores are Notes actions.** The Notes store is given the UI store when it is created (`createStores()`); the UI store never needs the Notes store back. `createNoteAt` (double-click) and `createNoteInView` (the S/M/L buttons) give the new Note the Current colour and size, place it inside the Board's current size, and open it in Editing; the components only measure the DOM and pass plain points and rects. `deleteNote` reports the delete to Editing, which saves the Draft text, and only then records the Note for Undo, so Undo brings the typed text back. The Notes store also follows the UI store, to save the Draft text whenever Editing ends. `recolour` also sets the Current colour. A drop on the Trash zone calls `deleteNote` too, so it gets the same Undo as the ×.","- The stores reach components through a context whose value never changes, so tests can build their own. Reading it never causes a render, only subscriptions do.","- **Geometry is pure** (`src/geometry.ts`): clamping to a Board size it is given, the minimum size, resize maths, the Notes' extent and the rect overlap test. The Notes transitions and the Drag kinds share it.","","## 4. Keyboard and focus","","- Each Note's `\u003carticle>` can be focused, followed in the Tab order by its ×. Keyboard focus (`:focus-visible`) Raises the Note, but a right-button press, which also focuses it, does not (the Press module decides both).","- Enter starts Editing, and Escape returns focus to the Note. Delete deletes the Note and moves focus to the next one, so the user keeps their place.","- The × is not a Press: it never Raises or drags. After a mouse click on it deletes a Note, the Press module ignores presses on Notes for a double-click's time, so the second half can't land on the Note that was underneath. Enter or Space on a × is never ignored.","","## 5. A Board that fits the window; the Local copy","","- The Board fills the visible area below the toolbar, so an empty Board has no scrollbars at any window size. It grows only to hold Notes that reach further, which happens when the window shrinks below them: the Board then scrolls to them, and their stored position is never rewritten ([ADR 0003](adr/0003-board-fits-window.md), superseding [ADR 0001](adr/0001-fixed-scrolling-board.md)). CSS takes the larger of the visible area and the Notes' extent, so the Board follows the window on the same frame. A Drag measures the Board once at press and stays inside it, so dragging never grows the Board. A Drag adds the scroll delta, so the Note stays under the pointer while the wheel scrolls.","- `main.tsx` is the composition root. It builds the stores, loads the Local copy into them, starts saving, and only then renders, so a reload never flashes an empty Board.","- The Local copy ([ADR 0002](adr/0002-local-copy.md)) follows changes in the Notes store rather than living inside the UI: `saveLocalCopy` subscribes to it and writes the whole Board 300 ms after the last change, flushing on `pagehide`. `parseNotes` guards what is read back, so a damaged copy is discarded with a warning instead of crashing the app.","","## Testing","","The pure core (Press, controller, kinds, stores and their transitions, geometry) is unit-tested in Node, with property-based tests for the geometry, and is held to the coverage gate. Components are tested in real browsers through Playwright, including `\u003cProfiler>` tests that check moving, resizing, typing in, recolouring or deleting one Note re-renders no other.","","Each merged PR has an interactive code walkthrough, listed at https://juanccastillog80.github.io/sticky-notes/walkthroughs/. The engine is explained in [move notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0004-move-notes.html) and [resize notes](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0005-resize-notes.html), the Trash zone in [trash zone](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0006-trash-zone.html), and the keyboard in [keyboard navigation](https://juanccastillog80.github.io/sticky-notes/walkthroughs/0033-keyboard-navigation.html)."],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72]}],"flow":[],"scenarios":[{"name":"A reviewer reads the README","steps":[{"title":"They check the bonuses against the brief","explain":"The brief numbers local storage III and colours IV, so the rows are swapped to match. 'Not included' now states that all 4 features and bonuses I to IV are built, instead of saying the bonuses are being added one at a time.","run":[{"file":"README.md","start":16,"end":17},{"file":"README.md","start":28,"end":28}]},{"title":"They read the Architecture section","explain":"Three paragraphs, one for each claim: one Drag engine specialised by pure **Drag kinds**, small stores read through selectors so one Note re-renders, and a **Local copy** that follows the Notes store. The last paragraph links to the detailed page. The diagram from the previous PR is kept as it is.","run":[{"file":"README.md","start":56,"end":62},{"file":"docs/architecture.md","start":0,"end":2}]}]}],"notes":[{"title":"The diagram stays in the README","detail":"Three paragraphs plus a diagram is still short, and the diagram was simplified for the README in the previous PR. The counter-argument: a strict reading of 'a short description (2-3 paragraphs)' would move it too."},{"title":"Every sentence was checked against the code, but not rendered","detail":"I didn't open the README or `docs/architecture.md` on GitHub to see them render; please do."}],"omitted":{}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
