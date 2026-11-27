@@ -22,22 +22,16 @@ describe('create', () => {
     expect(next.topZ).toBe(3);
   });
 
-  it('pushes a Note past the edge fully inside the Board', () => {
+  it('keeps a Note off negative coordinates, but never pulls it back from the far edges', () => {
     const next = create(makeState(), { x: 1900, y: -20 });
 
-    expect(next.notes[testId('new')]).toMatchObject({ x: 1700, y: 0 });
+    expect(next.notes[testId('new')]).toMatchObject({ x: 1900, y: 0 });
   });
 
   it('rounds to whole pixels', () => {
     const next = create(makeState(), { x: 10.4, y: 20.6, width: 200.5, height: 150.2 });
 
     expect(next.notes[testId('new')]).toMatchObject({ x: 10, y: 21, width: 201, height: 150 });
-  });
-
-  it('stays inside the Board when rounding the size up', () => {
-    const next = create(makeState(), { x: 1699.5, width: 220.5 });
-
-    expect(next.notes[testId('new')]).toMatchObject({ x: 1699, width: 221 });
   });
 
   it('keeps the other Notes by reference', () => {
@@ -68,10 +62,10 @@ describe('load', () => {
     expect(load(makeState(a, b))).toEqual(makeState());
   });
 
-  it('commits each rect inside the Board in whole pixels', () => {
+  it('keeps each stored position however far it is, in whole pixels', () => {
     const next = load(makeState(), { ...a, x: 5000, y: 20.6 });
 
-    expect(next.notes[a.id]).toMatchObject({ x: 1700, y: 21 });
+    expect(next.notes[a.id]).toMatchObject({ x: 5000, y: 21 });
   });
 
   it('lists an id that arrives twice once', () => {
@@ -140,10 +134,10 @@ describe('resize', () => {
     expect(next.notes[a.id]).toEqual({ ...a, x: 80, y: 90, width: 300, height: 200 });
   });
 
-  it('keeps a Note at least the minimum size and inside the Board', () => {
+  it('keeps a Note at least the minimum size, wherever it is', () => {
     const next = resize(makeState(a), { x: 1900, y: 10, width: 5, height: 5 });
 
-    expect(next.notes[a.id]).toMatchObject({ x: 1780, y: 10, width: 140, height: 100 });
+    expect(next.notes[a.id]).toMatchObject({ x: 1900, y: 10, width: 140, height: 100 });
   });
 
   it('keeps ids and the other Notes by reference', () => {
@@ -173,10 +167,10 @@ describe('move', () => {
     expect(next.notes[a.id]).toEqual({ ...a, x: 300, y: 250 });
   });
 
-  it('stops the Note at the Board edges', () => {
+  it('stops the Note at the top and left edges only: a Drag clamps to the far ones', () => {
     const next = move(makeState(a), 5000, -40);
 
-    expect(next.notes[a.id]).toMatchObject({ x: 1920 - a.width, y: 0 });
+    expect(next.notes[a.id]).toMatchObject({ x: 5000, y: 0 });
   });
 
   it('rounds to whole pixels', () => {

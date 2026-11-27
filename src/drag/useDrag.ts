@@ -1,5 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { Point, Rect } from '../geometry';
+import { measureBoardSize } from '../BoardDomContext';
 import { useStores } from '../StoresContext';
 import { createDragController, type DragController, type DragHandlers } from './controller';
 import { isInText, isPress } from './press';
@@ -8,7 +9,7 @@ import type { DragKind } from './kinds';
 export interface DragOptions {
   /** The Board's scroll container, which can scroll mid-drag. */
   readonly scrollerRef: RefObject<HTMLElement | null>;
-  /** The Board, whose top-left a kind that can delete measures, to place the Note on screen. */
+  /** The Board: its size at press bounds every Drag, and its top-left places a Note on screen for the Trash zone. */
   readonly boardRef: RefObject<HTMLElement | null>;
   /** The Trash zone, which only a kind that can delete measures and draws on. */
   readonly trashRef: RefObject<HTMLElement | null>;
@@ -88,6 +89,9 @@ export function useDrag(previewRef: RefObject<HTMLElement | null>, options: Drag
       boardOrigin() {
         const rect = latest.current.boardRef.current?.getBoundingClientRect();
         return { x: rect?.x ?? 0, y: rect?.y ?? 0 };
+      },
+      boardSize() {
+        return measureBoardSize(latest.current.boardRef.current);
       },
       writeTrash(state) {
         const zone = latest.current.trashRef.current;

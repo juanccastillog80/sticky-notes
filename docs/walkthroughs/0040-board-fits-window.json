@@ -1,0 +1,317 @@
+{
+  "issue": 40,
+  "title": "Board fits the window and grows with its Notes",
+  "lede": "Before this PR, the Board was a fixed 1920×1080, so a 1024×768 window had scrollbars before a single Note existed. Now the Board is **the larger of the visible area and the Notes' extent**. CSS works that out, so it follows the window on the same frame. A Drag **measures the Board once at press** and keeps the Note inside it, so dragging never grows the Board. The Notes store no longer clamps to any far edge, so shrinking the window never rewrites a stored position (ADR 0003, superseding ADR 0001).",
+  "files": [
+    {
+      "path": "src/components/Board.module.css",
+      "question": "What decides how big the Board is?",
+      "summary": "`min-width: 100%` and `min-height: 100%` of the scroll container, with the Notes' extent set inline as `width` and `height`. Layout takes the larger of the two.",
+      "owns": "The rule \"the visible area, or the Notes' extent if that is larger\".",
+      "never": "Needs JavaScript to follow a window resize: no `ResizeObserver`, no re-render.",
+      "tested": "`src/board.browser.test.tsx`: no scrollbars on an empty Board at 1024×768 and 1920×1080, and the Board grows at once when the window grows."
+    },
+    {
+      "path": "src/components/Board.tsx",
+      "question": "Where does the Notes' extent come from?",
+      "summary": "Two `useNotes` selectors return the extent's width and height as numbers and set them inline. The double-click handler measures the Board to place its Note.",
+      "owns": "Re-rendering the Board only when the furthest right or bottom edge changes.",
+      "never": "Reads the window size: CSS does that.",
+      "tested": "The shrink test: with the window smaller than a Note's far corner, the Board is exactly 980×670, the Note's edges."
+    },
+    {
+      "path": "src/geometry.ts",
+      "question": "How are rects kept inside a Board whose size changes?",
+      "summary": "`clampToBoard`, `toCommittedRect`, `resizeRect`, `placeCentredAt` and `placeInVisibleBoard` take the Board size as a parameter. `notesExtent` measures the Notes. `toStoredRect` is the store's window-independent rule.",
+      "owns": "All the clamping maths, including a Board smaller than a Note (the Note keeps 140×100 at the top-left).",
+      "never": "Holds a Board size of its own: `BOARD_SIZE` is gone.",
+      "tested": "`src/geometry.test.ts`: every function with a 1920×1080 and a 1000×696 Board, a Board smaller than a Note, and the property tests."
+    },
+    {
+      "path": "src/BoardDomContext.ts",
+      "question": "How is the Board measured when a size is needed?",
+      "summary": "`measureBoardSize` reads the rendered Board and rounds down to whole pixels.",
+      "owns": "Turning the CSS-decided size into a whole-pixel `Size`.",
+      "never": "Measures anything except at press or at a create.",
+      "tested": "Through the browser tests: a move or resize at the edge stops at exactly 1000×696."
+    },
+    {
+      "path": "src/drag/useDrag.ts",
+      "question": "Where does a Drag get the Board size?",
+      "summary": "The real `io.boardSize()` calls `measureBoardSize` on the Board.",
+      "owns": "The DOM read behind `DragIO.boardSize`.",
+      "never": "Decides when to read it: the controller does.",
+      "tested": "Excluded from coverage (DOM wiring). The browser edge tests run through it."
+    },
+    {
+      "path": "src/drag/controller.ts",
+      "question": "When is the Board size read during a Drag?",
+      "summary": "Once, at press, into the session. Every Preview and the commit get it through `context(s)`.",
+      "owns": "The press-time snapshot, so a window resized mid-drag doesn't change what the Drag allows.",
+      "never": "Knows how big the Board is: it asks `io`.",
+      "tested": "`src/drag/controller.test.ts`: a resize stops at the Board measured at press, even after the fake Board grows mid-drag."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "How do move and resize use it?",
+      "summary": "`DragContext` has a `board`. `moved` clamps with `toCommittedRect(…, board)`; a resize calls `resizeRect(…, board)`.",
+      "owns": "Preview and commit using the same Board size, so what you release is what you saw.",
+      "never": "Measures anything.",
+      "tested": "`src/drag/kinds.test.ts`, with a Board in every context."
+    },
+    {
+      "path": "src/components/NewNoteButtons.tsx",
+      "question": "Where does an S/M/L Note go now?",
+      "summary": "`createInView` measures the Board at the click and passes it to `placeInVisibleBoard`.",
+      "owns": "Placing a new Note inside the Board as it is at the click.",
+      "never": "Grows the Board: the placement stays inside the measured size.",
+      "tested": "`src/App.browser.test.tsx`: the per-size placement tests, and the cascade test."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Why doesn't the store clamp to the Board any more?",
+      "summary": "Its transitions use `toStoredRect`: whole pixels, at least 140×100, no negative position, but no far edge.",
+      "owns": "Keeping a stored position as it is, whatever the window size.",
+      "never": "Knows the Board's size: a Drag and a create clamp before they save.",
+      "tested": "`src/notes/notesStore.test.ts`: loading a Note at x 5000 keeps x 5000."
+    },
+    {
+      "path": "src/board.browser.test.tsx",
+      "question": "How do the tests prove the acceptance criteria?",
+      "summary": "Real windows in Chromium and Firefox: empty Board sizes, Notes that fit, growing and shrinking the window, and real mouse drags at the edges.",
+      "owns": "Every acceptance criterion in #40.",
+      "never": "Pushes a Note into the bottom-right corner: the Trash zone is there, so each edge is tested on its own.",
+      "tested": "Is the test."
+    }
+  ],
+  "flow": [
+    ["src/components/Board.tsx", "src/components/Board.module.css"],
+    ["src/drag/controller.ts", "src/drag/useDrag.ts", "src/BoardDomContext.ts"],
+    ["src/drag/controller.ts", "src/drag/kinds.ts", "src/geometry.ts"],
+    ["src/drag/kinds.ts", "src/notes/notesStore.ts", "src/geometry.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "The window shrinks below a stored Note",
+      "steps": [
+        {
+          "title": "the Local copy loads a Note at (760, 500)",
+          "explain": "`load` passes each Note through `toStoredRect`, which rounds and keeps the Note off negative coordinates but has **no far edge**. Before this PR it clamped to 1920×1080. With a window-sized Board, a far-edge clamp here would rewrite the saved position every time the app opened in a small window.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "const note = { ...raw, ...toStoredRect(raw) };"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "export function toStoredRect(rect: Rect): Rect {",
+              "to": "height: Math.max(height, MIN_NOTE_SIZE.height),"
+            }
+          ]
+        },
+        {
+          "title": "the Board renders with the Notes' extent",
+          "explain": "Each selector returns a number, so the Board re-renders only when the furthest edge moves, not on every Note change. The extent is (980, 670), the Note's right and bottom edges.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const extentWidth = useNotes(",
+              "to": "const extentHeight = useNotes("
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "export function notesExtent(notes: Iterable<Rect>): Size {",
+              "to": "return { width, height };"
+            },
+            {
+              "file": "src/components/Board.tsx",
+              "from": "style={{ width: extentWidth, height: extentHeight }}"
+            }
+          ]
+        },
+        {
+          "title": "the window goes from 1024×768 to 800×600",
+          "explain": "No JavaScript runs. In the large window, `min-width: 100%` (1000×696) beat the inline 980×670. In the small one, the visible area is smaller than the Note's extent, so the inline size wins, the Board is exactly 980×670, and the scroll container gets scrollbars. The test checks that the Note's stored position is still (760, 500), and that it is fully visible after scrolling to the end.",
+          "run": [
+            {
+              "file": "src/components/Board.module.css",
+              "from": "min-width: 100%;",
+              "to": "min-height: 100%;"
+            },
+            {
+              "file": "src/board.browser.test.tsx",
+              "from": "it('shrinking the window keeps a Note where it is stored, and the Board scrolls to it'",
+              "to": "expect(note.bottom).toBeLessThanOrEqual(view.top + scroller.clientHeight);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Drag a Note past the right edge of the visible Board",
+      "steps": [
+        {
+          "title": "pointerdown on the Note",
+          "explain": "The session takes the Board's size **once**, here. `measureBoardSize` rounds down, because `toCommittedRect` rounds before it clamps: a fractional bound could bring a fraction back, or let the Note reach half a pixel past the Board and add a scrollbar.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "board: io.boardSize(),"
+            },
+            {
+              "file": "src/drag/useDrag.ts",
+              "from": "boardSize() {",
+              "to": "return measureBoardSize(latest.current.boardRef.current);"
+            },
+            {
+              "file": "src/BoardDomContext.ts",
+              "from": "export function measureBoardSize(board: Element | null): Size {",
+              "to": "return { width: Math.floor(rect?.width ?? 0), height: Math.floor(rect?.height ?? 0) };"
+            }
+          ]
+        },
+        {
+          "title": "pointermove, 250 px to the right",
+          "explain": "Every move builds the context from the session, so the Preview uses the press-time size. `moved` clamps the shifted rect to it: x stops at 1000 − 220 = 780.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "function context(s: Session): DragContext {",
+              "to": "board: s.board,"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "io.writePreview(s.preview(d, ctx), s.from);"
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "function moved(from: Rect, delta: Point, { board }: DragContext): Rect {",
+              "to": "return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y }, board);"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "export function clampToBoard(rect: Rect, board: Size): Rect {",
+              "to": "y: clamp(rect.y, 0, Math.max(board.height - height, 0)),"
+            }
+          ]
+        },
+        {
+          "title": "pointerup",
+          "explain": "The commit calls the same `moved` with the same context, so it saves (780, 100), exactly the Preview. The store's `move` passes it through `toStoredRect`, which changes nothing here. Because the Note never went past the Board, the extent doesn't grow, and the test checks the Board is still 1000×696.",
+          "run": [
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "const { x, y } = moved(from, delta, ctx);"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "const { x, y } = toStoredRect({ ...note, x: to.x, y: to.y });"
+            },
+            {
+              "file": "src/board.browser.test.tsx",
+              "from": "it('a Note cannot be moved past the visible Board edge'",
+              "to": "expect(sizeOf(board)).toEqual({ width: 1000, height: 696 });"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The window grows during a resize",
+      "steps": [
+        {
+          "title": "pointerdown on the se handle, then the window grows",
+          "explain": "The Board grows on the next frame (CSS), but the session already holds the size from press. The resize kind reads `board` from the context, so it keeps stopping at the old edge. This is deliberate: what a Drag allows never changes under the pointer. Not run in a browser; the controller unit test fakes the growth.",
+          "run": [
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "preview: (from, delta, { board }) => resizeRect(from, delta, handle, board),"
+            },
+            {
+              "file": "src/geometry.ts",
+              "from": "Math.max(board.width - x, MIN_NOTE_SIZE.width),"
+            }
+          ]
+        },
+        {
+          "title": "Escape instead of pointerup",
+          "explain": "Nothing is saved, as before: the Board size changed nothing about cancelling.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "if (e.key === 'Escape') end(false);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Click S, M or L, or double-click, near the edge",
+      "steps": [
+        {
+          "title": "click on M",
+          "explain": "A new Note is placed inside the Board as it is now, measured at the click. Before, the cascade could run out to 1920×1080 even in a small window; now it stops at the edge of the visible Board.",
+          "run": [
+            {
+              "file": "src/components/NewNoteButtons.tsx",
+              "from": "const board = measureBoardSize(boardRef.current);",
+              "to": "notes.getState().createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));"
+            }
+          ]
+        },
+        {
+          "title": "double-click on empty Board",
+          "explain": "The same measurement, from the Board that was double-clicked.",
+          "run": [
+            {
+              "file": "src/components/Board.tsx",
+              "from": "const board = measureBoardSize(event.currentTarget);",
+              "to": "notes.getState().createNote(placeCentredAt(pointer, size, board));"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "CSS instead of the issue's ResizeObserver",
+      "detail": "The issue asked to watch the scroll container with a `ResizeObserver`. CSS `min-width`/`min-height: 100%` gives the same rule on the same frame, with no measure-then-render round trip and no fractional pixel that could add a scrollbar. JavaScript only needs the size at press or at a create, and reads it then. Counter-argument: the size isn't in a store, so a future feature that needs it reactively would have to add the observer after all."
+    },
+    {
+      "title": "The visible area is the scroll container less the 24 px backdrop strip",
+      "detail": "The issue said \"the scroll container's client size\". The existing padding (`--board-end-gap`) stays, so the Board stops 24 px short on the right and bottom and the edge line stays visible. The empty hint and the Trash zone use the same strip."
+    },
+    {
+      "title": "While the Board is grown by a far Note, any Note can be dragged that far",
+      "detail": "\"Clamped to the Board's current size\" means the extent when a Note sits past the window. Dragging the far Note back in shrinks the Board again. Recorded in ADR 0003."
+    },
+    {
+      "title": "Nothing bounds a stored position",
+      "detail": "A hand-edited Local copy with a Note at x 10,000,000 makes a Board that wide: `parseNotes` checks only that numbers are finite. Not in the spec; recorded in ADR 0003."
+    },
+    {
+      "title": "`placeCentredAt` also takes the Board size",
+      "detail": "Not listed in the issue, but `placeInVisibleBoard` and the double-click both go through it."
+    }
+  ],
+  "omitted": {
+    "GLOSSARY.md": "The Board entry now says it fills the visible area and grows to hold Notes.",
+    "README.md": "Section 4 describes the fitted Board and links ADR 0003.",
+    "docs/adr/0001-fixed-scrolling-board.md": "Marked superseded.",
+    "docs/adr/0003-board-fits-window.md": "The decision this walkthrough explains.",
+    "docs/cross-browser-checklist.md": "Rows for no scrollbars, growing and shrinking the window, and the edge stops.",
+    "src/App.browser.test.tsx": "Scrolling tests load `farCornerNote` so the Board is larger than the window.",
+    "src/components/EmptyHint.module.css": "The hint is inset by the backdrop strip, so it centres on the empty Board.",
+    "src/components/EmptyHint.tsx": "No longer reads `BOARD_SIZE`.",
+    "src/components/TrashZone.module.css": "The Board is never smaller than the window, so the zone's offset is just the scrollbars, the strip and 14 px.",
+    "src/components/TrashZone.tsx": "No longer sets the Board size as CSS variables.",
+    "src/drag.browser.test.tsx": "The mid-drag scroll test loads `farCornerNote`.",
+    "src/drag/controller.test.ts": "The fake `io` has a `boardSize` the test can change mid-drag.",
+    "src/drag/kinds.test.ts": "Every context has a Board.",
+    "src/geometry.test.ts": "Every call passes a Board size, plus the new cases.",
+    "src/notes/notesStore.test.ts": "Far-edge clamping expectations replaced by \"kept as stored\".",
+    "src/trash.browser.test.tsx": "Loads `farCornerNote` so the Board scrolls and a Note can reach the zone.",
+    "test/factories.ts": "Adds `farCornerNote`."
+  }
+}

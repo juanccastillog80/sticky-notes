@@ -1,4 +1,4 @@
-import type { Point, Rect } from '../geometry';
+import type { Point, Rect, Size } from '../geometry';
 import type { DragContext, DragKind, DragSave } from './kinds';
 
 /** How far a press must travel before it becomes a Drag. Inside it, a release is a click. */
@@ -53,6 +53,8 @@ export interface DragIO {
   trashRect: () => Rect | null;
   /** The Board's top-left in client coordinates. Read once per Press, by a kind that can delete. */
   boardOrigin: () => Point;
+  /** The Board's size now, in whole pixels. Read once per Press: the Drag keeps the Note inside it. */
+  boardSize: () => Size;
   /** Edge-triggered: called only when the state changes, and only for a kind that can delete. */
   writeTrash: (state: TrashState) => void;
 }
@@ -67,6 +69,8 @@ interface Session {
   readonly trash: Rect | null;
   /** The Board's top-left on screen, measured at press. A scroll since moves it the other way. */
   readonly pressBoardOrigin: Point;
+  /** Measured at press. The window resizing mid-drag doesn't change what the Drag allows. */
+  readonly board: Size;
   /** Last written to the DOM. */
   trashState: TrashState;
   readonly from: Rect;
@@ -140,6 +144,7 @@ export function createDragController(io: DragIO): DragController {
     return {
       trash: s.trash,
       boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },
+      board: s.board,
     };
   }
 
@@ -229,6 +234,7 @@ export function createDragController(io: DragIO): DragController {
         overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),
         trash: overTrash ? io.trashRect() : null,
         pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },
+        board: io.boardSize(),
         trashState: 'quiet',
         from,
         pointerId: e.pointerId,

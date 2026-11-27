@@ -28,6 +28,8 @@ function setup() {
   // The Board's top-left on screen at press. With it, the Note (Board 100, 100) is on
   // screen at (10, 10), the default press point, so the Note's top-left follows the pointer.
   const boardOrigin: Point = { x: -90, y: -90 };
+  // The Board's size, read at press: large enough for the Trash zone tests.
+  let board = { width: 1920, height: 1080 };
   let attached: DragHandlers | null = null;
 
   const io: DragIO = {
@@ -46,6 +48,7 @@ function setup() {
     click: (pointer) => calls.push({ call: 'click', pointer }),
     trashRect: () => trash,
     boardOrigin: () => boardOrigin,
+    boardSize: () => board,
     writeTrash: (state) => calls.push({ call: 'writeTrash', state }),
   };
   const controller = createDragController(io);
@@ -90,6 +93,10 @@ function setup() {
       signal((h) => {
         h.scroll();
       });
+    },
+    /** The window resizes, so the Board measures `size` from now on. */
+    resizeBoard: (size: { width: number; height: number }) => {
+      board = size;
     },
     of,
     /** What the Drags saved: every save except the Raise each Press makes. */
@@ -407,6 +414,24 @@ describe('moveKind', () => {
 
     expect(shown).toMatchObject({ x: 1920 - t.note.width, y: 0 });
     expect(t.commits()).toEqual([{ call: 'save', save: ['move', t.note.id, shown?.x, shown?.y] }]);
+  });
+});
+
+describe('a resize', () => {
+  it('stops at the edges of the Board measured at press, even if the window grows mid-drag', () => {
+    const t = setup();
+    t.resizeBoard({ width: 1000, height: 696 });
+    t.pressResize(10, 10);
+    t.resizeBoard({ width: 3000, height: 2000 });
+    t.move(5000, 5000);
+    t.up(5000, 5000);
+
+    expect(t.commits()).toEqual([
+      {
+        call: 'save',
+        save: ['resize', t.note.id, { x: 100, y: 100, width: 900, height: 596 }],
+      },
+    ]);
   });
 });
 

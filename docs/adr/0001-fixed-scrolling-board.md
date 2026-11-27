@@ -1,5 +1,7 @@
 # Fixed-size scrolling Board with a window-pinned Trash zone
 
+**Status:** superseded by [ADR 0003](0003-board-fits-window.md). The Board now fits the window and grows with its Notes. The window-pinned Trash zone stays.
+
 The Board has a fixed size of 1920×1080 CSS px and sits inside its own scroll container below the toolbar. It does not follow the window size. The Trash zone is pinned to the corner of the visible area, so it never scrolls. With fixed bounds, a Note's stored position can never become invalid: shrinking the window only puts Notes off-screen, never past the Board edge, so nothing is clamped or rewritten on resize. Pinning the Trash zone keeps it always visible, and its on-screen rectangle stays stable during a Drag.
 
 ## Considered Options

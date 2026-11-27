@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from 'vitest';
 import { commands, page, type Locator } from 'vitest/browser';
-import { makeNote, testId } from '../test/factories';
+import { farCornerNote, makeNote, testId } from '../test/factories';
 import { drag, pointIn, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 
@@ -14,7 +14,8 @@ const big = makeNote({ id: testId('big'), x: 100, y: 300, width: 400, height: 30
 
 async function setup() {
   const { screen, stores } = await renderApp();
-  stores.notes.getState().load([a, b, big]);
+  // The far Note holds the Board at 1920×1080, so it scrolls and a Note can reach the zone.
+  stores.notes.getState().load([a, b, big, farCornerNote]);
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(1)).toBeVisible();
   const zone = screen.getByText('Drop to delete').element().parentElement;
@@ -175,12 +176,12 @@ it('a double-click on the zone creates nothing', async () => {
 
   await screen.getByText('Drop to delete').dblClick();
 
-  expect(stores.notes.getState().ids).toEqual([a.id, b.id, big.id]);
+  expect(stores.notes.getState().ids).toEqual([a.id, b.id, big.id, farCornerNote.id]);
 });
 
 it.each([
   ['scrolled all the way to the bottom-right', 1024, 768],
-  ['in a window larger than the Board', 2400, 1400],
+  ['in a large window', 2400, 1400],
 ])('stays over the Board when %s', async (_, width, height) => {
   await page.viewport(width, height);
   const { zone, scroller } = await setup();

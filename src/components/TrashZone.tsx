@@ -1,6 +1,5 @@
-import { useLayoutEffect, type CSSProperties } from 'react';
+import { useLayoutEffect } from 'react';
 import { useBoardDom } from '../BoardDomContext';
-import { BOARD_SIZE } from '../geometry';
 import styles from './TrashZone.module.css';
 
 /**
@@ -37,18 +36,7 @@ export function TrashZone() {
 
   return (
     // Hidden from assistive technology: it is a pointer-only target. The × deletes from the keyboard.
-    <div
-      ref={trashRef}
-      aria-hidden="true"
-      className={styles.zone}
-      data-state="quiet"
-      style={
-        {
-          '--board-width': `${String(BOARD_SIZE.width)}px`,
-          '--board-height': `${String(BOARD_SIZE.height)}px`,
-        } as CSSProperties
-      }
-    >
+    <div ref={trashRef} aria-hidden="true" className={styles.zone} data-state="quiet">
       <svg
         className={styles.icon}
         viewBox="0 0 24 24"

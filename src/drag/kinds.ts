@@ -5,6 +5,7 @@ import {
   type Edges,
   type Point,
   type Rect,
+  type Size,
 } from '../geometry';
 import type { Note } from '../notes/note';
 import type { NotesActions } from '../notes/notesStore';
@@ -15,6 +16,8 @@ export interface DragContext {
   readonly trash: Rect | null;
   /** The Board's top-left in client coordinates now: where it was at press, less the scroll since. */
   readonly boardOrigin: Point;
+  /** The Board's size, measured at press: a Drag keeps the Note inside it. */
+  readonly board: Size;
 }
 
 /** The Notes store's actions a Drag saves through. A drop on the Trash zone is a `deleteNote`, for Undo. */
@@ -35,8 +38,8 @@ export interface DragKind<From extends Rect> {
 }
 
 /** The rect a move shows, which is exactly the rect it saves. */
-function moved(from: Rect, delta: Point): Rect {
-  return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y });
+function moved(from: Rect, delta: Point, { board }: DragContext): Rect {
+  return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y }, board);
 }
 
 /** A Press Raises its Note at once, whatever it turns into, so a dragged Note never slides under others. */
@@ -50,9 +53,10 @@ function raise(from: Note, save: DragSave) {
  * far edge is deleted as soon as any part of it reaches the zone. The highlight and the
  * release both ask this, so the highlight always predicts what a release does.
  */
-function noteOverTrash(from: Rect, delta: Point, { trash, boardOrigin }: DragContext): boolean {
+function noteOverTrash(from: Rect, delta: Point, ctx: DragContext): boolean {
+  const { trash, boardOrigin } = ctx;
   if (trash === null) return false;
-  const shown = moved(from, delta);
+  const shown = moved(from, delta, ctx);
   return intersects({ ...shown, x: shown.x + boardOrigin.x, y: shown.y + boardOrigin.y }, trash);
 }
 
@@ -65,7 +69,7 @@ export const moveKind: DragKind<Note> = {
       save.deleteNote(from.id);
       return;
     }
-    const { x, y } = moved(from, delta);
+    const { x, y } = moved(from, delta, ctx);
     save.move(from.id, x, y);
   },
 };
@@ -86,9 +90,9 @@ export type ResizeHandle = (typeof RESIZE_HANDLES)[number];
 function resizeKind(handle: ResizeHandle): DragKind<Note> {
   return {
     press: raise,
-    preview: (from, delta) => resizeRect(from, delta, handle),
-    commit(from, delta, _ctx, save) {
-      save.resize(from.id, resizeRect(from, delta, handle));
+    preview: (from, delta, { board }) => resizeRect(from, delta, handle, board),
+    commit(from, delta, { board }, save) {
+      save.resize(from.id, resizeRect(from, delta, handle, board));
     },
   };
 }
