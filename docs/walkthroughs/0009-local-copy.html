@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"issue":9,"title":"Local copy: the Board survives a reload","lede":"The Notes are saved to localStorage and come back on reload. On startup `main.tsx` reads the **Local copy synchronously and loads it before the first render**, so a reload never flashes an empty Board. After that, `saveLocalCopy` **subscribes to the Notes store** and writes the whole Board 300 ms after the last change, with a **flush on `pagehide`** so closing the tab straight after typing loses nothing. What is read back goes through `parseNotes`, a hand-written guard: a damaged copy is discarded with a warning, never half-loaded.","files":[{"path":"src/main.tsx","question":"When is the Local copy read, and when does saving start?","summary":"The composition root loads the Local copy into the store before `render`, then starts saving with the real `window` timers and wires `flush` to `pagehide`.","owns":"The order: read, load, subscribe, render. The real `localStorage` and timers.","never":"Decides what is valid or when to write: that is `src/persistence/`.","tested":"By hand in a real browser (reload, close-then-reopen, a damaged copy). `renderApp` in the browser tests leaves the Local copy out.","lines":["// Composition root: the only module that wires the Local copy and the mocks.","import { StrictMode } from 'react';","import { createRoot } from 'react-dom/client';","import { App } from './App';","import { apiBaseUrl } from './persistence/apiBaseUrl';","import { readLocalCopy, saveLocalCopy } from './persistence/localCopy';","import { createStores } from './StoresContext';","import './tokens.css';","","const stores = createStores();","","// The Local copy is loaded before the first render, so a reload never flashes","// an empty Board. Saving starts after the load, so loading never writes.","const storage = localStorageIfAllowed();","if (storage) {","  stores.notes.getState().load(readLocalCopy(storage));","  const saving = saveLocalCopy(stores.notes, {","    storage,","    timers: {","      setTimeout: (callback, ms) => window.setTimeout(callback, ms),","      clearTimeout: (id) => {","        window.clearTimeout(id);","      },","    },","  });","  // `pagehide`, not `beforeunload`: it also fires when the tab is closed or","  // the page goes into the back/forward cache, and never blocks navigation.","  window.addEventListener('pagehide', saving.flush);","}","","const rootElement = document.getElementById('root');","if (!rootElement) throw new Error('Missing #root element');","","createRoot(rootElement).render(","  \u003cStrictMode>","    \u003cApp stores={stores} />","  \u003c/StrictMode>,",");","","// Rendering never waits on the network. The worker must be running before","// the first request, so the GET is issued only once it has started. MSW is","// loaded as its own chunk so it never delays the first paint.","const { startMockWorker } = await import('./mocks/browser');","const viteBase = import.meta.env.BASE_URL;","const apiBase = apiBaseUrl(viteBase);","await startMockWorker({ viteBase, apiBase });","const response = await fetch(`${apiBase}/notes`);","console.info('GET /notes →', response.status, await response.json());","","/** `window.localStorage` throws when the browser blocks site data. The app then keeps Notes in memory only. */","function localStorageIfAllowed(): Storage | null {","  try {","    return window.localStorage;","  } catch (error) {","    console.warn('localStorage is blocked: Notes will not survive a reload.', error);","    return null;","  }","}"],"added":[0,5,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,48,49,50,51,52,53,54,55,56,57]},{"path":"src/persistence/localCopy.ts","question":"What is stored, and when is it written?","summary":"`readLocalCopy` reads and checks the `{ v: 1, notes, unsaved }` envelope; `saveLocalCopy` debounces writes off the store's subscription and returns `flush`.","owns":"The storage key, the format, the 300 ms debounce, and swallowing storage errors.","never":"Touches `window`: storage and timers are passed in.","tested":"Node tests in `localCopy.test.ts` with a fake storage and fake timers the test moves on itself.","lines":["import type { Note, NoteId } from '../notes/note';","import type { NotesState, NotesStore } from '../notes/notesStore';","import { parseNotes } from './parseNotes';","","/** Where the Local copy lives in localStorage. */","export const LOCAL_COPY_KEY = 'sticky-notes:local-copy';","","/** The part of `Storage` the Local copy uses, so tests can pass a fake. */","export type LocalCopyStorage = Pick\u003cStorage, 'getItem' | 'setItem'>;","","/** The timers the save waits on, so tests can move the clock themselves. */","export interface Timers {","  readonly setTimeout: (callback: () => void, ms: number) => number;","  readonly clearTimeout: (id: number) => void;","}","","/** How long the Board must be still before it is saved. */","export const SAVE_DELAY_MS = 300;","","/**"," * What is stored. `unsaved` is the ids of Notes with an Unsaved change; it stays"," * empty until saving to a server exists (ADR 0002)."," */","interface LocalCopyV1 {","  readonly v: 1;","  readonly notes: readonly Note[];","  readonly unsaved: readonly NoteId[];","}","","/**"," * The Notes in the Local copy, read synchronously so they are on the Board"," * before the first paint. A copy that can't be read or trusted is discarded"," * with a warning: the app starts empty rather than crashing, and the next"," * save overwrites it."," */","export function readLocalCopy(storage: LocalCopyStorage): Note[] {","  let raw: string | null;","  let copy: unknown;","  try {","    raw = storage.getItem(LOCAL_COPY_KEY);","    if (raw === null) return [];","    copy = JSON.parse(raw);","  } catch (error) {","    console.warn('Discarding the Local copy: it could not be read.', error);","    return [];","  }","","  const notes = isVersion1(copy) ? parseNotes(copy.notes) : null;","  if (!notes) {","    console.warn('Discarding the Local copy: it is not a valid version 1 copy.', raw);","    return [];","  }","  return notes;","}","","function isVersion1(copy: unknown): copy is { v: 1; notes: unknown } {","  return (","    typeof copy === 'object' && copy !== null && 'v' in copy && copy.v === 1 && 'notes' in copy","  );","}","","export interface LocalCopySaving {","  /** Writes a scheduled save now, as the page is hidden or closed. */","  readonly flush: () => void;","}","","/**"," * Follows the Notes store and writes the whole Board to the Local copy, once the"," * Notes have been still for `SAVE_DELAY_MS`. A write that fails (a full or"," * blocked storage) is ignored: the Board stays as it is in memory."," */","export function saveLocalCopy(","  store: NotesStore,","  { storage, timers }: { storage: LocalCopyStorage; timers: Timers },","): LocalCopySaving {","  let scheduled: number | null = null;","","  function flush() {","    if (scheduled === null) return;","    timers.clearTimeout(scheduled);","    scheduled = null;","    write(storage, store.getState());","  }","","  // Zustand notifies only when an action returns a new state, so a no-op","  // (a move to the same place, a raise of the front Note) never saves.","  store.subscribe(() => {","    if (scheduled !== null) timers.clearTimeout(scheduled);","    scheduled = timers.setTimeout(flush, SAVE_DELAY_MS);","  });","","  return { flush };","}","","function write(storage: LocalCopyStorage, { notes, ids }: NotesState) {","  const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []), unsaved: [] };","  try {","    storage.setItem(LOCAL_COPY_KEY, JSON.stringify(copy));","  } catch {","    // Quota exceeded or storage blocked: nothing to do but keep working in memory.","  }","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101]},{"path":"src/persistence/parseNotes.ts","question":"Which Notes from outside the app are trusted?","summary":"`parseNotes` turns `unknown` into `Note[]` or `null`: all or nothing, unknown fields dropped.","owns":"The shape of a valid Note: a non-empty id, finite numbers, a string text, a known colour.","never":"Clamps or rounds: `load` commits each rect inside the Board, as for any other Note.","tested":"Node tests in `parseNotes.test.ts`, one per way to reject; each guard was mutated to check a test fails.","lines":["import type { Rect } from '../geometry';","import { NOTE_COLOURS, parseNoteId, type Note, type NoteColour } from '../notes/note';","","/**"," * The way in for Notes from outside the app: the Local copy now, and later"," * server responses and mock request bodies. All or nothing: one invalid Note"," * rejects the whole list, so a damaged copy is never half-loaded."," */","export function parseNotes(raw: unknown): Note[] | null {","  if (!Array.isArray(raw)) return null;","  const notes: Note[] = [];","  for (const item of raw) {","    const note = parseNote(item);","    if (!note) return null;","    notes.push(note);","  }","  return notes;","}","","function parseNote(raw: unknown): Note | null {","  if (typeof raw !== 'object' || raw === null) return null;","  const { id, text, colour, z, ...rest } = raw as Record\u003cstring, unknown>;","  const noteId = parseNoteId(id);","  const rect = parseRect(rest);","  if (!noteId || !rect || typeof text !== 'string' || !isColour(colour)) return null;","  if (!isFiniteNumber(z)) return null;","  return { id: noteId, ...rect, text, colour, z };","}","","function parseRect({ x, y, width, height }: Record\u003cstring, unknown>): Rect | null {","  const valid =","    isFiniteNumber(x) && isFiniteNumber(y) && isFiniteNumber(width) && isFiniteNumber(height);","  return valid ? { x, y, width, height } : null;","}","","function isFiniteNumber(value: unknown): value is number {","  return typeof value === 'number' && Number.isFinite(value);","}","","function isColour(value: unknown): value is NoteColour {","  return (NOTE_COLOURS as readonly unknown[]).includes(value);","}"],"added":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41]},{"path":"src/notes/notesStore.ts","question":"Why does a no-op never save?","summary":"Unchanged. `load` was already there. Every action `set`s a pure transition, and one that changes nothing returns the same state, so Zustand notifies no subscriber.","owns":"The Notes and their transitions.","never":"Knows the Local copy exists.","tested":"Its own tests; `localCopy.test.ts` checks a no-op writes nothing.","lines":["import { createStore, type StoreApi } from 'zustand/vanilla';","import { toCommittedRect, type Point, type Rect } from '../geometry';","import type { UiStore } from '../ui/uiStore';","import { newNoteId, type Note, type NoteColour, type NoteId } from './note';","","export interface NotesState {","  readonly notes: Readonly\u003cRecord\u003cNoteId, Note>>;","  /** Creation order, which is also DOM order. The Stacking order is each Note's `z`. */","  readonly ids: readonly NoteId[];","  readonly topZ: number;","}","","const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };","","function create(state: NotesState, note: Omit\u003cNote, 'z'>): NotesState {","  if (state.notes[note.id]) return state;","  const z = state.topZ + 1;","  return {","    notes: { ...state.notes, [note.id]: { ...note, ...toCommittedRect(note), z } },","    ids: [...state.ids, note.id],","    topZ: z,","  };","}","","function move(state: NotesState, id: NoteId, to: Point): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y } = toCommittedRect({ ...note, x: to.x, y: to.y });","  if (x === note.x && y === note.y) return state;","  return withNote(state, { ...note, x, y });","}","","function resize(state: NotesState, id: NoteId, to: Rect): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y, width, height } = toCommittedRect(to);","  if (x === note.x && y === note.y && width === note.width && height === note.height) return state;","  return withNote(state, { ...note, x, y, width, height });","}","","/** Sets `z = ++topZ`. A Note already alone at the front stays as it is. */","function raise(state: NotesState, id: NoteId): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const alreadyInFront =","    note.z === state.topZ &&","    state.ids.every((other) => other === id || state.notes[other]?.z !== note.z);","  if (alreadyInFront) return state;","  const z = state.topZ + 1;","  return { ...withNote(state, { ...note, z }), topZ: z };","}","","/** Keeps the text exactly as typed, whitespace and line breaks included. */","function setText(state: NotesState, id: NoteId, text: string): NotesState {","  const note = state.notes[id];","  if (!note || note.text === text) return state;","  return withNote(state, { ...note, text });","}","","function setColour(state: NotesState, id: NoteId, colour: NoteColour): NotesState {","  const note = state.notes[id];","  if (!note || note.colour === colour) return state;","  return withNote(state, { ...note, colour });","}","","/** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */","function withoutNote(state: NotesState, id: NoteId): NotesState {","  if (!state.notes[id]) return state;","  const ids = state.ids.filter((other) => other !== id);","  const notes = Object.fromEntries(","    Object.entries(state.notes).filter(([other]) => other !== id),","  ) as NotesState['notes'];","  return { ...state, notes, ids };","}","","/** Brings a deleted Note back exactly as it was, `z` included. It is listed last. */","function restore(state: NotesState, note: Note): NotesState {","  if (state.notes[note.id]) return state;","  return {","    notes: { ...state.notes, [note.id]: note },","    ids: [...state.ids, note.id],","    topZ: Math.max(state.topZ, note.z),","  };","}","","/** Replaces one Note. `ids` and every other Note keep their reference. */","function withNote(state: NotesState, note: Note): NotesState {","  return { ...state, notes: { ...state.notes, [note.id]: note } };","}","","function load(state: NotesState, incoming: readonly Note[]): NotesState {","  // A Map, so an id that arrives twice is listed once.","  const byId = new Map\u003cNoteId, Note>();","  for (const raw of incoming) {","    const note = { ...raw, ...toCommittedRect(raw) };","    const current = state.notes[note.id];","    byId.set(note.id, current && sameNote(current, note) ? current : note);","  }","","  const loadedIds = [...byId.keys()];","  const sameIds =","    loadedIds.length === state.ids.length && loadedIds.every((id, i) => id === state.ids[i]);","  if (sameIds && loadedIds.every((id) => byId.get(id) === state.notes[id])) return state;","","  return {","    notes: Object.fromEntries(byId),","    ids: sameIds ? state.ids : loadedIds,","    topZ: Math.max(0, ...Array.from(byId.values(), (note) => note.z)),","  };","}","","function sameNote(a: Note, b: Note): boolean {","  return (Object.keys(b) as (keyof Note)[]).every((key) => a[key] === b[key]);","}","","/**"," * The pure state transitions behind the Notes store's actions. An unchanged Note,"," * unchanged `ids` and a no-op all keep their reference. That is what lets a change"," * re-render only the Notes it touched."," */","export const transitions = {","  create,","  move,","  resize,","  raise,","  setText,","  setColour,","  delete: withoutNote,","  restore,","  load,","};","","export interface NotesActions {","  /** Replaces every Note, as a load from storage does. */","  readonly load: (notes: readonly Note[]) => void;","  /** A new empty Note in the Current colour, which opens straight into Editing. */","  readonly createNote: (rect: Rect) => void;","  readonly move: (id: NoteId, x: number, y: number) => void;","  readonly resize: (id: NoteId, rect: Rect) => void;","  readonly raise: (id: NoteId) => void;","  readonly setText: (id: NoteId, text: string) => void;","  /** Only the Note's colour. `recolour` is what the user does. */","  readonly setColour: (id: NoteId, colour: NoteColour) => void;","  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */","  readonly recolour: (id: NoteId, colour: NoteColour) => void;","  /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */","  readonly pickColour: (colour: NoteColour) => void;","  /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */","  readonly deleteNote: (id: NoteId) => void;","  /** Brings back the last deleted Note exactly as it was, and hides the Undo toast. */","  readonly undoDelete: () => void;","}","","export type NotesStore = StoreApi\u003cNotesState & NotesActions>;","","/**"," * The Notes, and the actions that change them. The UI store is passed in for the"," * rules that span both stores (Undo, Editing, the Current colour); it never needs"," * the Notes store back."," */","export function createNotesStore(ui: UiStore): NotesStore {","  // Each action `set`s a pure transition. One that returns the state it was given","  // leaves the reference the same, and Zustand notifies nobody.","  return createStore\u003cNotesState & NotesActions>()((set, get) => {","    function recolour(id: NoteId, colour: NoteColour) {","      if (!get().notes[id]) return;","      set((state) => setColour(state, id, colour));","      ui.getState().setCurrentColour(colour);","    }","","    return {","      ...EMPTY_NOTES,","      load: (notes) => {","        set((state) => load(state, notes));","      },","      createNote: ({ x, y, width, height }) => {","        const id = newNoteId();","        const colour = ui.getState().currentColour;","        set((state) => create(state, { id, x, y, width, height, text: '', colour }));","        ui.getState().startEditing(id);","      },","      move: (id, x, y) => {","        set((state) => move(state, id, { x, y }));","      },","      resize: (id, rect) => {","        set((state) => resize(state, id, rect));","      },","      raise: (id) => {","        set((state) => raise(state, id));","      },","      setText: (id, text) => {","        set((state) => setText(state, id, text));","      },","      setColour: (id, colour) => {","        set((state) => setColour(state, id, colour));","      },","      recolour,","      pickColour: (colour) => {","        const { editingId } = ui.getState();","        if (editingId) recolour(editingId, colour);","        else ui.getState().setCurrentColour(colour);","      },","      deleteNote: (id) => {","        const note = get().notes[id];","        if (!note) return;","        if (ui.getState().editingId === id) ui.getState().stopEditing();","        ui.getState().showUndo(note);","        set((state) => withoutNote(state, id));","      },","      undoDelete: () => {","        const note = ui.getState().lastDeleted;","        if (!note) return;","        set((state) => restore(state, note));","        ui.getState().hideUndo();","      },","    };","  });","}"],"added":[]}],"flow":[["src/main.tsx","src/persistence/localCopy.ts","src/persistence/parseNotes.ts"],["src/notes/notesStore.ts","src/persistence/localCopy.ts"]],"scenarios":[{"name":"A reload brings the Board back","steps":[{"title":"The page loads, before anything is rendered","explain":"The read happens at module top level, before `createRoot(...).render`. `getItem` is synchronous, so the first render already has the Notes. Saving is started only after `load`, so loading the copy never schedules a write of what was just read.","run":[{"file":"src/main.tsx","start":13,"end":15},{"file":"src/persistence/localCopy.ts","start":39,"end":41},{"file":"src/persistence/localCopy.ts","start":47,"end":47}]},{"title":"Each saved Note is checked","explain":"Every field is checked, and the result is built from the checked values only, so an extra field in storage never reaches the store. One bad Note returns `null` for the whole list.","run":[{"file":"src/persistence/parseNotes.ts","start":11,"end":13},{"file":"src/persistence/parseNotes.ts","start":21,"end":26}]},{"title":"The Notes go into the store, then the first render","explain":"`load` keeps the order in which the Notes were saved, which is `ids` order (creation order, also DOM order), and recomputes `topZ` from the saved `z`s, so the Stacking order comes back exactly. Then the first render paints them.","run":[{"file":"src/notes/notesStore.ts","start":90,"end":90},{"file":"src/notes/notesStore.ts","start":107,"end":107},{"file":"src/main.tsx","start":33,"end":33}]}]},{"name":"Typing, then closing the tab at once","steps":[{"title":"Each keystroke changes the store","explain":"Each `setText` returns a new state, so Zustand calls the subscriber, which restarts the 300 ms timer. A burst of keystrokes therefore makes one write, 300 ms after the last.","run":[{"file":"src/persistence/localCopy.ts","start":86,"end":88}]},{"title":"pagehide, less than 300 ms later","explain":"The timer would never fire in a closing page, so `pagehide` calls `flush`, which writes now and cancels the timer. `pagehide` rather than `beforeunload`: it also fires for the back/forward cache and never blocks leaving. Checked in Chromium through Playwright: two Notes typed and the page closed with no wait, and nothing was in storage before the close; on reopening both were back.","run":[{"file":"src/main.tsx","start":27,"end":27},{"file":"src/persistence/localCopy.ts","start":77,"end":81},{"file":"src/persistence/localCopy.ts","start":95,"end":97}]},{"title":"pagehide with nothing scheduled","explain":"When the Board has been still for 300 ms the timer has already written and cleared `scheduled`, so `flush` returns at once: no second, identical write. The test 'writes a scheduled save at once when flushed, and only once' covers both halves.","run":[{"file":"src/persistence/localCopy.ts","start":78,"end":78}]}]},{"name":"A damaged copy, or a full storage","steps":[{"title":"Startup with a copy that can't be trusted","explain":"Not JSON, `getItem` throwing, a version other than 1, no `notes`, or one invalid Note: each is a warning and an empty Board, never a crash. The copy isn't deleted; the next save overwrites it. `localCopy.test.ts` has one case per cause.","run":[{"file":"src/persistence/localCopy.ts","start":42,"end":43},{"file":"src/persistence/localCopy.ts","start":48,"end":49}]},{"title":"A write that throws","explain":"A full quota or blocked storage throws from `setItem`. It is swallowed, so the timer callback can't throw an uncaught error, and the next change tries again. The test 'keeps saving after a write fails' makes one write fail and the next succeed.","run":[{"file":"src/persistence/localCopy.ts","start":98,"end":99}]},{"title":"The browser blocks site data altogether","explain":"Reading `window.localStorage` itself throws when site data is blocked. Then there is no Local copy at all: one warning, and the app works in memory as before.","run":[{"file":"src/main.tsx","start":50,"end":54}]}]}],"notes":[{"title":"The key is `sticky-notes:local-copy`, not the issue's `sticky-notes:cache`","detail":"The glossary lists \"cache\" as a word to avoid for the Local copy, and the key shows in DevTools. Renamed before anything was released, so no copy under the old key needs migrating."},{"title":"A trailing debounce, not a throttle","detail":"Continuous typing for longer than 300 ms between pauses never writes until a pause. That is acceptable because `pagehide` flushes; the counter-argument is a browser crash mid-burst, which loses the burst."},{"title":"Not Zustand's `persist` middleware","detail":"It would remove `saveLocalCopy`, but the format, the `parseNotes` guard and the flush on `pagehide` are the parts worth controlling. Recorded in ADR 0002."},{"title":"`unsaved` is always empty","detail":"It is in the format now so the proposed REST saving won't need a version 2. ADR 0002 says plainly that nothing writes to it yet."},{"title":"No browser test for a reload","detail":"The round trip (save, read, load, identical state) is a Node test, and the reload was checked by hand in Chromium. `renderApp` deliberately has no persistence, so the browser tests start empty."}],"omitted":{"src/persistence/localCopy.test.ts":"The tests, described in the steps.","src/persistence/parseNotes.test.ts":"The tests, described in the steps.","docs/adr/0002-local-first-persistence-msw.md":"Split into Built (the Local copy) and Proposed (REST), so it no longer describes unbuilt code as built.","README.md":"Bonus IV marked done; REST listed as not built; Known limits updated.","GLOSSARY.md":"Local copy redefined; Unsaved change marked as proposed."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+{
+  "issue": 9,
+  "title": "Local copy: the Board survives a reload",
+  "lede": "The Notes are saved to localStorage and come back on reload. On startup `main.tsx` reads the **Local copy synchronously and loads it before the first render**, so a reload never flashes an empty Board. After that, `saveLocalCopy` **subscribes to the Notes store** and writes the whole Board 300 ms after the last change, with a **flush on `pagehide`** so closing the tab straight after typing loses nothing. What is read back goes through `parseNotes`, a hand-written guard: a damaged copy is discarded with a warning, never half-loaded.",
+  "files": [
+    {
+      "path": "src/main.tsx",
+      "question": "When is the Local copy read, and when does saving start?",
+      "summary": "The composition root loads the Local copy into the store before `render`, then starts saving with the real `window` timers and wires `flush` to `pagehide`.",
+      "owns": "The order: read, load, subscribe, render. The real `localStorage` and timers.",
+      "never": "Decides what is valid or when to write: that is `src/persistence/`.",
+      "tested": "By hand in a real browser (reload, close-then-reopen, a damaged copy). `renderApp` in the browser tests leaves the Local copy out."
+    },
+    {
+      "path": "src/persistence/localCopy.ts",
+      "question": "What is stored, and when is it written?",
+      "summary": "`readLocalCopy` reads and checks the `{ v: 1, notes, unsaved }` envelope; `saveLocalCopy` debounces writes off the store's subscription and returns `flush`.",
+      "owns": "The storage key, the format, the 300 ms debounce, and swallowing storage errors.",
+      "never": "Touches `window`: storage and timers are passed in.",
+      "tested": "Node tests in `localCopy.test.ts` with a fake storage and fake timers the test moves on itself."
+    },
+    {
+      "path": "src/persistence/parseNotes.ts",
+      "question": "Which Notes from outside the app are trusted?",
+      "summary": "`parseNotes` turns `unknown` into `Note[]` or `null`: all or nothing, unknown fields dropped.",
+      "owns": "The shape of a valid Note: a non-empty id, finite numbers, a string text, a known colour.",
+      "never": "Clamps or rounds: `load` commits each rect inside the Board, as for any other Note.",
+      "tested": "Node tests in `parseNotes.test.ts`, one per way to reject; each guard was mutated to check a test fails."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Why does a no-op never save?",
+      "summary": "Unchanged. `load` was already there. Every action `set`s a pure transition, and one that changes nothing returns the same state, so Zustand notifies no subscriber.",
+      "owns": "The Notes and their transitions.",
+      "never": "Knows the Local copy exists.",
+      "tested": "Its own tests; `localCopy.test.ts` checks a no-op writes nothing."
+    }
+  ],
+  "flow": [
+    ["src/main.tsx", "src/persistence/localCopy.ts", "src/persistence/parseNotes.ts"],
+    ["src/notes/notesStore.ts", "src/persistence/localCopy.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "A reload brings the Board back",
+      "steps": [
+        {
+          "title": "The page loads, before anything is rendered",
+          "explain": "The read happens at module top level, before `createRoot(...).render`. `getItem` is synchronous, so the first render already has the Notes. Saving is started only after `load`, so loading the copy never schedules a write of what was just read.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "const storage = localStorageIfAllowed();",
+              "to": "stores.notes.getState().load(readLocalCopy(storage));"
+            },
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "raw = storage.getItem(LOCAL_COPY_KEY);",
+              "to": "copy = JSON.parse(raw);"
+            },
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "const notes = isVersion1(copy) ? parseNotes(copy.notes) : null;"
+            }
+          ]
+        },
+        {
+          "title": "Each saved Note is checked",
+          "explain": "Every field is checked, and the result is built from the checked values only, so an extra field in storage never reaches the store. One bad Note returns `null` for the whole list.",
+          "run": [
+            {
+              "file": "src/persistence/parseNotes.ts",
+              "from": "for (const item of raw) {",
+              "to": "if (!note) return null;"
+            },
+            {
+              "file": "src/persistence/parseNotes.ts",
+              "from": "const { id, text, colour, z, ...rest } = raw as Record<string, unknown>;",
+              "to": "return { id: noteId, ...rect, text, colour, z };"
+            }
+          ]
+        },
+        {
+          "title": "The Notes go into the store, then the first render",
+          "explain": "`load` keeps the order in which the Notes were saved, which is `ids` order (creation order, also DOM order), and recomputes `topZ` from the saved `z`s, so the Stacking order comes back exactly. Then the first render paints them.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "function load(state: NotesState, incoming: readonly Note[]): NotesState {"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "topZ: Math.max(0, ...Array.from(byId.values(), (note) => note.z)),"
+            },
+            {
+              "file": "src/main.tsx",
+              "from": "createRoot(rootElement).render("
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Typing, then closing the tab at once",
+      "steps": [
+        {
+          "title": "Each keystroke changes the store",
+          "explain": "Each `setText` returns a new state, so Zustand calls the subscriber, which restarts the 300 ms timer. A burst of keystrokes therefore makes one write, 300 ms after the last.",
+          "run": [
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "store.subscribe(() => {",
+              "to": "scheduled = timers.setTimeout(flush, SAVE_DELAY_MS);"
+            }
+          ]
+        },
+        {
+          "title": "pagehide, less than 300 ms later",
+          "explain": "The timer would never fire in a closing page, so `pagehide` calls `flush`, which writes now and cancels the timer. `pagehide` rather than `beforeunload`: it also fires for the back/forward cache and never blocks leaving. Checked in Chromium through Playwright: two Notes typed and the page closed with no wait, and nothing was in storage before the close; on reopening both were back.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "window.addEventListener('pagehide', saving.flush);"
+            },
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "function flush() {",
+              "to": "write(storage, store.getState());"
+            },
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "const copy: LocalCopyV1 = { v: 1, notes: ids.flatMap((id) => notes[id] ?? []), unsaved: [] };",
+              "to": "storage.setItem(LOCAL_COPY_KEY, JSON.stringify(copy));"
+            }
+          ]
+        },
+        {
+          "title": "pagehide with nothing scheduled",
+          "explain": "When the Board has been still for 300 ms the timer has already written and cleared `scheduled`, so `flush` returns at once: no second, identical write. The test 'writes a scheduled save at once when flushed, and only once' covers both halves.",
+          "run": [
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "if (scheduled === null) return;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A damaged copy, or a full storage",
+      "steps": [
+        {
+          "title": "Startup with a copy that can't be trusted",
+          "explain": "Not JSON, `getItem` throwing, a version other than 1, no `notes`, or one invalid Note: each is a warning and an empty Board, never a crash. The copy isn't deleted; the next save overwrites it. `localCopy.test.ts` has one case per cause.",
+          "run": [
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "} catch (error) {",
+              "to": "console.warn('Discarding the Local copy: it could not be read.', error);"
+            },
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "if (!notes) {",
+              "to": "console.warn('Discarding the Local copy: it is not a valid version 1 copy.', raw);"
+            }
+          ]
+        },
+        {
+          "title": "A write that throws",
+          "explain": "A full quota or blocked storage throws from `setItem`. It is swallowed, so the timer callback can't throw an uncaught error, and the next change tries again. The test 'keeps saving after a write fails' makes one write fail and the next succeed.",
+          "run": [
+            {
+              "file": "src/persistence/localCopy.ts",
+              "from": "} catch {",
+              "to": "// Quota exceeded or storage blocked: nothing to do but keep working in memory."
+            }
+          ]
+        },
+        {
+          "title": "The browser blocks site data altogether",
+          "explain": "Reading `window.localStorage` itself throws when site data is blocked. Then there is no Local copy at all: one warning, and the app works in memory as before.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "function localStorageIfAllowed(): Storage | null {",
+              "to": "console.warn('localStorage is blocked: Notes will not survive a reload.', error);"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "The key is `sticky-notes:local-copy`, not the issue's `sticky-notes:cache`",
+      "detail": "The glossary lists \"cache\" as a word to avoid for the Local copy, and the key shows in DevTools. Renamed before anything was released, so no copy under the old key needs migrating."
+    },
+    {
+      "title": "A trailing debounce, not a throttle",
+      "detail": "Continuous typing for longer than 300 ms between pauses never writes until a pause. That is acceptable because `pagehide` flushes; the counter-argument is a browser crash mid-burst, which loses the burst."
+    },
+    {
+      "title": "Not Zustand's `persist` middleware",
+      "detail": "It would remove `saveLocalCopy`, but the format, the `parseNotes` guard and the flush on `pagehide` are the parts worth controlling. Recorded in ADR 0002."
+    },
+    {
+      "title": "`unsaved` is always empty",
+      "detail": "It is in the format now so the proposed REST saving won't need a version 2. ADR 0002 says plainly that nothing writes to it yet."
+    },
+    {
+      "title": "No browser test for a reload",
+      "detail": "The round trip (save, read, load, identical state) is a Node test, and the reload was checked by hand in Chromium. `renderApp` deliberately has no persistence, so the browser tests start empty."
+    }
+  ],
+  "omitted": {
+    "src/persistence/localCopy.test.ts": "The tests, described in the steps.",
+    "src/persistence/parseNotes.test.ts": "The tests, described in the steps.",
+    "docs/adr/0002-local-first-persistence-msw.md": "Split into Built (the Local copy) and Proposed (REST), so it no longer describes unbuilt code as built.",
+    "README.md": "Bonus IV marked done; REST listed as not built; Known limits updated.",
+    "GLOSSARY.md": "Local copy redefined; Unsaved change marked as proposed."
+  }
+}
