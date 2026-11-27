@@ -118,7 +118,7 @@ it("Shift+Tab from the textarea to the Note's own × keeps Editing", async () =>
 });
 
 it('Enter on a focused Note starts Editing with the caret at the end, and typing changes the text', async () => {
-  const { stores, noteA } = await setup();
+  const { noteA } = await setup();
   await tabTo(noteA);
 
   await userEvent.keyboard('{Enter}');
@@ -128,7 +128,7 @@ it('Enter on a focused Note starts Editing with the caret at the end, and typing
   expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([5, 5]);
   await userEvent.keyboard(' there');
   // The Enter that started Editing typed no line break.
-  expect(stores.notes.getState().notes[a.id]?.text).toBe('hello there');
+  await expect.element(editor(noteA)).toHaveValue('hello there');
 });
 
 it('Escape ends Editing and gives focus back to the Note, so Tab carries on from there', async () => {
@@ -183,7 +183,8 @@ it('Backspace while Editing only edits the text', async () => {
 
   await userEvent.keyboard('{Backspace}{Delete}');
 
-  expect(stores.notes.getState().notes[a.id]?.text).toBe('hell');
+  await expect.element(editor(noteA)).toHaveValue('hell');
+  expect(stores.notes.getState().notes[a.id]).toBeDefined();
   expect(stores.ui.getState().editingId).toBe(a.id);
 });
 

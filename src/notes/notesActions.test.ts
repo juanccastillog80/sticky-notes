@@ -175,3 +175,97 @@ describe('the actions a Drag saves through', () => {
     expect(notes.getState()).toBe(before);
   });
 });
+
+describe('Draft text', () => {
+  const a = makeNote({ id: testId('a'), text: 'hello' });
+  const b = makeNote({ id: testId('b'), x: 400, z: 2 });
+
+  it('typing changes no Note; Editing ending saves the Draft text once', () => {
+    const { notes, ui } = setup([a, b]);
+    let updates = 0;
+    notes.subscribe(() => (updates += 1));
+    ui.getState().startEditing(a.id);
+
+    ui.getState().typed('hello w');
+    ui.getState().typed('hello wo');
+    expect(updates).toBe(0);
+    expect(ui.getState().draftText).toBe('hello wo');
+
+    ui.getState().escaped();
+    expect(updates).toBe(1);
+    expect(notes.getState().notes[a.id]?.text).toBe('hello wo');
+    expect(ui.getState().draftText).toBeNull();
+  });
+
+  it('every way Editing ends saves it', () => {
+    const { notes, ui } = setup([a, b]);
+    const text = () => notes.getState().notes[a.id]?.text;
+    const endings: Record<string, () => void> = {
+      'press on empty Board': () => {
+        ui.getState().pressed(null);
+      },
+      'press on another Note': () => {
+        ui.getState().pressed(b.id);
+      },
+      'Editing another Note': () => {
+        ui.getState().startEditing(b.id);
+      },
+      'page hidden': () => {
+        ui.getState().pageHidden();
+      },
+      'new Note': () => {
+        notes.getState().createNote({ x: 0, y: 0, width: 220, height: 170 });
+      },
+    };
+    for (const [ending, end] of Object.entries(endings)) {
+      ui.getState().startEditing(a.id);
+      ui.getState().typed(ending);
+      end();
+      expect(text()).toBe(ending);
+    }
+  });
+
+  it('the page being hidden while Editing saves the Draft text', () => {
+    const { notes, ui } = setup([a]);
+    ui.getState().startEditing(a.id);
+    ui.getState().typed('before reload');
+
+    ui.getState().pageHidden();
+
+    expect(notes.getState().notes[a.id]?.text).toBe('before reload');
+    expect(ui.getState().editingId).toBeNull();
+  });
+
+  it('deleting the edited Note saves the Draft text first, so Undo brings it back', () => {
+    const { notes, ui } = setup([a, b]);
+    ui.getState().startEditing(a.id);
+    ui.getState().typed('typed');
+
+    notes.getState().deleteNote(a.id);
+    notes.getState().undoDelete();
+
+    expect(notes.getState().notes[a.id]).toEqual({ ...a, text: 'typed' });
+  });
+
+  it('nothing typed, or the same text typed back, changes nothing', () => {
+    const { notes, ui } = setup([a, b]);
+    const before = notes.getState();
+    ui.getState().startEditing(a.id);
+    ui.getState().escaped();
+    ui.getState().startEditing(a.id);
+    ui.getState().typed('hello!');
+    ui.getState().typed('hello');
+    ui.getState().escaped();
+
+    expect(notes.getState()).toBe(before);
+  });
+
+  it('typing while not Editing keeps no Draft text', () => {
+    const { ui } = setup([a]);
+    const idle = ui.getState();
+
+    ui.getState().typed('lost');
+
+    expect(ui.getState()).toBe(idle);
+  });
+});

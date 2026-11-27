@@ -56,6 +56,10 @@ _Avoid_: Drag threshold, slop, tolerance
 The state of the one note whose text is being typed into. A click on a note, or Enter on a focused note, enters it; Escape or pressing anywhere else ends it. While editing, the note's body works as text and only its grip strip moves it.
 _Avoid_: Edit mode, focus, active note
 
+**Draft text**:
+The text typed into the Note in Editing, not yet saved to it. Editing ending, however it ends, saves it to the Note.
+_Avoid_: buffer, local text
+
 **Grip strip**:
 The band along the top of every note. It always moves the note, including while the note is being edited.
 _Avoid_: Header, handle, title bar

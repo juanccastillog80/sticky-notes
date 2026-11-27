@@ -24,7 +24,11 @@ if (storage) {
   });
   // `pagehide`, not `beforeunload`: it also fires when the tab is closed or
   // the page goes into the back/forward cache, and never blocks navigation.
-  window.addEventListener('pagehide', saving.flush);
+  // Ending Editing first saves its Draft text, so the flush writes it.
+  window.addEventListener('pagehide', () => {
+    stores.ui.getState().pageHidden();
+    saving.flush();
+  });
 }
 
 const rootElement = document.getElementById('root');

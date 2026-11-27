@@ -1,5 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { toCommittedRect, type Point, type Rect } from '../geometry';
+import { savedDraft } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
 import { newNoteId, type Note, type NoteColour, type NoteId } from './note';
 
@@ -161,7 +162,7 @@ export type NotesStore = StoreApi<NotesState & NotesActions>;
 export function createNotesStore(ui: UiStore): NotesStore {
   // Each action `set`s a pure transition. One that returns the state it was given
   // leaves the reference the same, and Zustand notifies nobody.
-  return createStore<NotesState & NotesActions>()((set, get) => {
+  const store = createStore<NotesState & NotesActions>()((set, get) => {
     function recolour(id: NoteId, colour: NoteColour) {
       if (!get().notes[id]) return;
       set((state) => setColour(state, id, colour));
@@ -201,9 +202,11 @@ export function createNotesStore(ui: UiStore): NotesStore {
         else ui.getState().setCurrentColour(colour);
       },
       deleteNote: (id) => {
+        if (!get().notes[id]) return;
+        // Ending Editing saves its Draft text, so the Undo snapshot is read after it.
+        ui.getState().deleted(id);
         const note = get().notes[id];
         if (!note) return;
-        ui.getState().deleted(id);
         ui.getState().showUndo(note);
         set((state) => withoutNote(state, id));
       },
@@ -215,4 +218,13 @@ export function createNotesStore(ui: UiStore): NotesStore {
       },
     };
   });
+
+  // However Editing ends, its Draft text is saved to its Note, synchronously, before
+  // the action that ended it carries on. Typing itself never touches this store.
+  ui.subscribe((after, before) => {
+    const draft = savedDraft(before, after);
+    if (draft) store.getState().setText(draft.id, draft.text);
+  });
+
+  return store;
 }

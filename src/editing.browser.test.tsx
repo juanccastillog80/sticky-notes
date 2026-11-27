@@ -1,9 +1,11 @@
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { page, userEvent, type Locator } from 'vitest/browser';
 import type { ProfilerOnRenderCallback } from 'react';
 import { makeNote, testId } from '../test/factories';
 import { drag, press, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
+import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';
+import type { Stores } from './StoresContext';
 
 beforeEach(async () => {
   await page.viewport(1024, 768);
@@ -19,7 +21,7 @@ async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback
   const notes = screen.getByRole('article', { name: 'Note' });
   await expect.element(notes.nth(2)).toBeVisible();
   const board = screen.getByRole('region', { name: 'Board' });
-  return { stores, notes, noteA: notes.nth(0), noteB: notes.nth(1), board };
+  return { screen, stores, notes, noteA: notes.nth(0), noteB: notes.nth(1), board };
 }
 
 const editor = (note: Locator) => note.getByRole('textbox');
@@ -59,7 +61,7 @@ it('keeps text exactly as typed, line breaks included', async () => {
   const { stores, noteA } = await setup();
   await editABeforeWorld(noteA);
 
-  await userEvent.keyboard('big{Enter}');
+  await userEvent.keyboard('big{Enter}{Escape}');
 
   expect(stores.notes.getState().notes[a.id]?.text).toBe('hello big\nworld');
 });
@@ -200,4 +202,79 @@ it('Escape during a strip Drag cancels the Drag and keeps Editing', async () => 
   expect(stores.notes.getState().notes[a.id]).toMatchObject({ x: 100, y: 100 });
   expect(stores.ui.getState().editingId).toBe(a.id);
   await expect.element(editor(noteA)).toHaveFocus();
+});
+
+describe('Draft text', () => {
+  /** Counts Notes store updates from here on. */
+  function countUpdates(stores: Stores) {
+    const counter = { updates: 0 };
+    stores.notes.subscribe(() => (counter.updates += 1));
+    return counter;
+  }
+
+  it('typing updates the Notes store not at all until Editing ends, then exactly once', async () => {
+    const { stores, noteA } = await setup();
+    await editABeforeWorld(noteA);
+    const counter = countUpdates(stores);
+
+    await userEvent.keyboard('big ');
+    expect(counter.updates).toBe(0);
+    await expect.element(editor(noteA)).toHaveValue('hello big world');
+    expect(focused()?.selectionStart).toBe(10);
+
+    await userEvent.keyboard('{Escape}');
+    expect(counter.updates).toBe(1);
+    expect(stores.notes.getState().notes[a.id]?.text).toBe('hello big world');
+    await expect.element(noteA.getByText('hello big world')).toBeVisible();
+  });
+
+  const endings: [string, (s: Awaited<ReturnType<typeof setup>>) => Promise<unknown>][] = [
+    ['Tab to the next Note (blur)', () => userEvent.keyboard('{Tab}')],
+    ['Escape', () => userEvent.keyboard('{Escape}')],
+    ['a press on empty Board', ({ board }) => press(board, { x: 500, y: 500 })],
+    [
+      'a press on another Note',
+      ({ noteB }) => drag(noteB, { dx: 50, dy: 0, position: { x: 100, y: 10 } }),
+    ],
+    ['creating a new Note', ({ board }) => board.dblClick({ position: { x: 500, y: 500 } })],
+  ];
+
+  it.each(endings)('the text is kept after Editing ends by %s', async (_, end) => {
+    const s = await setup();
+    await editABeforeWorld(s.noteA);
+    await userEvent.keyboard('big ');
+
+    await end(s);
+
+    expect(s.stores.ui.getState().editingId).not.toBe(a.id);
+    expect(s.stores.notes.getState().notes[a.id]?.text).toBe('hello big world');
+    await expect.element(s.noteA.getByText('hello big world')).toBeVisible();
+  });
+
+  it('type, delete the Note with ×, Undo: the Note comes back with the typed text', async () => {
+    const { screen, stores, noteA } = await setup();
+    await editABeforeWorld(noteA);
+    await userEvent.keyboard('big ');
+    const typedInto = stores.notes.getState().notes[a.id];
+
+    await noteA.getByRole('button', { name: 'Delete note' }).click();
+    await screen.getByRole('button', { name: 'Undo' }).click();
+
+    expect(stores.notes.getState().notes[a.id]).toEqual({ ...typedInto, text: 'hello big world' });
+    await expect.element(screen.getByText('hello big world')).toBeVisible();
+    // A mouse delete ignores presses on Notes for a double-click interval: let it lapse.
+    await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
+  });
+
+  it('typing in Note a re-renders no other Note', async () => {
+    const renders: string[] = [];
+    const { noteA } = await setup({ onNoteRender: (id) => renders.push(id) });
+    await editABeforeWorld(noteA);
+    renders.length = 0;
+
+    await userEvent.keyboard('xyz');
+    await expect.element(editor(noteA)).toHaveValue('hello xyzworld');
+
+    expect(renders.filter((id) => id !== 'a')).toEqual([]);
+  });
 });

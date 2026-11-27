@@ -5,6 +5,7 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type PointerEvent,
+  type Ref,
 } from 'react';
 import { useBoardDom } from '../BoardDomContext';
 import type { Point } from '../geometry';
@@ -12,7 +13,7 @@ import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
 import { isInText } from '../drag/press';
 import { useDrag } from '../drag/useDrag';
 import type { NoteId } from '../notes/note';
-import { useIsEditing, useNotes, useStores } from '../StoresContext';
+import { useIsEditing, useNotes, useStores, useUi } from '../StoresContext';
 import { caretOffsetAt } from './caret';
 import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';
 import styles from './Note.module.css';
@@ -163,16 +164,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
         ×
       </button>
       {editing ? (
-        <textarea
-          ref={editorRef}
-          aria-label="Note text"
-          className={styles.editor}
-          value={text}
-          onChange={(e) => {
-            notes.getState().setText(id, e.target.value);
-          }}
-          onKeyDown={keyDownInEditor}
-        />
+        <NoteEditor ref={editorRef} text={text} onKeyDown={keyDownInEditor} />
       ) : (
         <div ref={textRef} className={styles.text} data-note-text="">
           {text}
@@ -182,3 +174,33 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     </article>
   );
 });
+
+/**
+ * The textarea of the Note in Editing. It shows the Draft text, falling back to the
+ * Note's saved `text` until something is typed, and is the only component that
+ * subscribes to it: typing re-renders it alone, and changes no Note until Editing ends.
+ */
+function NoteEditor({
+  ref,
+  text,
+  onKeyDown,
+}: {
+  ref: Ref<HTMLTextAreaElement>;
+  text: string;
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+}) {
+  const { ui } = useStores();
+  const draftText = useUi((state) => state.draftText);
+  return (
+    <textarea
+      ref={ref}
+      aria-label="Note text"
+      className={styles.editor}
+      value={draftText ?? text}
+      onChange={(e) => {
+        ui.getState().typed(e.target.value);
+      }}
+      onKeyDown={onKeyDown}
+    />
+  );
+}
