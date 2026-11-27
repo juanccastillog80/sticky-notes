@@ -138,7 +138,7 @@ it('a Note created near the edge is pushed fully inside the Board', async () => 
 
 it('shows the empty hint only while there are no Notes', async () => {
   const { screen, stores, board } = await setup();
-  const hint = screen.getByText('Double-click anywhere to add a note of the selected size');
+  const hint = screen.getByText('Double-click anywhere to add a note of the current size');
   await expect.element(hint).toBeVisible();
 
   await userEvent.dblClick(board, { position: { x: 100, y: 100 } });
@@ -150,7 +150,7 @@ it('shows the empty hint only while there are no Notes', async () => {
 
 it('a double-click on the empty hint reaches the Board under it', async () => {
   const { screen, board, notes } = await setup();
-  const hint = screen.getByText('Double-click anywhere to add a note of the selected size');
+  const hint = screen.getByText('Double-click anywhere to add a note of the current size');
   await expect.element(hint).toBeVisible();
   const { x, y, width, height } = rectOnBoard(hint.element(), board);
 
