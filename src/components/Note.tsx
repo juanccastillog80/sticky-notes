@@ -154,7 +154,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
           // Not a Press: no Raise, no Drag, and focus stays where it is until the delete.
           e.stopPropagation();
           e.preventDefault();
-          // But it is a press elsewhere, so it ends Editing on any other Note.
+          // Still ends Editing on any other Note, as pressing anywhere else does.
           ui.getState().pressed(id);
         }}
         onClick={(e) => {

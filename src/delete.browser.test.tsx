@@ -66,8 +66,8 @@ it('deleting the Note being edited ends Editing', async () => {
   expect(stores.notes.getState().notes[a.id]).toBeUndefined();
 });
 
-it('pressing another Note’s × ends Editing and saves the Draft text', async () => {
-  const { stores, noteA, noteB } = await setup();
+it('pressing another Note’s × ends Editing and saves the Draft text, with no Raise', async () => {
+  const { stores, actions, noteA, noteB } = await setup();
   stores.ui.getState().startEditing(a.id);
   const editor = noteA.getByRole('textbox');
   await expect.element(editor).toHaveFocus();
@@ -76,6 +76,10 @@ it('pressing another Note’s × ends Editing and saves the Draft text', async (
   await press(deleteButton(noteB));
 
   expect(stores.notes.getState().ids).toEqual([a.id]);
+  expect(actions).toEqual([
+    ['setText', a.id, 'keep me!'],
+    ['deleteNote', b.id],
+  ]);
   expect(stores.ui.getState().editingId).toBeNull();
   expect(stores.notes.getState().notes[a.id]?.text).toBe('keep me!');
   await expect.element(editor).not.toBeInTheDocument();
