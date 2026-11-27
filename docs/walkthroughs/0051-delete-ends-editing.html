@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"issue":51,"title":"Pressing another Note's × ends Editing","lede":"The × cancels its own `pointerdown`, so it is not a **Press**: it never Raises or drags. But that also meant the press never reached `ui.pressed`, so while Note A was in **Editing**, clicking the × on Note B deleted B and left A in Editing, with its **Draft text** unsaved. The glossary says pressing anywhere else ends Editing. Now the × reports the press itself. One line of runtime code; the rest is a test and wording.","files":[{"path":"src/components/Note.tsx","question":"What does a press on the × do?","summary":"The ×'s `onPointerDown` still stops the press reaching the article, and now calls `ui.getState().pressed(id)` itself.","owns":"Turning DOM events on a Note into what happened: a Press, a press on the ×, keyboard focus.","never":"Decides whether Editing ends: it only reports, and `src/ui/editing.ts` decides.","tested":"`src/delete.browser.test.tsx`: `pressing another Note’s × ends Editing and saves the Draft text, with no Raise`.","lines":["import {","  memo,","  useLayoutEffect,","  useRef,","  type FocusEvent,","  type KeyboardEvent,","  type PointerEvent,","  type Ref,","} from 'react';","import { useBoardDom } from '../BoardDomContext';","import type { Point } from '../geometry';","import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';","import { isInText } from '../drag/press';","import { useDrag } from '../drag/useDrag';","import type { NoteId } from '../notes/note';","import { useIsEditing, useNotes, useStores, useUi } from '../StoresContext';","import { caretOffsetAt } from './caret';","import { DOUBLE_CLICK_MS, ignorePressesFor } from './ignorePressesFor';","import styles from './Note.module.css';","import { ResizeHandles } from './ResizeHandles';","","/**"," * Idle, a press anywhere but a handle starts a move, and a Click starts Editing."," * While Editing, the body is a textarea, so a press there only Raises (see `isInText`)"," * and Drags start from the Grip strip and the handles alone."," *"," * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or"," * Backspace deletes. A left press prevents its default, so it never focuses the article;"," * a right or middle press can, which is why only keyboard focus (`:focus-visible`) Raises."," */","export const Note = memo(function Note({ id }: { id: NoteId }) {","  const note = useNotes((state) => state.notes[id]);","  const editing = useIsEditing(id);","  const { notes, ui } = useStores();","  const { scrollerRef, boardRef, trashRef } = useBoardDom();","  const ref = useRef\u003cHTMLElement>(null);","  const textRef = useRef\u003cHTMLDivElement>(null);","  const editorRef = useRef\u003cHTMLTextAreaElement>(null);","  // Where the Click that starts Editing puts the caret; `null` is the end of the text.","  const pendingCaret = useRef\u003cnumber | null>(null);","  // Tells the render where Editing ended apart from mounts that start out idle.","  const wasEditing = useRef(editing);","  const start = useDrag(ref, { scrollerRef, boardRef, trashRef, onClick: startEditingAt });","","  // Before paint, so the caret is in place on the first frame of Editing.","  useLayoutEffect(() => {","    const editor = editorRef.current;","    if (!editing || !editor) return;","    const offset = pendingCaret.current ?? editor.value.length;","    pendingCaret.current = null;","    editor.focus();","    editor.setSelectionRange(offset, offset);","  }, [editing]);","","  // Escape ended Editing: the article takes focus, so Tab carries on from this Note.","  // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.","  useLayoutEffect(() => {","    const ended = wasEditing.current && !editing;","    wasEditing.current = editing;","    if (ended && ui.getState().editingEndedBy === 'escape') ref.current?.focus();","  }, [editing, ui]);","","  if (!note) return null;","","  /** `caret` is a text offset, or `null` for the end of the text. */","  function startEditing(caret: number | null) {","    if (editing) return;","    pendingCaret.current = caret;","    ui.getState().startEditing(id);","  }","","  function startEditingAt(pointer: Point) {","    // Measured on the idle text, which the textarea lays out identically.","    startEditing(caretOffsetAt(textRef.current, pointer));","  }","","  function press(e: PointerEvent\u003cHTMLElement>) {","    if (!note) return;","    ui.getState().pressed(id);","    start(e, moveKind, note);","  }","","  function pressHandle(e: PointerEvent\u003cHTMLElement>, handle: ResizeHandle) {","    if (!note) return;","    ui.getState().pressed(id);","    start(e, resizeKinds[handle], note);","  }","","  function keyDownInEditor(e: KeyboardEvent\u003cHTMLTextAreaElement>) {","    // An Escape that cancelled a Drag (prevented by the Drag engine) leaves Editing on.","    if (e.key === 'Escape' && !e.defaultPrevented) ui.getState().escaped();","  }","","  /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */","  function keyDownOnNote(e: KeyboardEvent\u003cHTMLElement>) {","    // With a modifier, the key belongs to the browser or the system (Cmd+Backspace and the like).","    if (e.target !== e.currentTarget || editing || e.metaKey || e.ctrlKey || e.altKey) return;","    if (e.key === 'Enter') {","      // Or the textarea, focused before the key's default runs, would get a line break.","      e.preventDefault();","      startEditing(null);","    } else if (e.key === 'Delete' || e.key === 'Backspace') {","      e.preventDefault();","      deleteAndFocusNeighbour(e.currentTarget);","    }","  }","","  /**","   * Keeps the user's place for the next Tab: focus left on the removed article would","   * fall to the body, and Tab would start again from the toolbar.","   */","  function deleteAndFocusNeighbour(article: HTMLElement) {","    const board = article.parentElement;","    const siblings = board ? [...board.querySelectorAll\u003cHTMLElement>(':scope > article')] : [];","    const index = siblings.indexOf(article);","    const next = siblings[index + 1] ?? siblings[index - 1] ?? board;","    notes.getState().deleteNote(id);","    // Before the Undo toast's effect runs, so it sees focus taken and leaves it here.","    next?.focus();","  }","","  function focusNote(e: FocusEvent\u003cHTMLElement>) {","    // The textarea is focused only by Editing, which a Press or Enter already Raised.","    if (isInText(e)) return;","    // As a press on this Note: so the focus ring and the Editing outline are never on","    // two Notes at once.","    ui.getState().pressed(id);","    // Raised, so the focus ring is never under another Note. Only keyboard focus: a","    // right-button press focuses the article too, and must not Raise.","    if (e.target.matches(':focus-visible')) notes.getState().raise(id);","  }","","  const { x, y, width, height, z, colour, text } = note;","  return (","    \u003carticle","      ref={ref}","      aria-label=\"Note\"","      tabIndex={0}","      className={styles.note}","      data-colour={colour}","      data-editing={editing ? '' : undefined}","      // Geometry only. `transform` is left free for the Drag Preview.","      style={{ left: x, top: y, width, height, zIndex: z }}","      onPointerDown={press}","      onKeyDown={keyDownOnNote}","      onFocus={focusNote}","    >","      \u003cdiv className={styles.gripStrip} data-grip-strip=\"\" />","      \u003cbutton","        type=\"button\"","        aria-label=\"Delete note\"","        className={styles.delete}","        onPointerDown={(e) => {","          // Not a Press: no Raise, no Drag, and focus stays where it is until the delete.","          e.stopPropagation();","          e.preventDefault();","          // Still ends Editing on any other Note, as pressing anywhere else does.","          ui.getState().pressed(id);","        }}","        onClick={(e) => {","          notes.getState().deleteNote(id);","          // A mouse click (not Enter or Space) may be the first half of a double-click.","          if (e.detail > 0) ignorePressesFor(DOUBLE_CLICK_MS);","        }}","      >","        ×","      \u003c/button>","      {editing ? (","        \u003cNoteEditor ref={editorRef} text={text} onKeyDown={keyDownInEditor} />","      ) : (","        \u003cdiv ref={textRef} className={styles.text} data-note-text=\"\">","          {text}","        \u003c/div>","      )}","      \u003cResizeHandles onPress={pressHandle} />","    \u003c/article>","  );","});","","/**"," * The textarea of the Note in Editing. It shows the Draft text, falling back to the"," * Note's saved `text` until something is typed, and is the only component that"," * subscribes to it: typing re-renders it alone, and changes no Note until Editing ends."," */","function NoteEditor({","  ref,","  text,","  onKeyDown,","}: {","  ref: Ref\u003cHTMLTextAreaElement>;","  text: string;","  onKeyDown: (e: KeyboardEvent\u003cHTMLTextAreaElement>) => void;","}) {","  const { ui } = useStores();","  const draftText = useUi((state) => state.draftText);","  return (","    \u003ctextarea","      ref={ref}","      aria-label=\"Note text\"","      className={styles.editor}","      value={draftText ?? text}","      onChange={(e) => {","        ui.getState().typed(e.target.value);","      }}","      onKeyDown={onKeyDown}","    />","  );","}"],"added":[156,157]},{"path":"src/ui/editing.ts","question":"Which presses end Editing?","summary":"Unchanged logic: `pressed` ends Editing unless the target is the Note being edited. Its comment now lists the ×.","owns":"The rule for how Editing ends, and the single exit `end` that every way out goes through.","never":"Knows about the DOM or saves text itself.","tested":"`src/ui/uiStore.test.ts`, unchanged.","lines":["import type { NoteId } from '../notes/note';","","/** Why Editing last ended. `Note` reads it to put focus back on the article after Escape. */","export type EditingEnd = 'press' | 'escape' | 'delete' | 'pageHide';","","/**"," * Editing: at most one Note, its Draft text, and the rule for how it ends (\"Escape or"," * pressing anywhere else ends it\"). Callers report what happened; these decide."," */","export interface EditingState {","  readonly editingId: NoteId | null;","  /** The edited Note's Draft text, or `null` while nothing has been typed into it. */","  readonly draftText: string | null;","  /** `null` while Editing, or before it ever ended. */","  readonly editingEndedBy: EditingEnd | null;","}","","export const NOT_EDITING: EditingState = {","  editingId: null,","  draftText: null,","  editingEndedBy: null,","};","","/** Draft text that Editing ending hands over, to be saved to its Note. */","export interface EndedDraft {","  readonly id: NoteId;","  readonly text: string;","}","","/**"," * The single exit: every way Editing ends comes through here, and leaves the Draft"," * text behind for `endedDraft` to find. Leaves the state as it is when nothing is"," * being edited, so a no-op notifies nobody."," */","function end(state: EditingState, reason: EditingEnd): EditingState {","  return state.editingId === null ? state : { ...NOT_EDITING, editingEndedBy: reason };","}","","/**"," * The Draft text that the transition from `before` to `after` ended Editing with, or"," * `null` when Editing didn't end there or nothing was typed."," */","export function endedDraft(before: EditingState, after: EditingState): EndedDraft | null {","  const { editingId, draftText } = before;","  if (editingId === null || draftText === null || after.editingId === editingId) return null;","  return { id: editingId, text: draftText };","}","","/** At most one: starting it on one Note ends it on any other, through the same exit. */","export function startEditing(state: EditingState, id: NoteId): EditingState {","  if (state.editingId === id) return state;","  return { ...end(state, 'press'), editingId: id, editingEndedBy: null };","}","","/** Text typed into the edited Note. With no Note being edited, it is dropped. */","export function typed(state: EditingState, text: string): EditingState {","  return state.editingId === null || state.draftText === text","    ? state","    : { ...state, draftText: text };","}","","/**"," * A press on a Note (handles and × included) or keyboard focus arriving on it, or with"," * `null`, a press on empty Board. Anywhere but the edited Note ends Editing."," */","export function pressed(state: EditingState, target: NoteId | null): EditingState {","  return target === state.editingId ? state : end(state, 'press');","}","","/** Escape that wasn't for something else, such as cancelling a Drag. */","export function escaped(state: EditingState): EditingState {","  return end(state, 'escape');","}","","/** A Note was deleted: Editing ends only if it was that Note. */","export function deleted(state: EditingState, id: NoteId): EditingState {","  return state.editingId === id ? end(state, 'delete') : state;","}","","/** The page is being hidden or closed: Editing ends, so its Draft text is saved. */","export function pageHidden(state: EditingState): EditingState {","  return end(state, 'pageHide');","}"],"added":[62]},{"path":"src/notes/notesStore.ts","question":"How is the Draft text saved before B is deleted?","summary":"Unchanged. A subscriber on the UI store saves the Draft text synchronously whenever Editing ends; `deleteNote` then removes B.","owns":"Saving the Draft text, and deleting with an Undo snapshot.","never":"Reads the DOM.","tested":"`src/notes/notesActions.test.ts` (`every way Editing ends saves it`), unchanged.","lines":["import { createStore, type StoreApi } from 'zustand/vanilla';","import {","  placeCentredAt,","  placeInVisibleBoard,","  toStoredRect,","  type Point,","  type Rect,","  type Size,","} from '../geometry';","import { endedDraft } from '../ui/editing';","import type { UiStore } from '../ui/uiStore';","import {","  NOTE_SIZE_PRESETS,","  newNoteId,","  type Note,","  type NoteColour,","  type NoteId,","  type NoteSize,","} from './note';","","export interface NotesState {","  readonly notes: Readonly\u003cRecord\u003cNoteId, Note>>;","  /** Creation order, which is also DOM order. The Stacking order is each Note's `z`. */","  readonly ids: readonly NoteId[];","  readonly topZ: number;","}","","const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };","","function create(state: NotesState, note: Omit\u003cNote, 'z'>): NotesState {","  if (state.notes[note.id]) return state;","  const z = state.topZ + 1;","  return {","    notes: { ...state.notes, [note.id]: { ...note, ...toStoredRect(note), z } },","    ids: [...state.ids, note.id],","    topZ: z,","  };","}","","function move(state: NotesState, id: NoteId, to: Point): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y } = toStoredRect({ ...note, x: to.x, y: to.y });","  if (x === note.x && y === note.y) return state;","  return withNote(state, { ...note, x, y });","}","","function resize(state: NotesState, id: NoteId, to: Rect): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y, width, height } = toStoredRect(to);","  if (x === note.x && y === note.y && width === note.width && height === note.height) return state;","  return withNote(state, { ...note, x, y, width, height });","}","","/** Sets `z = ++topZ`. A Note already alone at the front stays as it is. */","function raise(state: NotesState, id: NoteId): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const alreadyInFront =","    note.z === state.topZ &&","    state.ids.every((other) => other === id || state.notes[other]?.z !== note.z);","  if (alreadyInFront) return state;","  const z = state.topZ + 1;","  return { ...withNote(state, { ...note, z }), topZ: z };","}","","/** Keeps the text exactly as typed, whitespace and line breaks included. */","function setText(state: NotesState, id: NoteId, text: string): NotesState {","  const note = state.notes[id];","  if (!note || note.text === text) return state;","  return withNote(state, { ...note, text });","}","","function setColour(state: NotesState, id: NoteId, colour: NoteColour): NotesState {","  const note = state.notes[id];","  if (!note || note.colour === colour) return state;","  return withNote(state, { ...note, colour });","}","","/** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */","function withoutNote(state: NotesState, id: NoteId): NotesState {","  if (!state.notes[id]) return state;","  const ids = state.ids.filter((other) => other !== id);","  const notes = Object.fromEntries(","    Object.entries(state.notes).filter(([other]) => other !== id),","  ) as NotesState['notes'];","  return { ...state, notes, ids };","}","","/** Brings a deleted Note back exactly as it was, `z` included. It is listed last. */","function restore(state: NotesState, note: Note): NotesState {","  if (state.notes[note.id]) return state;","  return {","    notes: { ...state.notes, [note.id]: note },","    ids: [...state.ids, note.id],","    topZ: Math.max(state.topZ, note.z),","  };","}","","/** Replaces one Note. `ids` and every other Note keep their reference. */","function withNote(state: NotesState, note: Note): NotesState {","  return { ...state, notes: { ...state.notes, [note.id]: note } };","}","","function load(state: NotesState, incoming: readonly Note[]): NotesState {","  // A Map, so an id that arrives twice is listed once.","  const byId = new Map\u003cNoteId, Note>();","  for (const raw of incoming) {","    const note = { ...raw, ...toStoredRect(raw) };","    const current = state.notes[note.id];","    byId.set(note.id, current && sameNote(current, note) ? current : note);","  }","","  const loadedIds = [...byId.keys()];","  const sameIds =","    loadedIds.length === state.ids.length && loadedIds.every((id, i) => id === state.ids[i]);","  if (sameIds && loadedIds.every((id) => byId.get(id) === state.notes[id])) return state;","","  return {","    notes: Object.fromEntries(byId),","    ids: sameIds ? state.ids : loadedIds,","    topZ: Math.max(0, ...Array.from(byId.values(), (note) => note.z)),","  };","}","","function sameNote(a: Note, b: Note): boolean {","  return (Object.keys(b) as (keyof Note)[]).every((key) => a[key] === b[key]);","}","","/**"," * The pure state transitions behind the Notes store's actions. An unchanged Note,"," * unchanged `ids` and a no-op all keep their reference. That is what lets a change"," * re-render only the Notes it touched."," */","export const transitions = {","  create,","  move,","  resize,","  raise,","  setText,","  setColour,","  delete: withoutNote,","  restore,","  load,","};","","export interface NotesActions {","  /** Replaces every Note, as a load from storage does. */","  readonly load: (notes: readonly Note[]) => void;","  /**","   * A double-click on empty Board: a new empty Note in the Current colour and size,","   * centred on `point` and kept inside `board` (the Board's current size, ADR 0003).","   * It opens straight into Editing.","   */","  readonly createNoteAt: (point: Point, board: Size) => void;","  /**","   * An S/M/L button: makes `size` the Current size, then creates a new empty Note of","   * that size in the Current colour, in `view` (the part of the Board scrolled into","   * view) past the spots Notes already take, kept inside `board`. It opens straight","   * into Editing.","   */","  readonly createNoteInView: (size: NoteSize, view: Rect, board: Size) => void;","  readonly move: (id: NoteId, x: number, y: number) => void;","  readonly resize: (id: NoteId, rect: Rect) => void;","  readonly raise: (id: NoteId) => void;","  readonly setText: (id: NoteId, text: string) => void;","  /** Only the Note's colour. `recolour` is what the user does. */","  readonly setColour: (id: NoteId, colour: NoteColour) => void;","  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */","  readonly recolour: (id: NoteId, colour: NoteColour) => void;","  /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */","  readonly pickColour: (colour: NoteColour) => void;","  /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */","  readonly deleteNote: (id: NoteId) => void;","  /** Brings back the last deleted Note exactly as it was, and hides the Undo toast. */","  readonly undoDelete: () => void;","}","","export type NotesStore = StoreApi\u003cNotesState & NotesActions>;","","/**"," * The Notes, and the actions that change them. The UI store is passed in for the"," * rules that span both stores (Undo, Editing, the Current colour and size); it never needs"," * the Notes store back."," */","export function createNotesStore(ui: UiStore): NotesStore {","  // Each action `set`s a pure transition. One that returns the state it was given","  // leaves the reference the same, and Zustand notifies nobody.","  const store = createStore\u003cNotesState & NotesActions>()((set, get) => {","    function recolour(id: NoteId, colour: NoteColour) {","      if (!get().notes[id]) return;","      set((state) => setColour(state, id, colour));","      ui.getState().setCurrentColour(colour);","    }","","    function createNote({ x, y, width, height }: Rect) {","      const id = newNoteId();","      const colour = ui.getState().currentColour;","      set((state) => create(state, { id, x, y, width, height, text: '', colour }));","      ui.getState().startEditing(id);","    }","","    return {","      ...EMPTY_NOTES,","      load: (notes) => {","        set((state) => load(state, notes));","      },","      createNoteAt: (point, board) => {","        const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];","        createNote(placeCentredAt(point, size, board));","      },","      createNoteInView: (size, view, board) => {","        ui.getState().setCurrentSize(size);","        const taken = Object.values(get().notes);","        createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));","      },","      move: (id, x, y) => {","        set((state) => move(state, id, { x, y }));","      },","      resize: (id, rect) => {","        set((state) => resize(state, id, rect));","      },","      raise: (id) => {","        set((state) => raise(state, id));","      },","      setText: (id, text) => {","        set((state) => setText(state, id, text));","      },","      setColour: (id, colour) => {","        set((state) => setColour(state, id, colour));","      },","      recolour,","      pickColour: (colour) => {","        const { editingId } = ui.getState();","        if (editingId) recolour(editingId, colour);","        else ui.getState().setCurrentColour(colour);","      },","      deleteNote: (id) => {","        // Ending Editing saves its Draft text, so the Undo snapshot is read after it.","        ui.getState().deleted(id);","        const note = get().notes[id];","        if (!note) return;","        ui.getState().showUndo(note);","        set((state) => withoutNote(state, id));","      },","      undoDelete: () => {","        const note = ui.getState().lastDeleted;","        if (!note) return;","        set((state) => restore(state, note));","        ui.getState().hideUndo();","      },","    };","  });","","  // However Editing ends, its Draft text is saved to its Note, synchronously, before","  // the action that ended it carries on. Typing itself never touches this store.","  ui.subscribe((after, before) => {","    const draft = endedDraft(before, after);","    if (draft) store.getState().setText(draft.id, draft.text);","  });","","  return store;","}"],"added":[]},{"path":"src/delete.browser.test.tsx","question":"How is the bug proved fixed?","summary":"A real mouse press on B's × while A is being edited with typed text.","owns":"The scenario from the issue, end to end in a browser.","never":"Calls `pressed` directly: it goes through the real `pointerdown` and `click`.","tested":"Is the test. It failed before the fix with `editingId` still `\"a\"`.","lines":["import { afterEach, beforeEach, expect, it, vi } from 'vitest';","import { page, userEvent, type Locator } from 'vitest/browser';","import type { ProfilerOnRenderCallback } from 'react';","import { makeNote, testId } from '../test/factories';","import { press } from '../test/mouse';","import { recordActions } from '../test/recordCalls';","import { renderApp } from '../test/renderApp';","import { DOUBLE_CLICK_MS } from './components/ignorePressesFor';","import { UNDO_TOAST_MS } from './components/UndoToast';","","beforeEach(async () => {","  await page.viewport(1024, 768);","});","","afterEach(async () => {","  vi.useRealTimers();","  // A mouse delete ignores presses on Notes for a double-click interval; let it lapse","  // so it can't swallow the next test's first press.","  await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));","});","","const a = makeNote({ id: testId('a'), x: 100, y: 100, z: 1, text: 'keep me', colour: 'yellow' });","const b = makeNote({ id: testId('b'), x: 400, y: 100, z: 2 });","","async function setup({ onNoteRender }: { onNoteRender?: ProfilerOnRenderCallback } = {}) {","  const { screen, stores } = await renderApp(onNoteRender ? { onNoteRender } : {});","  stores.notes.getState().load([a, b]);","  const actions = recordActions(stores.notes);","  const notes = screen.getByRole('article', { name: 'Note' });","  await expect.element(notes.nth(1)).toBeVisible();","  const toast = screen.getByRole('status');","  return { screen, stores, actions, notes, noteA: notes.nth(0), noteB: notes.nth(1), toast };","}","","const deleteButton = (note: Locator) => note.getByRole('button', { name: 'Delete note' });","","it('every Note shows a × on its strip, and clicking it deletes only that Note, with no Raise or move', async () => {","  const { stores, actions, noteA, toast } = await setup();","  await expect.element(deleteButton(noteA)).toBeVisible();","","  await press(deleteButton(noteA));","","  expect(stores.notes.getState().ids).toEqual([b.id]);","  expect(actions).toEqual([['deleteNote', a.id]]);","  await expect.element(toast.getByText('Note deleted')).toBeVisible();","});","","it('Undo brings the same Note back: id, rect, text, colour and z', async () => {","  const { stores, noteA, toast } = await setup();","  await press(deleteButton(noteA));","","  await toast.getByRole('button', { name: 'Undo' }).click();","","  expect(stores.notes.getState().notes[a.id]).toEqual(a);","  await expect.element(toast.getByText('Note deleted')).not.toBeInTheDocument();","});","","it('deleting the Note being edited ends Editing', async () => {","  const { stores, noteA } = await setup();","  stores.ui.getState().startEditing(a.id);","  await expect.element(noteA.getByRole('textbox')).toHaveFocus();","","  await press(deleteButton(noteA));","","  expect(stores.ui.getState().editingId).toBeNull();","  expect(stores.notes.getState().notes[a.id]).toBeUndefined();","});","","it('pressing another Note’s × ends Editing and saves the Draft text, with no Raise', async () => {","  const { stores, actions, noteA, noteB } = await setup();","  stores.ui.getState().startEditing(a.id);","  const editor = noteA.getByRole('textbox');","  await expect.element(editor).toHaveFocus();","  await userEvent.keyboard('!');","","  await press(deleteButton(noteB));","","  expect(stores.notes.getState().ids).toEqual([a.id]);","  expect(actions).toEqual([","    ['setText', a.id, 'keep me!'],","    ['deleteNote', b.id],","  ]);","  expect(stores.ui.getState().editingId).toBeNull();","  expect(stores.notes.getState().notes[a.id]?.text).toBe('keep me!');","  await expect.element(editor).not.toBeInTheDocument();","});","","it('the toast hides after its time, and a newer delete restarts the timer', async () => {","  const { noteA, noteB, toast } = await setup();","  const deleteB = page.elementLocator(deleteButton(noteB).element());","  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });","  await press(deleteButton(noteA));","  await expect.element(toast.getByText('Note deleted')).toBeVisible();","","  vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);","  // From the keyboard: a mouse click this soon would be taken for a double-click.","  (deleteB.element() as HTMLElement).focus();","  await userEvent.keyboard('{Enter}');","  vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);","  await expect.element(toast.getByText('Note deleted')).toBeVisible();","","  vi.advanceTimersByTime(1000);","  await expect.element(toast.getByText('Note deleted')).not.toBeInTheDocument();","});","","it('the × works from the keyboard, and focus moves to Undo', async () => {","  const { stores, noteA, toast } = await setup();","  (deleteButton(noteA).element() as HTMLElement).focus();","","  await userEvent.keyboard('{Enter}');","","  expect(stores.notes.getState().notes[a.id]).toBeUndefined();","  await expect.element(toast.getByRole('button', { name: 'Undo' })).toHaveFocus();","});","","it('a double-click on the × deletes only that Note, even with another Note under it', async () => {","  const { stores, notes } = await setup();","  const front = makeNote({ id: testId('front'), z: 2 });","  const under = makeNote({ id: testId('under'), z: 1 });","  stores.notes.getState().load([under, front]);","  await expect.element(notes.nth(1)).toBeVisible();","","  await deleteButton(notes.nth(1)).dblClick();","","  expect(stores.notes.getState().ids).toEqual([under.id]);","  expect(stores.notes.getState().notes[under.id]).toEqual(under);","});","","it('deleting Note a does not re-render Note b', async () => {","  const renders: string[] = [];","  const { noteA } = await setup({ onNoteRender: (id) => renders.push(id) });","  renders.length = 0;","","  await press(deleteButton(noteA));","","  expect(renders).not.toContain('b');","});"],"added":[68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86]}],"flow":[["src/components/Note.tsx","src/ui/editing.ts","src/notes/notesStore.ts"],["src/components/Note.tsx","src/notes/notesStore.ts"]],"scenarios":[{"name":"Note A is in Editing; click the × on Note B","steps":[{"title":"pointerdown on B's ×","explain":"`stopPropagation` keeps the article's `press` from running, so B is not Raised and no Drag starts. `preventDefault` keeps focus in A's textarea, so the textarea never blurs. Before this PR nothing else ran, and nothing told the UI store that the user had pressed somewhere else. Now the × reports `pressed(b)` itself.","run":[{"file":"src/components/Note.tsx","start":152,"end":157}]},{"title":"The UI store ends Editing on A","explain":"The target is B, not the Note being edited, so Editing ends through the single exit `end`, with the reason `press`.","run":[{"file":"src/ui/editing.ts","start":65,"end":67},{"file":"src/ui/editing.ts","start":34,"end":35}]},{"title":"A's Draft text is saved, still inside pointerdown","explain":"The subscriber sees Editing end and calls `setText(a, draft)` synchronously. This happens before the click, so the text is already saved when B is deleted.","run":[{"file":"src/notes/notesStore.ts","start":257,"end":259}]},{"title":"click on B's ×","explain":"`deleteNote(b)` calls `ui.deleted(b)`, which does nothing now: Editing has already ended. B is removed and the Undo toast shows.","run":[{"file":"src/components/Note.tsx","start":159,"end":162},{"file":"src/notes/notesStore.ts","start":238,"end":244}]},{"title":"The test checks it","explain":"It types `!` into A, presses B's × with the real mouse, and expects exactly two Notes actions, `setText` then `deleteNote` (no `raise`), Editing ended, A's text `keep me!`, and the textarea gone. Before the fix it failed on `editingId`, which was still `\"a\"`.","run":[{"file":"src/delete.browser.test.tsx","start":68,"end":84}]}]},{"name":"Note A is in Editing; click A's own ×","steps":[{"title":"pointerdown on A's ×: nothing changes","explain":"The same new line runs, but the target is the Note being edited, so `pressed` returns the state unchanged and nobody is notified. A stays in Editing until the click.","run":[{"file":"src/components/Note.tsx","start":156,"end":157},{"file":"src/ui/editing.ts","start":66,"end":66}]},{"title":"click: the delete ends Editing","explain":"As before this PR, `deleteNote(a)` calls `ui.deleted(a)` first, which ends Editing with the reason `delete`. The Draft text is saved before the Undo snapshot is read, so Undo brings back the typed text. The existing test `deleting the Note being edited ends Editing` covers this.","run":[{"file":"src/ui/editing.ts","start":75,"end":77},{"file":"src/notes/notesStore.ts","start":239,"end":241}]}]},{"name":"From the keyboard: Tab to B's ×, then Enter","steps":[{"title":"focus moves to B's ×","explain":"Unchanged, and the reason only the mouse path was broken. Focus leaving A's textarea and arriving on B's × bubbles to B's article as a React `focus` event. `focusNote` reports `pressed(b)`, which ends Editing on A. No `pointerdown` happens, so the new line doesn't run.","run":[{"file":"src/components/Note.tsx","start":121,"end":126}]}]}],"notes":[{"title":"Why report the press, and not end Editing on every delete","detail":"Changing `deleted` to end Editing whatever Note is deleted would also fix this, but it changes the documented rule (\"ends only if it was that Note\") and would end Editing for deletes that no press caused. Reporting the press keeps the glossary's rule as the single reason. The counter-argument: `pressed(id)` is now called in four places in `Note.tsx`."},{"title":"Right or middle button on the ×","detail":"`pointerdown` fires for every button, so a right-click on another Note's × now ends Editing without deleting anything (no `click` follows). That matches the article's own `press`, which also reports every button. Read in the code, not run."},{"title":"Where focus goes","detail":"`preventDefault` keeps focus in A's textarea, which unmounts when Editing ends, so focus falls to `\u003cbody>`. A press on empty Board ends the same way today. Not changed here."}],"omitted":{"GLOSSARY.md":"The Delete button entry now says the × ends Editing on any other note, as pressing anywhere else does."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
