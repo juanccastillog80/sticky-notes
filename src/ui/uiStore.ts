@@ -1,10 +1,12 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { Note, NoteColour, NoteId } from '../notes/note';
+import type { Note, NoteColour, NoteId, NoteSize } from '../notes/note';
 import * as editing from './editing';
 
 export interface UiState extends editing.EditingState {
   /** The colour the next new Note gets. */
   readonly currentColour: NoteColour;
+  /** The size a double-click on empty Board gives the next Note. */
+  readonly currentSize: NoteSize;
   /** The Note that Undo would bring back. */
   readonly lastDeleted: Note | null;
 }
@@ -26,11 +28,17 @@ export interface UiActions {
   readonly showUndo: (note: Note) => void;
   readonly hideUndo: () => void;
   readonly setCurrentColour: (colour: NoteColour) => void;
+  readonly setCurrentSize: (size: NoteSize) => void;
 }
 
 export type UiStore = StoreApi<UiState & UiActions>;
 
-const INITIAL_UI: UiState = { ...editing.NOT_EDITING, currentColour: 'yellow', lastDeleted: null };
+const INITIAL_UI: UiState = {
+  ...editing.NOT_EDITING,
+  currentColour: 'yellow',
+  currentSize: 'medium',
+  lastDeleted: null,
+};
 
 /**
  * An action that changes nothing leaves the state reference the same, and notifies
@@ -71,6 +79,9 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
       },
       setCurrentColour: (colour) => {
         setField('currentColour', colour);
+      },
+      setCurrentSize: (size) => {
+        setField('currentSize', size);
       },
     };
   });

@@ -1,26 +1,31 @@
 import type { RefObject } from 'react';
-import { placeInVisibleBoard, type Size } from '../geometry';
-import { NOTE_SIZE_PRESETS } from '../notes/note';
+import { placeInVisibleBoard } from '../geometry';
+import { NOTE_SIZE_PRESETS, type NoteSize } from '../notes/note';
 import { useStores, useUi } from '../StoresContext';
 import styles from './NewNoteButtons.module.css';
 
 const BUTTONS = [
-  { label: 'S', name: 'New small note', size: NOTE_SIZE_PRESETS.small },
-  { label: 'M', name: 'New medium note', size: NOTE_SIZE_PRESETS.medium },
-  { label: 'L', name: 'New large note', size: NOTE_SIZE_PRESETS.large },
-] as const;
+  { label: 'S', name: 'New small note', size: 'small' },
+  { label: 'M', name: 'New medium note', size: 'medium' },
+  { label: 'L', name: 'New large note', size: 'large' },
+] as const satisfies readonly { label: string; name: string; size: NoteSize }[];
 
 export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDivElement | null> }) {
-  const { notes } = useStores();
+  const { notes, ui } = useStores();
   const currentColour = useUi((state) => state.currentColour);
+  const currentSize = useUi((state) => state.currentSize);
 
-  function createInView(size: Size) {
+  /** Creates a Note of `size` in the visible Board, and makes `size` the Current size. */
+  function createInView(size: NoteSize) {
+    ui.getState().setCurrentSize(size);
     const scroller = scrollerRef.current;
     if (!scroller) return;
     const { scrollLeft: x, scrollTop: y, clientWidth: width, clientHeight: height } = scroller;
     // Read at press time, not subscribed: the buttons don't re-render as Notes change.
     const taken = Object.values(notes.getState().notes);
-    notes.getState().createNote(placeInVisibleBoard({ x, y, width, height }, size, taken));
+    notes
+      .getState()
+      .createNote(placeInVisibleBoard({ x, y, width, height }, NOTE_SIZE_PRESETS[size], taken));
   }
 
   return (
@@ -33,6 +38,7 @@ export function NewNoteButtons({ scrollerRef }: { scrollerRef: RefObject<HTMLDiv
           key={label}
           type="button"
           aria-label={name}
+          aria-pressed={size === currentSize}
           title={name}
           className={styles.button}
           onClick={() => {

@@ -14,7 +14,7 @@ export function EmptyHint() {
       style={{ maxWidth: BOARD_SIZE.width, maxHeight: BOARD_SIZE.height }}
     >
       <p className={styles.title}>Your board is empty</p>
-      <p className={styles.action}>Double-click anywhere to add a note</p>
+      <p className={styles.action}>Double-click anywhere to add a note of the selected size</p>
     </div>
   );
 }
