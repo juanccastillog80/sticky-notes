@@ -19,9 +19,7 @@
         {
           "title": "A reader opens the Architecture section",
           "explain": "The two subgraphs say where the decisions are: the UI only passes **Press** events in and draws what the **Drag** controller sends back through `DragIO`. Solid arrows are calls, dotted ones are selector subscriptions, and the thick arrow is the Notes store saving the **Draft text** when **Editing** ends, as the unchanged caption says.",
-          "run": [
-            { "file": "README.md", "from": "flowchart LR", "to": "US == \"Editing ended" }
-          ]
+          "run": [{ "file": "README.md", "from": "flowchart LR", "to": "US == \"Editing ended" }]
         }
       ]
     }
