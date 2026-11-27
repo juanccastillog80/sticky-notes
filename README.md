@@ -61,35 +61,24 @@ The UI layer is thin. The decisions are made in a pure core that never touches t
 ```mermaid
 flowchart LR
   subgraph UI["React components and DOM wiring (thin)"]
-    Board["Board"]
-    Note["Note<br/>(markup, keys)"]
+    Comp["Board · Note · Toolbar"]
     PDom["Press DOM side<br/>(pressDom.ts)"]
-    Bar["Toolbar · swatches · Undo toast"]
   end
   subgraph Core["Pure core: unit-tested, 90% coverage gate"]
     Press["Press"]
-    Ctrl["Drag controller"]
-    Kinds["Drag kinds<br/>move · resize"]
+    Ctrl["Drag controller<br/>+ kinds"]
     Geo["geometry"]
-    NS[("notes store<br/>(Zustand)")]
-    US[("ui store<br/>(Zustand)")]
+    NS[("notes store")]
+    US[("ui store")]
   end
-  Board -- "attaches once" --> PDom
-  PDom -- "Press target,<br/>focus, ×, double-click" --> Press
-  Press -- "Raise · × · new Note" --> NS
-  Press -- "ends Editing ·<br/>Click starts it" --> US
-  Press -- "press" --> Ctrl
-  PDom -- "DragHandlers<br/>pointer events" --> Ctrl
-  Ctrl -- "DragIO<br/>Preview, Trash zone look, Click" --> PDom
-  Ctrl --> Kinds --> Geo
-  Ctrl -- "one action on release" --> NS
-  Note -- "Enter · Escape · Delete · typing" --> US
-  Bar --> NS & US
-  NS -- "Undo · Editing · Current colour and size" --> US
-  NS -. "ids" .-> Board
-  NS -. "notes[id]" .-> Note
-  US -. "editingId === id ·<br/>Draft text (edited Note only)" .-> Note
-  US == "Editing ended:<br/>save its Draft text" ==> NS
+  PDom -- "pointer, focus, click" --> Press
+  Press --> Ctrl --> Geo
+  Ctrl -- "DragIO: Preview, Trash zone" --> PDom
+  Press & Ctrl -- "actions" --> NS
+  Press -- "ends Editing" --> US
+  Comp -- "actions" --> NS & US
+  NS & US -. "selectors" .-> Comp
+  US == "Editing ended:<br/>save Draft text" ==> NS
 ```
 
 Solid arrows are calls. Dotted arrows are selector subscriptions, which decide what re-renders. The thick arrow is the Notes store following the UI store: however Editing ends, it saves the Draft text to the Note.
