@@ -1,0 +1,96 @@
+{
+  "title": "S/M/L only pick the Current size",
+  "lede": "The reviewer marked note creation as only partly done because size and position were chosen apart: a size button dropped a Note in the middle of the view, and only a double-click chose where. Now S/M/L only set the **Current size**, and a double-click on empty Board is the one way to create a Note, at that size and under the pointer. `createNoteInView` and the cascade placement it used had no other caller, so they are gone.",
+  "files": [
+    {
+      "path": "src/components/SizeButtons.tsx",
+      "question": "What does clicking S, M or L do now?",
+      "summary": "Calls `setCurrentSize` on the ui store and nothing else; renamed from `NewNoteButtons`, with names 'Small notes', 'Medium notes', 'Large notes' in a 'Size of new notes' group.",
+      "owns": "The three toggle buttons and which one is pressed.",
+      "never": "Creates, places or measures a Note, so it no longer needs the scroll container.",
+      "tested": "`App.browser.test.tsx`: a size button creates no Note and keeps Editing; each size then sizes the next double-click's Note."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "How is a Note created now?",
+      "summary": "Only `createNoteAt`, which reads the Current size and centres the Note on the pointer.",
+      "owns": "Creating a Note in the Current colour and size, and opening it in Editing.",
+      "never": "Picks a place for a Note on its own: the pointer always gives the position.",
+      "tested": "`notesActions.test.ts`: the Current size and colour, Editing, and distinct ids."
+    },
+    {
+      "path": "src/press/press.ts",
+      "question": "Where does the double-click reach the store?",
+      "summary": "Unchanged: a double-click whose two presses were both on empty Board calls `createNoteAt`.",
+      "owns": "Deciding that a double-click on empty Board creates a Note.",
+      "never": "Reads the Current size itself.",
+      "tested": "`press.test.ts`, unchanged."
+    }
+  ],
+  "flow": [["src/components/SizeButtons.tsx"], ["src/press/press.ts", "src/notes/notesStore.ts"]],
+  "scenarios": [
+    {
+      "name": "Making a large Note",
+      "steps": [
+        {
+          "title": "Click L in the toolbar",
+          "explain": "The button only sets the Current size. No Note appears and an edited Note stays in **Editing**, since a press outside the Board is no Press target that ends it. The new browser test clicks all three buttons while a Note is being edited and checks both.",
+          "run": [
+            {
+              "file": "src/components/SizeButtons.tsx",
+              "from": "onClick={() => {",
+              "to": "ui.getState().setCurrentSize(size);"
+            }
+          ]
+        },
+        {
+          "title": "Double-click empty Board",
+          "explain": "The Press module sees both presses on empty Board and calls `createNoteAt` with the pointer and the Board's size. It reads the Current size, so the Note is large and centred under the pointer: size and position are chosen together.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "doubleClickedBoard(point, board) {",
+              "to": "createNoteAt(point, board)"
+            },
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "createNoteAt: (point, board) => {",
+              "to": "createNote(placeCentredAt(point, size, board));"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "No way to create a Note from the keyboard",
+      "detail": "Tab to S/M/L and Enter used to create a Note; now only a double-click does. The README's Keyboard paragraph now says creating Notes from the keyboard isn't built. The counter-argument: this is a step back for keyboard users, which a keyboard shortcut on the Board could fix later."
+    },
+    {
+      "title": "The cascade placement is deleted, not kept unused",
+      "detail": "`placeInVisibleBoard` and its tests (about 200 lines) only served the buttons. ADR 0003 and the cross-browser checklist were updated to match. Coverage stays above the gate (98.67% lines)."
+    },
+    {
+      "title": "Checked in the browser only by looking",
+      "detail": "I looked at the toolbar in the dev server but didn't click through it, because the Board held your own Notes; please do. The behaviour is covered by the browser tests in Chromium and Firefox."
+    }
+  ],
+  "omitted": {
+    "src/App.tsx": "Stops passing `scrollerRef` to the top bar.",
+    "src/components/TopBar.tsx": "Renders `SizeButtons`, which takes no props.",
+    "src/components/SizeButtons.module.css": "Renamed from `NewNoteButtons.module.css`, unchanged.",
+    "src/geometry.ts": "Removes `placeInVisibleBoard` and its cascade helpers.",
+    "src/geometry.test.ts": "Removes their tests.",
+    "src/notes/notesActions.test.ts": "Removes the `createNoteInView` tests.",
+    "src/App.browser.test.tsx": "Tests for pick-only buttons, described in the first step.",
+    "src/colours.browser.test.tsx": "Creates the next Note by double-click instead of a button.",
+    "README.md": "Feature row 1 and the Keyboard paragraph.",
+    "GLOSSARY.md": "Current size no longer adds a note.",
+    "docs/architecture.md": "`createNoteAt` is the only way to create a Note.",
+    "docs/adr/0003-board-fits-window.md": "Drops the S/M/L placement and `placeInVisibleBoard`.",
+    "docs/cross-browser-checklist.md": "Rows 9–11 now check that S/M/L only pick the size.",
+    "src/components/NewNoteButtons.tsx": "Replaced by `SizeButtons.tsx`.",
+    "src/components/NewNoteButtons.module.css": "Renamed to `SizeButtons.module.css`, unchanged."
+  }
+}
