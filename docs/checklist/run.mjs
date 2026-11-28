@@ -154,7 +154,7 @@ async function row(id, name, fn) {
   } catch (e) {
     detail = `error: ${e.message.split('\n')[0]}`;
   }
-  if (typeof fn === 'function' && detail.startsWith('not checked')) ok = null;
+  if (detail.startsWith('not checked')) ok = null;
   results.push({ id, name, ok, detail });
   console.log(
     `${ok === null ? 'SKIP' : ok ? 'PASS' : 'FAIL'} ${id} ${name}${detail ? ' — ' + detail : ''}`,
