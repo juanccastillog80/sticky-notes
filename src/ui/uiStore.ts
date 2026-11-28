@@ -20,10 +20,10 @@ export interface UiActions {
   readonly startEditing: (id: NoteId, caret?: number | null) => void;
   /**
    * The edited Note's editor keeps the Draft text in its own state, and lends here how
-   * to read it, once, when it mounts. Typing then notifies nobody. Ignored for a Note
-   * that isn't in Editing.
+   * to read it, once, when it mounts; it calls what this returns when it unmounts.
+   * Typing then notifies nobody. Ignored for a Note that isn't in Editing.
    */
-  readonly holdDraft: (id: NoteId, read: () => string) => void;
+  readonly holdDraft: (id: NoteId, read: () => string) => () => void;
   /** The Draft text of Note `id`, or `null` when no editor of it has lent one. */
   readonly readDraft: (id: NoteId) => string | null;
   /** A press on a Note or keyboard focus on it, or (`null`) a press on empty Board. */
@@ -51,11 +51,11 @@ const INITIAL_UI: UiState = {
 
 /**
  * An action that changes nothing leaves the state reference the same, and notifies
- * nobody: each one sets its field only when the value is new.
+ * nobody: each one sets its field only when the value is new. The Draft text reader
+ * that `holdDraft` lends sits outside the state, so it notifies nobody either.
  */
 export function createUiStore(initial: Partial<UiState> = {}): UiStore {
-  // Not state: nothing subscribes to it, and lending it notifies nobody. It is kept
-  // after its editor unmounts, so Editing ending reads it whatever React has done.
+  // Not state: nothing subscribes to it, and lending it notifies nobody.
   let draft: { readonly id: NoteId; readonly read: () => string } | null = null;
   return createStore<UiState & UiActions>()((set, get) => {
     function setField<K extends keyof UiState>(key: K, value: UiState[K]) {
@@ -69,7 +69,13 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
         set((state) => editing.startEditing(state, id, caret));
       },
       holdDraft: (id, read) => {
-        if (get().editingId === id) draft = { id, read };
+        if (get().editingId !== id) return () => undefined;
+        const held = { id, read };
+        draft = held;
+        return () => {
+          // Only its own: by now another editor may have lent one.
+          if (draft === held) draft = null;
+        };
       },
       readDraft: (id) => (draft?.id === id ? draft.read() : null),
       pressed: (target) => {

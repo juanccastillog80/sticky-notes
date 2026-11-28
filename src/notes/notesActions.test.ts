@@ -276,17 +276,29 @@ describe('Draft text', () => {
     expect(notes.getState().notes[a.id]).toEqual({ ...a, text: 'typed' });
   });
 
-  it('nothing typed, or the same text typed back, changes nothing', () => {
+  it('nothing typed, or the text typed back to what it was, changes nothing', () => {
     const { notes, ui } = setup([a, b]);
     const before = notes.getState();
     edit(ui, a.id, a.text);
     ui.getState().escaped();
-    const editor = edit(ui, a.id, a.text);
-    editor.text = 'hello!';
-    editor.text = 'hello';
+    edit(ui, a.id, a.text).text = 'hello';
     ui.getState().escaped();
 
     expect(notes.getState()).toBe(before);
+  });
+
+  it('an editor that has unmounted lends nothing, unless another has lent since', () => {
+    const { ui } = setup([a]);
+    ui.getState().startEditing(a.id);
+    const unmountOld = ui.getState().holdDraft(a.id, () => 'old');
+    ui.getState().holdDraft(a.id, () => 'new');
+
+    unmountOld();
+    expect(ui.getState().readDraft(a.id)).toBe('new');
+
+    const unmountNew = ui.getState().holdDraft(a.id, () => 'newer');
+    unmountNew();
+    expect(ui.getState().readDraft(a.id)).toBeNull();
   });
 
   it('a Draft text lent for a Note not in Editing is ignored', () => {

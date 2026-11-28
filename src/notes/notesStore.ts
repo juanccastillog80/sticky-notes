@@ -231,8 +231,9 @@ export function createNotesStore(ui: UiStore): NotesStore {
   // the action that ended it carries on. Typing itself never touches this store.
   ui.subscribe((after, before) => {
     const id = endedEditing(before, after);
-    const text = id === null ? null : ui.getState().readDraft(id);
-    if (id !== null && text !== null) store.getState().setText(id, text);
+    if (id === null) return;
+    const text = ui.getState().readDraft(id);
+    if (text !== null) store.getState().setText(id, text);
   });
 
   return store;

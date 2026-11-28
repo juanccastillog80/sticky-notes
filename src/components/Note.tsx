@@ -131,12 +131,10 @@ function NoteEditor({
   const { ui } = useStores();
   const [draftText, setDraftText] = useState(text);
   // Read when Editing ends, which may be from outside React (a delete, `pagehide`).
-  const latest = useRef(draftText);
-  // Before paint, so Editing that ends in the next event still finds it. Nothing to
-  // undo on unmount: the Notes store reads it as Editing ends, and the next lends anew.
-  useLayoutEffect(() => {
-    ui.getState().holdDraft(id, () => latest.current);
-  }, [id, ui]);
+  const latestDraft = useRef(draftText);
+  // Before paint, so Editing that ends in the next event still finds it. Taken back on
+  // unmount, which comes after Editing ending has already read it.
+  useLayoutEffect(() => ui.getState().holdDraft(id, () => latestDraft.current), [id, ui]);
   return (
     <textarea
       ref={ref}
@@ -144,7 +142,7 @@ function NoteEditor({
       className={styles.editor}
       value={draftText}
       onChange={(e) => {
-        latest.current = e.target.value;
+        latestDraft.current = e.target.value;
         setDraftText(e.target.value);
       }}
       onKeyDown={onKeyDown}
