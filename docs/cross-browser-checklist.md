@@ -11,7 +11,7 @@ Run on the live app in the latest Chrome, Edge and Firefox, once with the window
 | 3     | With Notes past the window, the Board scrolls; the toolbar stays put       |        |      |         |
 | 5–7   | Dot grid, empty-Board hint, opens scrolled to the top-left                 |        |      |         |
 | 8     | Double-click empty Board creates a Note centred on the pointer             |        |      |         |
-| 9–11  | S/M/L create in the visible middle, with a cascade when repeated           |        |      |         |
+| 9–11  | S/M/L only pick the size; the next double-click uses it                    |        |      |         |
 | 12    | A new Note opens in Editing, ready to type                                 |        |      |         |
 | 14–15 | A Note near the edge is pushed inside; double-click on a Note does nothing |        |      |         |
 | 16–18 | Drag from anywhere on the Note; a click inside the Dead zone doesn't move  |        |      |         |

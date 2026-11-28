@@ -8,7 +8,7 @@ A single-page desktop app for placing, arranging and resizing sticky notes on a 
 
 | Feature                                              | Status                                                                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 1. Create a note of a given size at a given position | Done: S/M/L add a Note and set the Current size; double-click empty Board adds one at the pointer       |
+| 1. Create a note of a given size at a given position | Done: S/M/L pick the Current size; double-click empty Board adds a Note of that size at the pointer     |
 | 2. Change note size by dragging                      | Done: any of the 4 edges or 4 corners, with a minimum size, stopping at the Board's edges               |
 | 3. Move a note by dragging                           | Done: a Dead zone before the drag starts, wheel-scroll while dragging, Escape cancels                   |
 | 4. Remove a note on a trash zone                     | Done: drop a Note so it overlaps the bottom-right Trash zone; Undo restores it                          |
@@ -18,7 +18,7 @@ A single-page desktop app for placing, arranging and resizing sticky notes on a 
 | Bonus IV: note colours                               | Done: six toolbar swatches recolour the Note being edited, or set the Current colour for the next Note  |
 | Extra (not in the brief): × on each Note             | Deletes the Note in one click, with Undo. Quicker than dragging it across the Board                     |
 
-**Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Moving and resizing from the keyboard aren't built. In Safari, Tab skips buttons unless "Press Tab to highlight each item on a webpage" is on (Settings → Advanced), or use Option+Tab.
+**Keyboard.** Tab and Shift+Tab move through the Notes in creation order, each followed by its ×. A focused Note is Raised and shows a focus ring. Enter starts Editing with the caret at the end, Escape ends it and leaves focus on the Note, and Delete or Backspace deletes the Note (with Undo) and focuses the next one. Creating, moving and resizing Notes from the keyboard aren't built. In Safari, Tab skips buttons unless "Press Tab to highlight each item on a webpage" is on (Settings → Advanced), or use Option+Tab.
 
 **Starting over.** The Board is kept in this browser's localStorage. To clear it, clear the site's data (DevTools → Application → Storage → Clear site data) and reload, or use a private window, which starts empty and forgets the Board when it closes.
 
