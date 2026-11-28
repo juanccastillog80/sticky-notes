@@ -73,7 +73,7 @@ The colour the next new note gets. Picking a colour in the toolbar sets it, whet
 _Avoid_: Default colour, selected colour, active colour
 
 **Current size**:
-The size (small, medium or large) a double-click on empty Board gives the next note. Clicking S, M or L in the toolbar sets it, as well as adding a note of that size; it starts at medium.
+The size (small, medium or large) a double-click on empty Board gives the next note. Clicking S, M or L in the toolbar sets it, without adding a note; it starts at medium.
 _Avoid_: Default size, selected size, active size
 
 **Raise**:

@@ -83,7 +83,9 @@ it('while not Editing, a swatch sets only the Current colour, and the next Note 
     'yellow',
   ]);
 
-  await userEvent.click(screen.getByRole('button', { name: 'New medium note' }));
+  await userEvent.dblClick(screen.getByRole('region', { name: 'Board' }), {
+    position: { x: 600, y: 500 },
+  });
 
   const created = screen.getByRole('article', { name: 'Note' }).nth(2);
   await expect.element(created).toHaveAttribute('data-colour', 'green');
@@ -92,7 +94,10 @@ it('while not Editing, a swatch sets only the Current colour, and the next Note 
 it('the label, the pressed swatch and the New-button glyphs track the state', async () => {
   const { screen, stores, noteA, colours, swatch } = await setup();
   const glyph = () =>
-    screen.getByRole('button', { name: 'New small note' }).element().querySelector('[data-colour]');
+    screen
+      .getByRole('button', { name: 'Small notes', exact: true })
+      .element()
+      .querySelector('[data-colour]');
 
   await expect.element(colours).toHaveTextContent('next note');
   await expect.element(swatch('yellow')).toHaveAttribute('aria-pressed', 'true');

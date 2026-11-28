@@ -46,64 +46,35 @@ describe('createNoteAt, a double-click on empty Board', () => {
   });
 });
 
-describe('createNoteInView, the S/M/L buttons', () => {
-  const view = { x: 0, y: 0, width: 1000, height: 696 };
-
-  it('creates a Note of that size centred in the view, and makes it the Current size', () => {
-    const { notes, ui, createNoteInView } = setup();
-
-    createNoteInView('small', { ...view, x: 100 }, { width: 1400, height: 696 });
-
-    expect(created(notes)[0]).toMatchObject({ x: 520, y: 288, width: 160, height: 120 });
-    expect(ui.getState().currentSize).toBe('small');
-  });
-
-  it('steps past spots already taken', () => {
-    const taken = makeNote({ id: testId('a'), x: 390, y: 263, z: 1 });
-    const { notes, createNoteInView } = setup([taken]);
-
-    createNoteInView('medium', view, board);
-
-    expect(created(notes).find((note) => note.id !== taken.id)).toMatchObject({ x: 414, y: 287 });
-  });
-});
-
-describe('a new Note, however it is created', () => {
-  const ways = {
-    createNoteAt: (store: Setup) => {
-      store.createNoteAt({ x: 400, y: 300 }, board);
-    },
-    createNoteInView: (store: Setup) => {
-      store.createNoteInView('medium', { x: 0, y: 0, ...board }, board);
-    },
+describe('a new Note', () => {
+  const createOne = (store: Setup) => {
+    store.createNoteAt({ x: 400, y: 300 }, board);
   };
 
-  for (const [name, createOne] of Object.entries(ways)) {
-    it(`${name} uses the Current colour`, () => {
-      const store = setup([], createUiStore({ currentColour: 'blue' }));
+  it('uses the Current colour', () => {
+    const store = setup([], createUiStore({ currentColour: 'blue' }));
 
-      createOne(store);
+    createOne(store);
 
-      expect(created(store.notes)[0]?.colour).toBe('blue');
-    });
+    expect(created(store.notes)[0]?.colour).toBe('blue');
+  });
 
-    it(`${name} opens the new Note straight into Editing`, () => {
-      const store = setup();
+  it('opens straight into Editing', () => {
+    const store = setup();
 
-      createOne(store);
+    createOne(store);
 
-      expect(store.ui.getState().editingId).toBe(created(store.notes)[0]?.id);
-    });
+    expect(store.ui.getState().editingId).toBe(created(store.notes)[0]?.id);
+  });
 
-    it(`${name} gives each Note its own id`, () => {
-      const store = setup();
+  it('gets its own id', () => {
+    const store = setup();
 
-      createOne(store);
-      createOne(store);
+    createOne(store);
+    createOne(store);
 
-      expect(new Set(created(store.notes).map((note) => note.id)).size).toBe(2);
-    });
-  }
+    expect(new Set(created(store.notes).map((note) => note.id)).size).toBe(2);
+  });
 });
 
 describe('deleteNote and undoDelete', () => {

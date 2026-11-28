@@ -46,21 +46,6 @@ it('with no size picked, double-clicking empty Board creates a medium Note centr
   expectWithinAPixel(note.y + 85, 300);
 });
 
-it('after clicking L, double-clicking empty Board creates a large Note centred on the pointer', async () => {
-  const { screen, stores, board, notes } = await setup();
-  await userEvent.click(screen.getByRole('button', { name: 'New large note' }));
-  // Clear the Note the button made, so only the double-click's Note remains.
-  stores.notes.getState().load([]);
-
-  await userEvent.dblClick(board, { position: { x: 400, y: 300 } });
-
-  await expect.element(notes).toBeVisible();
-  const note = rectOnBoard(notes.element(), board);
-  expect(note).toMatchObject({ width: 300, height: 230 });
-  expectWithinAPixel(note.x + 150, 400);
-  expectWithinAPixel(note.y + 115, 300);
-});
-
 it('double-clicking a scrolled Board still centres the Note on the pointer', async () => {
   const { stores, board, scroller, notes } = await setup();
   stores.notes.getState().load([farCornerNote]);
@@ -163,40 +148,35 @@ it('a double-click on the empty hint reaches the Board under it', async () => {
 });
 
 it.each([
-  { size: 'small', width: 160, height: 120 },
-  { size: 'medium', width: 220, height: 170 },
-  { size: 'large', width: 300, height: 230 },
+  { size: 'Small', width: 160, height: 120 },
+  { size: 'Medium', width: 220, height: 170 },
+  { size: 'Large', width: 300, height: 230 },
 ])(
-  'the $size button creates a Note centred in the visible part of the Board',
+  'after clicking $size, double-clicking empty Board creates a Note of that size on the pointer',
   async ({ size, width, height }) => {
-    const { screen, stores, board, scroller, notes } = await setup();
-    stores.notes.getState().load([farCornerNote]);
+    const { screen, board, notes } = await setup();
+    await userEvent.click(screen.getByRole('button', { name: `${size} notes`, exact: true }));
+    await expect.element(notes).not.toBeInTheDocument();
+
+    await userEvent.dblClick(board, { position: { x: 400, y: 300 } });
+
     await expect.element(notes).toBeVisible();
-    // Headless scrollbars take no space, so borders stand in for 16 px ones.
-    (scroller as HTMLElement).style.border = 'solid transparent';
-    (scroller as HTMLElement).style.borderWidth = '0 16px 16px 0';
-    scroller.scrollTo(500, 200);
-
-    await userEvent.click(screen.getByRole('button', { name: `New ${size} note` }));
-
-    // Listed after the far Note.
-    await expect.element(notes.nth(1)).toBeVisible();
-    const note = rectOnBoard(notes.nth(1).element(), board);
+    const note = rectOnBoard(notes.element(), board);
     expect(note).toMatchObject({ width, height });
-    // 1024×768, less the 48 px top bar and the scrollbars: 1008×704 is visible.
-    expectWithinAPixel(note.x + width / 2, 500 + 504);
-    expectWithinAPixel(note.y + height / 2, 200 + 352);
+    expectWithinAPixel(note.x + width / 2, 400);
+    expectWithinAPixel(note.y + height / 2, 300);
   },
 );
 
 it('the Current size button is pressed, and looks it without hovering', async () => {
   const { screen } = await setup();
-  const button = (size: string) => screen.getByRole('button', { name: `New ${size} note` });
+  const button = (size: string) =>
+    screen.getByRole('button', { name: `${size} notes`, exact: true });
   const pressed = () =>
-    ['small', 'medium', 'large'].map((size) => button(size).element().getAttribute('aria-pressed'));
+    ['Small', 'Medium', 'Large'].map((size) => button(size).element().getAttribute('aria-pressed'));
   expect(pressed()).toEqual(['false', 'true', 'false']);
 
-  await userEvent.click(button('small'));
+  await userEvent.click(button('Small'));
   // Move the pointer off the buttons, so no hover style is in play.
   await userEvent.hover(screen.getByRole('region', { name: 'Board' }), {
     position: { x: 400, y: 400 },
@@ -204,23 +184,24 @@ it('the Current size button is pressed, and looks it without hovering', async ()
 
   expect(pressed()).toEqual(['true', 'false', 'false']);
   const style = (size: string) => getComputedStyle(button(size).element());
-  expect(style('small').boxShadow).not.toBe(style('large').boxShadow);
-  expect(style('small').borderColor).not.toBe(style('large').borderColor);
+  expect(style('Small').boxShadow).not.toBe(style('Large').boxShadow);
+  expect(style('Small').borderColor).not.toBe(style('Large').borderColor);
 });
 
-it('pressing a size button again cascades the new Note by (24, 24)', async () => {
-  const { screen, board, notes } = await setup();
-  const button = screen.getByRole('button', { name: 'New medium note' });
+it('a size button only picks the size: it creates no Note and keeps Editing', async () => {
+  const { screen, stores, notes } = await setup();
+  const note = makeNote();
+  stores.notes.getState().load([note]);
+  await expect.element(notes).toBeVisible();
+  stores.ui.getState().startEditing(note.id);
 
-  await userEvent.click(button);
-  await userEvent.click(button);
-  await userEvent.click(button);
+  for (const size of ['Small', 'Large', 'Medium']) {
+    await userEvent.click(screen.getByRole('button', { name: `${size} notes`, exact: true }));
+  }
 
-  await expect.element(notes.nth(2)).toBeVisible();
-  const [first, second, third] = notes.elements().map((note) => rectOnBoard(note, board));
-  if (!first || !second || !third) throw new Error('Expected three Notes');
-  expect([second.x - first.x, second.y - first.y]).toEqual([24, 24]);
-  expect([third.x - second.x, third.y - second.y]).toEqual([24, 24]);
+  expect(stores.notes.getState().ids).toHaveLength(1);
+  expect(stores.ui.getState().currentSize).toBe('medium');
+  expect(stores.ui.getState().editingId).toBe(note.id);
 });
 
 it('a Board larger than the window scrolls in its container while the top bar stays put', async () => {

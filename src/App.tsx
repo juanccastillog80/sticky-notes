@@ -23,7 +23,7 @@ export function App({ stores, onNoteRender }: AppProps) {
     <StoresContext value={stores}>
       <BoardDomContext value={boardDom}>
         <div className={styles.app}>
-          <TopBar scrollerRef={scrollerRef} />
+          <TopBar />
           <Board scrollerRef={scrollerRef} {...(onNoteRender && { onNoteRender })} />
         </div>
       </BoardDomContext>

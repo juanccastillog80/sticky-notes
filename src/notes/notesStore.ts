@@ -1,22 +1,8 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import {
-  placeCentredAt,
-  placeInVisibleBoard,
-  toStoredRect,
-  type Point,
-  type Rect,
-  type Size,
-} from '../geometry';
+import { placeCentredAt, toStoredRect, type Point, type Rect, type Size } from '../geometry';
 import { endedDraft } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
-import {
-  NOTE_SIZE_PRESETS,
-  newNoteId,
-  type Note,
-  type NoteColour,
-  type NoteId,
-  type NoteSize,
-} from './note';
+import { NOTE_SIZE_PRESETS, newNoteId, type Note, type NoteColour, type NoteId } from './note';
 
 export interface NotesState {
   readonly notes: Readonly<Record<NoteId, Note>>;
@@ -154,13 +140,6 @@ export interface NotesActions {
    * It opens straight into Editing.
    */
   readonly createNoteAt: (point: Point, board: Size) => void;
-  /**
-   * An S/M/L button: makes `size` the Current size, then creates a new empty Note of
-   * that size in the Current colour, in `view` (the part of the Board scrolled into
-   * view) past the spots Notes already take, kept inside `board`. It opens straight
-   * into Editing.
-   */
-  readonly createNoteInView: (size: NoteSize, view: Rect, board: Size) => void;
   readonly move: (id: NoteId, x: number, y: number) => void;
   readonly resize: (id: NoteId, rect: Rect) => void;
   readonly raise: (id: NoteId) => void;
@@ -209,11 +188,6 @@ export function createNotesStore(ui: UiStore): NotesStore {
       createNoteAt: (point, board) => {
         const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
         createNote(placeCentredAt(point, size, board));
-      },
-      createNoteInView: (size, view, board) => {
-        ui.getState().setCurrentSize(size);
-        const taken = Object.values(get().notes);
-        createNote(placeInVisibleBoard(view, NOTE_SIZE_PRESETS[size], taken, board));
       },
       move: (id, x, y) => {
         set((state) => move(state, id, { x, y }));
