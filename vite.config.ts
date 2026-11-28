@@ -44,8 +44,8 @@ function browserInstances(list = 'chromium,firefox') {
 }
 
 export default defineConfig({
-  // The same base for every command, dev included, so the service-worker
-  // scope and URLs match the GitHub Pages deployment.
+  // The same base for every command, dev included, so URLs match the GitHub
+  // Pages deployment.
   base: '/sticky-notes/',
   plugins: [react()],
   test: {

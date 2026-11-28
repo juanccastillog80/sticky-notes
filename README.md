@@ -65,7 +65,7 @@ The Board is saved to a Local copy in localStorage that follows the Notes store 
 ```mermaid
 flowchart LR
   subgraph UI["React components and DOM wiring (thin)"]
-    Comp["Board · Note · Toolbar"]
+    Comp["Board · Note · TopBar"]
     PDom["Press DOM side<br/>(pressDom.ts)"]
   end
   subgraph Core["Pure core: unit-tested, 90% coverage gate"]
