@@ -6,6 +6,12 @@ import type { Stores } from '../StoresContext';
 
 /** Longer than most systems' double-click interval. */
 export const DOUBLE_CLICK_MS = 500;
+/**
+ * How far from a deleting click its double-click's second half can land. Above the
+ * systems' own distance limits (Windows 2 px, GTK 5 px), below half the 18 px ×, so a
+ * different Note's × is never inside it unless that Note sits almost exactly on top.
+ */
+export const DOUBLE_CLICK_RADIUS_PX = 8;
 
 export type PressTarget =
   | { readonly on: 'body' | 'grip'; readonly id: NoteId }
@@ -32,8 +38,8 @@ export interface Press {
     id: NoteId,
     how: { readonly keyboard: boolean; readonly inText: boolean },
   ) => void;
-  /** `mouse`: not Enter or Space, so maybe half a double-click. */
-  readonly deleteButtonClicked: (id: NoteId, how: { readonly mouse: boolean }) => void;
+  /** `mouseAt`: the client point of a mouse click, maybe half a double-click; `null` for Enter or Space. */
+  readonly deleteButtonClicked: (id: NoteId, how: { readonly mouseAt: Point | null }) => void;
   readonly doubleClickedBoard: (point: Point, board: Size) => void;
   readonly dispose: () => void;
 }
@@ -42,8 +48,9 @@ export interface Press {
  * Every rule for the pointer going down, in one place, so a new Press target can't
  * skip one. The less obvious ones:
  * - a double-click creates a Note only if both presses were on empty Board.
- * - after a mouse click on a × deletes its Note, presses on Notes are ignored for
- *   `DOUBLE_CLICK_MS`, so a double-click's second half can't hit the Note under the ×.
+ * - after a mouse click on a × deletes its Note, presses on Notes near that point are
+ *   ignored for `DOUBLE_CLICK_MS`, so a double-click's second half can't hit the Note
+ *   under the ×. Presses elsewhere, such as on another Note's ×, act at once.
  * - a Note deleted while held (from the keyboard) cancels its Drag, so Undo brings it
  *   back where it was.
  */
@@ -55,9 +62,12 @@ export function createPress(
   let pressedId: NoteId | null = null;
   let previousOnBoard = false;
   let lastOnBoard = false;
-  let ignoreUntil = -Infinity;
+  let ignored: { readonly at: Point; readonly until: number } | null = null;
 
-  const ignoring = () => now() < ignoreUntil;
+  const ignoring = ({ x, y }: Point) =>
+    ignored !== null &&
+    now() < ignored.until &&
+    Math.hypot(x - ignored.at.x, y - ignored.at.y) <= DOUBLE_CLICK_RADIUS_PX;
 
   const unsubscribe = notes.subscribe((state) => {
     if (pressedId !== null && !state.notes[pressedId]) {
@@ -75,7 +85,7 @@ export function createPress(
         ui.getState().pressed(null);
         return 'none';
       }
-      if (ignoring()) return 'prevent';
+      if (ignoring({ x: pointer.clientX, y: pointer.clientY })) return 'prevent';
       // Any button, the × included.
       ui.getState().pressed(target.id);
       if (target.on === 'delete') return 'prevent';
@@ -103,11 +113,11 @@ export function createPress(
       if (keyboard) notes.getState().raise(id);
     },
 
-    deleteButtonClicked(id, { mouse }) {
-      if (mouse && ignoring()) return;
+    deleteButtonClicked(id, { mouseAt }) {
+      if (mouseAt && ignoring(mouseAt)) return;
 
       notes.getState().deleteNote(id);
-      if (mouse) ignoreUntil = now() + DOUBLE_CLICK_MS;
+      if (mouseAt) ignored = { at: mouseAt, until: now() + DOUBLE_CLICK_MS };
     },
 
     doubleClickedBoard(point, board) {

@@ -242,7 +242,7 @@ describe('Draft text', () => {
       'the × on another Note',
       async ({ noteB }) => {
         await noteB.getByRole('button', { name: 'Delete note' }).click();
-        // A mouse delete ignores presses on Notes for a double-click interval: let it lapse.
+        // A mouse delete ignores presses on Notes near its point for a double-click interval: let it lapse.
         await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
       },
     ],
@@ -271,7 +271,7 @@ describe('Draft text', () => {
 
     expect(stores.notes.getState().notes[a.id]).toEqual({ ...typedInto, text: 'hello big world' });
     await expect.element(screen.getByText('hello big world')).toBeVisible();
-    // A mouse delete ignores presses on Notes for a double-click interval: let it lapse.
+    // A mouse delete ignores presses on Notes near its point for a double-click interval: let it lapse.
     await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
   });
 

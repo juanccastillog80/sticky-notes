@@ -116,7 +116,9 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     if (!id || !(e.target instanceof Element)) return;
     if (!e.target.closest('[data-press-target="delete"]')) return;
     // `detail` 0: Enter or Space, which can't be half a double-click.
-    press.deleteButtonClicked(id, { mouse: e.detail > 0 });
+    press.deleteButtonClicked(id, {
+      mouseAt: e.detail > 0 ? { x: e.clientX, y: e.clientY } : null,
+    });
   }
 
   function doubleClick(e: MouseEvent) {
