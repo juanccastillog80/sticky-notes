@@ -136,6 +136,16 @@ it('shows the empty hint only while there are no Notes', async () => {
   await expect.element(hint).toBeVisible();
 });
 
+it('the toolbar says how to add a Note, with Notes on the Board or none', async () => {
+  const { screen, board, notes } = await setup();
+  const toolbarHint = screen.getByText('Double-click the Board to add a note');
+  await expect.element(toolbarHint).toBeVisible();
+
+  await userEvent.dblClick(board, { position: { x: 100, y: 100 } });
+  await expect.element(notes).toBeVisible();
+  await expect.element(toolbarHint).toBeVisible();
+});
+
 it('a double-click on the empty hint reaches the Board under it', async () => {
   const { screen, board, notes } = await setup();
   const hint = screen.getByText('Double-click anywhere to add a note of the current size');

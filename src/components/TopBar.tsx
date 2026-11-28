@@ -8,6 +8,8 @@ export function TopBar() {
       <h1 className={styles.name}>Sticky Notes</h1>
       <SizeButtons />
       <ColourSwatches />
+      {/* Always shown: S/M/L only pick a size, and the empty-Board hint goes with the first Note. */}
+      <p className={styles.hint}>Double-click the Board to add a note</p>
     </header>
   );
 }

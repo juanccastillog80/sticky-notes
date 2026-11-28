@@ -90,7 +90,7 @@ Solid arrows are calls, dotted arrows are selector subscriptions, and the thick 
 ## Known limits
 
 - Notes are saved only in this browser. Syncing several tabs isn't handled: across tabs, the last save wins. If the browser blocks site data, Notes are kept in memory only, with a warning in the console.
-- Browser tests run in Chromium and Firefox on every PR, and also in Chrome and Edge on real Windows and macOS runners. None are skipped or retried. Any Firefox flakiness found will be recorded here rather than silenced.
+- Browser tests run on every PR in the browsers listed under Setup. None are skipped or retried.
 - Desktop pointer input only. Touch and pen aren't targeted, per the brief.
 
 ## Cross-browser sign-off
