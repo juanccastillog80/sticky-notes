@@ -13,3 +13,4 @@ dist/
 coverage/
 .vitest/
 .playwright-browsers/
+docs/checklist/out/
