@@ -31,7 +31,8 @@ export function useStores(): Stores {
 
 /**
  * Re-renders only when the selected value changes by `Object.is`, so a selector
- * returns a primitive or a reference already in the state, never a new object.
+ * returns a primitive or a reference already in the state. A selector that builds a
+ * new object goes through `useShallow`, which compares it field by field.
  */
 export function useNotes<T>(selector: (state: NotesState) => T): T {
   return useStore(useStores().notes, selector);

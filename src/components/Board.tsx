@@ -1,4 +1,5 @@
 import { memo, Profiler, useEffect, type ProfilerOnRenderCallback, type RefObject } from 'react';
+import { useShallow } from 'zustand/shallow';
 import { notesExtent } from '../geometry';
 import type { NoteId } from '../notes/note';
 import { useBoardDom } from '../BoardDomContext';
@@ -20,9 +21,8 @@ export function Board({
   const ids = useNotes((state) => state.ids);
   const stores = useStores();
   // The Board is at least as big as its Notes; CSS makes it at least the visible area too.
-  // Numbers, so only a change of the furthest edges re-renders the Board.
-  const extentWidth = useNotes((state) => notesExtent(Object.values(state.notes)).width);
-  const extentHeight = useNotes((state) => notesExtent(Object.values(state.notes)).height);
+  // Compared field by field, so only a change of the furthest edges re-renders the Board.
+  const extent = useNotes(useShallow((state) => notesExtent(Object.values(state.notes))));
 
   const boardDom = useBoardDom();
   const { boardRef } = boardDom;
@@ -38,7 +38,7 @@ export function Board({
           // Focusable by script only: where focus goes when the last Note is deleted.
           tabIndex={-1}
           className={styles.board}
-          style={{ width: extentWidth, height: extentHeight }}
+          style={{ width: extent.width, height: extent.height }}
         >
           {ids.map((id) =>
             onNoteRender ? (

@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"Review polish: a toolbar hint, one extent selector, stale comments","lede":"Fixes from the second mock review. The toolbar now always says how to add a Note, because S/M/L only pick a size and the empty-Board hint goes away with the first Note. The Board reads the Notes' extent once per change instead of twice. Two comments that had gone stale and a README line that read as a promise are fixed.","files":[{"path":"src/components/TopBar.tsx","question":"How does someone find out how to add a Note once the Board has Notes?","summary":"A muted line after the colour swatches: \"Double-click the Board to add a note\".","owns":"The toolbar's layout: name, size buttons, colour swatches and the hint.","never":"Creating Notes: S/M/L only set the Current size (PR #58).","tested":"`src/App.browser.test.tsx`: the hint is visible with no Notes and still visible after a double-click adds one.","lines":["import { ColourSwatches } from './ColourSwatches';","import { SizeButtons } from './SizeButtons';","import styles from './TopBar.module.css';","","export function TopBar() {","  return (","    \u003cheader className={styles.topBar}>","      \u003ch1 className={styles.name}>Sticky Notes\u003c/h1>","      \u003cSizeButtons />","      \u003cColourSwatches />","      {/* Always shown: S/M/L only pick a size, and the empty-Board hint goes with the first Note. */}","      \u003cp className={styles.hint}>Double-click the Board to add a note\u003c/p>","    \u003c/header>","  );","}"],"added":[10,11]},{"path":"src/App.browser.test.tsx","question":"What proves the hint stays?","summary":"A browser test reads the hint before and after a double-click adds a Note, in Chromium and Firefox.","owns":"The App-level behaviour a reviewer sees: creation, the hints, the Board's size.","never":"Store logic: that is unit-tested in Node.","tested":"It is the test.","lines":["import { beforeEach, expect, it } from 'vitest';","import { page, userEvent, type Locator } from 'vitest/browser';","import { farCornerNote, makeNote } from '../test/factories';","import { renderApp } from '../test/renderApp';","","beforeEach(async () => {","  await page.viewport(1024, 768);","});","","async function setup() {","  const { screen, stores } = await renderApp();","  const board = screen.getByRole('region', { name: 'Board' });","  const scroller = scrollContainerOf(board.element());","  return { screen, stores, board, scroller, notes: screen.getByRole('article', { name: 'Note' }) };","}","","function scrollContainerOf(element: Element): Element {","  for (let parent = element.parentElement; parent; parent = parent.parentElement) {","    if (getComputedStyle(parent).overflowX === 'auto') return parent;","  }","  throw new Error('The Board has no scroll container');","}","","/** An element's rect in Board coordinates. */","function rectOnBoard(element: Element, board: Locator) {","  const { x, y, width, height } = element.getBoundingClientRect();","  const origin = board.element().getBoundingClientRect();","  return { x: x - origin.x, y: y - origin.y, width, height };","}","","/** Real input lands on device pixels, so a pointer position can be a pixel out. */","function expectWithinAPixel(actual: number, expected: number) {","  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);","}","","it('with no size picked, double-clicking empty Board creates a medium Note centred on the pointer', async () => {","  const { board, notes } = await setup();","","  await userEvent.dblClick(board, { position: { x: 400, y: 300 } });","","  await expect.element(notes).toBeVisible();","  const note = rectOnBoard(notes.element(), board);","  // 220×170 is Medium.","  expect(note).toMatchObject({ width: 220, height: 170 });","  expectWithinAPixel(note.x + 110, 400);","  expectWithinAPixel(note.y + 85, 300);","});","","it('double-clicking a scrolled Board still centres the Note on the pointer', async () => {","  const { stores, board, scroller, notes } = await setup();","  stores.notes.getState().load([farCornerNote]);","  await expect.element(notes).toBeVisible();","  scroller.scrollTo(500, 200);","","  await userEvent.dblClick(board, { position: { x: 900, y: 500 } });","","  // Listed after the far Note.","  await expect.element(notes.nth(1)).toBeVisible();","  const note = rectOnBoard(notes.nth(1).element(), board);","  expectWithinAPixel(note.x + 110, 900);","  expectWithinAPixel(note.y + 85, 500);","});","","it('double-clicking a Note creates nothing', async () => {","  const { board, notes } = await setup();","  await userEvent.dblClick(board, { position: { x: 400, y: 300 } });","  await expect.element(notes).toBeVisible();","","  // The Grip strip, then the body: both are inside the Note.","  await userEvent.dblClick(notes, { position: { x: 110, y: 10 } });","  await userEvent.dblClick(notes, { position: { x: 110, y: 100 } });","","  expect(notes.elements()).toHaveLength(1);","});","","it('a double-click that starts on a Note creates nothing', async () => {","  const { board, stores, notes } = await setup();","  const note = makeNote({ x: 100, y: 100 });","  stores.notes.getState().load([note]);","  await expect.element(notes).toBeVisible();","  // Move the Note after the first click, so the second lands on empty Board.","  notes.element().addEventListener(","    'click',","    () => {","      stores.notes.getState().load([{ ...note, x: 600 }]);","    },","    { once: true },","  );","","  await userEvent.dblClick(board, { position: { x: 200, y: 200 }, delay: 50 });","","  expect(rectOnBoard(notes.first().element(), board).x).toBe(600);","  expect(notes.elements()).toHaveLength(1);","});","","it('a double-click that starts outside the Board creates nothing', async () => {","  const { screen, board, notes } = await setup();","  // An earlier press on empty Board, which must not count towards the double-click.","  await userEvent.click(board, { position: { x: 700, y: 400 } });","  const topBar = screen.getByRole('banner').element() as HTMLElement;","  // Shrink the top bar after the first click, so the second lands on empty Board.","  topBar.addEventListener(","    'click',","    () => {","      topBar.style.height = '24px';","    },","    { once: true },","  );","  let target: EventTarget | null = null;","  board.element().addEventListener('dblclick', (event) => (target = event.target));","","  await userEvent.dblClick(document.body, { position: { x: 500, y: 40 }, delay: 50 });","","  expect(target).toBe(board.element());","  expect(notes.elements()).toHaveLength(0);","});","","it('a Note created near the edge is pushed fully inside the Board', async () => {","  const { board, notes } = await setup();","","  await userEvent.dblClick(board, { position: { x: 8, y: 8 } });","","  await expect.element(notes).toBeVisible();","  expect(rectOnBoard(notes.element(), board)).toMatchObject({ x: 0, y: 0 });","});","","it('shows the empty hint only while there are no Notes', async () => {","  const { screen, stores, board } = await setup();","  const hint = screen.getByText('Double-click anywhere to add a note of the current size');","  await expect.element(hint).toBeVisible();","","  await userEvent.dblClick(board, { position: { x: 100, y: 100 } });","  await expect.element(hint).not.toBeInTheDocument();","","  stores.notes.getState().load([]);","  await expect.element(hint).toBeVisible();","});","","it('the toolbar says how to add a Note, with Notes on the Board or none', async () => {","  const { screen, board, notes } = await setup();","  const toolbarHint = screen.getByText('Double-click the Board to add a note');","  await expect.element(toolbarHint).toBeVisible();","","  await userEvent.dblClick(board, { position: { x: 100, y: 100 } });","  await expect.element(notes).toBeVisible();","  await expect.element(toolbarHint).toBeVisible();","});","","it('a double-click on the empty hint reaches the Board under it', async () => {","  const { screen, board, notes } = await setup();","  const hint = screen.getByText('Double-click anywhere to add a note of the current size');","  await expect.element(hint).toBeVisible();","  const { x, y, width, height } = rectOnBoard(hint.element(), board);","","  await userEvent.dblClick(board, { position: { x: x + width / 2, y: y + height / 2 } });","","  await expect.element(notes).toBeVisible();","});","","it.each([","  { size: 'Small', width: 160, height: 120 },","  { size: 'Medium', width: 220, height: 170 },","  { size: 'Large', width: 300, height: 230 },","])(","  'after clicking $size, double-clicking empty Board creates a Note of that size on the pointer',","  async ({ size, width, height }) => {","    const { screen, board, notes } = await setup();","    await userEvent.click(screen.getByRole('button', { name: `${size} notes`, exact: true }));","    await expect.element(notes).not.toBeInTheDocument();","","    await userEvent.dblClick(board, { position: { x: 400, y: 300 } });","","    await expect.element(notes).toBeVisible();","    const note = rectOnBoard(notes.element(), board);","    expect(note).toMatchObject({ width, height });","    expectWithinAPixel(note.x + width / 2, 400);","    expectWithinAPixel(note.y + height / 2, 300);","  },",");","","it('the Current size button is pressed, and looks it without hovering', async () => {","  const { screen } = await setup();","  const button = (size: string) =>","    screen.getByRole('button', { name: `${size} notes`, exact: true });","  const pressed = () =>","    ['Small', 'Medium', 'Large'].map((size) => button(size).element().getAttribute('aria-pressed'));","  expect(pressed()).toEqual(['false', 'true', 'false']);","","  await userEvent.click(button('Small'));","  // Move the pointer off the buttons, so no hover style is in play.","  await userEvent.hover(screen.getByRole('region', { name: 'Board' }), {","    position: { x: 400, y: 400 },","  });","","  expect(pressed()).toEqual(['true', 'false', 'false']);","  const style = (size: string) => getComputedStyle(button(size).element());","  expect(style('Small').boxShadow).not.toBe(style('Large').boxShadow);","  expect(style('Small').borderColor).not.toBe(style('Large').borderColor);","});","","it('a size button only picks the size: it creates no Note and keeps Editing', async () => {","  const { screen, stores, notes } = await setup();","  const note = makeNote();","  stores.notes.getState().load([note]);","  await expect.element(notes).toBeVisible();","  stores.ui.getState().startEditing(note.id);","","  for (const size of ['Small', 'Large', 'Medium']) {","    await userEvent.click(screen.getByRole('button', { name: `${size} notes`, exact: true }));","  }","","  expect(stores.notes.getState().ids).toHaveLength(1);","  expect(stores.ui.getState().currentSize).toBe('medium');","  expect(stores.ui.getState().editingId).toBe(note.id);","});","","it('a Board larger than the window scrolls in its container while the top bar stays put', async () => {","  const { screen, stores, board, scroller, notes } = await setup();","  stores.notes.getState().load([farCornerNote]);","  await expect.element(notes).toBeVisible();","  const topBar = screen.getByRole('banner');","","  expect(board.element().getBoundingClientRect()).toMatchObject({","    x: 0,","    y: 48,","    width: 1920,","    height: 1080,","  });","","  scroller.scrollTo(10_000, 10_000);","","  const end = board.element().getBoundingClientRect();","  const visible = scroller.getBoundingClientRect();","  // The Board's far edge comes into view, with backdrop beyond it.","  expect(end.right).toBeLessThan(visible.left + scroller.clientWidth);","  expect(end.bottom).toBeLessThan(visible.top + scroller.clientHeight);","  expect(topBar.element().getBoundingClientRect()).toMatchObject({ x: 0, y: 0, height: 48 });","  expect(document.documentElement.scrollWidth).toBe(1024);","  expect(document.documentElement.scrollHeight).toBe(768);","});"],"added":[138,139,140,141,142,143,144,145,146,147]},{"path":"src/components/Board.tsx","question":"When does the Board re-render for its size?","summary":"One selector returns the Notes' extent as `{ width, height }`, and `useShallow` compares it field by field.","owns":"The Board's inline size: the Notes' extent, with CSS making it at least the visible area (ADR 0003).","never":"Measuring the window: CSS handles that.","tested":"The existing Board-size tests in `src/App.browser.test.tsx` (growing and shrinking with the far Note) still pass.","lines":["import { memo, Profiler, useEffect, type ProfilerOnRenderCallback, type RefObject } from 'react';","import { useShallow } from 'zustand/shallow';","import { notesExtent } from '../geometry';","import type { NoteId } from '../notes/note';","import { useBoardDom } from '../BoardDomContext';","import { attachPress } from '../press/pressDom';","import { useNotes, useStores } from '../StoresContext';","import { EmptyHint } from './EmptyHint';","import { Note } from './Note';","import { TrashZone } from './TrashZone';","import { UndoToast } from './UndoToast';","import styles from './Board.module.css';","","export function Board({","  scrollerRef,","  onNoteRender,","}: {","  scrollerRef: RefObject\u003cHTMLDivElement | null>;","  onNoteRender?: ProfilerOnRenderCallback;","}) {","  const ids = useNotes((state) => state.ids);","  const stores = useStores();","  // The Board is at least as big as its Notes; CSS makes it at least the visible area too.","  // Compared field by field, so only a change of the furthest edges re-renders the Board.","  const extent = useNotes(useShallow((state) => notesExtent(Object.values(state.notes))));","","  const boardDom = useBoardDom();","  const { boardRef } = boardDom;","  // Everything the pointer going down does, on Notes and on empty Board (`src/press/`).","  useEffect(() => attachPress(stores, boardDom), [stores, boardDom]);","","  return (","    \u003cmain className={styles.viewport}>","      \u003cdiv ref={scrollerRef} className={styles.scroller}>","        \u003csection","          ref={boardRef}","          aria-label=\"Board\"","          // Focusable by script only: where focus goes when the last Note is deleted.","          tabIndex={-1}","          className={styles.board}","          style={{ width: extent.width, height: extent.height }}","        >","          {ids.map((id) =>","            onNoteRender ? (","              \u003cProfiledNote key={id} id={id} onRender={onNoteRender} />","            ) : (","              \u003cNote key={id} id={id} />","            ),","          )}","        \u003c/section>","      \u003c/div>","      \u003cEmptyHint />","      \u003cTrashZone />","      \u003cUndoToast />","    \u003c/main>","  );","}","","/**"," * Tests only. Memoised, so a Board render (create, delete) doesn't re-render the"," * `\u003cProfiler>` itself: it then reports only when its own Note renders."," */","const ProfiledNote = memo(function ProfiledNote({","  id,","  onRender,","}: {","  id: NoteId;","  onRender: ProfilerOnRenderCallback;","}) {","  return (","    \u003cProfiler id={id} onRender={onRender}>","      \u003cNote id={id} />","    \u003c/Profiler>","  );","});"],"added":[1,23,24,40]}],"flow":[],"scenarios":[{"name":"A reviewer with Notes on the Board wants another","steps":[{"title":"They look at the toolbar","explain":"The empty-Board hint unmounts with the first Note, and clicking S, M or L only changes the pressed button. Without this line a reviewer might decide creation is broken. It is a `\u003cp>` with no handlers, so it changes nothing in the Press module. I checked that it fits on one line at 1024×768 in Chromium. I didn't check Firefox or Edge by eye.","run":[{"file":"src/components/TopBar.tsx","start":9,"end":11}]},{"title":"The test pins it","explain":"It reads the hint before and after a double-click creates a Note, so removing the line, or showing it only on an empty Board, fails.","run":[{"file":"src/App.browser.test.tsx","start":138,"end":144}]}]},{"name":"A Note is typed in or recoloured, and the Board's size doesn't change","steps":[{"title":"The Notes store notifies, and the Board's selector runs","explain":"Every Notes change runs this selector. Before, two selectors each scanned every Note with `notesExtent`. Now one scan builds `{ width, height }`. `useShallow` keeps the previous object when both fields are equal, so the Board doesn't re-render and the new object isn't a new reference on every change.","run":[{"file":"src/components/Board.tsx","start":24,"end":24},{"file":"src/components/Board.tsx","start":40,"end":40}]}]}],"notes":[{"title":"The hint repeats the empty-Board hint","detail":"On an empty Board both say double-click. The empty hint is the big welcome, and the toolbar line is what remains afterwards. Counter-argument: two lines saying nearly the same thing. Hiding the toolbar line while the Board is empty would remove that, but it would add a selector for little gain."},{"title":"Stale comment in `App.tsx`","detail":"It said the top bar reads the scroll container to see the visible part of the Board. That stopped being true in PR #58, which removed placement in the visible area. Now it names the actual readers: the Trash zone and a Drag."}],"omitted":{"src/components/TopBar.module.css":"The hint's style: muted, 12.5 px, on one line.","src/App.tsx":"Comment only (see notes).","README.md":"Known limits: the browser-test line now points to the matrix under Setup, and the Firefox-flakiness promise is gone.","src/StoresContext.ts":"Comment only: `useNotes` now names `useShallow` for a selector that builds an object."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>
