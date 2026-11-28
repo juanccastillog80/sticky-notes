@@ -39,7 +39,6 @@ function resize(state: NotesState, id: NoteId, to: Rect): NotesState {
   return withNote(state, { ...note, x, y, width, height });
 }
 
-/** Sets `z = ++topZ`. A Note already alone at the front stays as it is. */
 function raise(state: NotesState, id: NoteId): NotesState {
   const note = state.notes[id];
   if (!note) return state;
@@ -51,7 +50,6 @@ function raise(state: NotesState, id: NoteId): NotesState {
   return { ...withNote(state, { ...note, z }), topZ: z };
 }
 
-/** Keeps the text exactly as typed, whitespace and line breaks included. */
 function setText(state: NotesState, id: NoteId, text: string): NotesState {
   const note = state.notes[id];
   if (!note || note.text === text) return state;
@@ -74,7 +72,6 @@ function withoutNote(state: NotesState, id: NoteId): NotesState {
   return { ...state, notes, ids };
 }
 
-/** Brings a deleted Note back exactly as it was, `z` included. It is listed last. */
 function restore(state: NotesState, note: Note): NotesState {
   if (state.notes[note.id]) return state;
   return {
@@ -84,13 +81,11 @@ function restore(state: NotesState, note: Note): NotesState {
   };
 }
 
-/** Replaces one Note. `ids` and every other Note keep their reference. */
 function withNote(state: NotesState, note: Note): NotesState {
   return { ...state, notes: { ...state.notes, [note.id]: note } };
 }
 
 function load(state: NotesState, incoming: readonly Note[]): NotesState {
-  // A Map, so an id that arrives twice is listed once.
   const byId = new Map<NoteId, Note>();
   for (const raw of incoming) {
     const note = { ...raw, ...toStoredRect(raw) };
@@ -115,9 +110,8 @@ function sameNote(a: Note, b: Note): boolean {
 }
 
 /**
- * The pure state transitions behind the Notes store's actions. An unchanged Note,
- * unchanged `ids` and a no-op all keep their reference. That is what lets a change
- * re-render only the Notes it touched.
+ * Pure. An unchanged Note, unchanged `ids` and a no-op all keep their reference, so a
+ * change re-renders only the Notes it touched.
  */
 export const transitions = {
   create,
@@ -132,40 +126,26 @@ export const transitions = {
 };
 
 export interface NotesActions {
-  /** Replaces every Note, as a load from storage does. */
   readonly load: (notes: readonly Note[]) => void;
-  /**
-   * A double-click on empty Board: a new empty Note in the Current colour and size,
-   * centred on `point` and kept inside `board` (the Board's current size, ADR 0003).
-   * It opens straight into Editing.
-   */
+  /** In the Current colour and size, centred on `point`, straight into Editing. */
   readonly createNoteAt: (point: Point, board: Size) => void;
   readonly move: (id: NoteId, x: number, y: number) => void;
   readonly resize: (id: NoteId, rect: Rect) => void;
   readonly raise: (id: NoteId) => void;
   readonly setText: (id: NoteId, text: string) => void;
-  /** Only the Note's colour. `recolour` is what the user does. */
   readonly setColour: (id: NoteId, colour: NoteColour) => void;
-  /** Recolouring a Note also makes its colour the Current colour, for the next Note. */
+  /** Also makes it the Current colour. */
   readonly recolour: (id: NoteId, colour: NoteColour) => void;
-  /** A swatch: recolours the Note being edited, or with none, sets only the Current colour. */
+  /** Recolours the edited Note, or with none, sets only the Current colour. */
   readonly pickColour: (colour: NoteColour) => void;
-  /** Records the Note for Undo and ends its Editing first, so no phantom Editing is left. */
   readonly deleteNote: (id: NoteId) => void;
-  /** Brings back the last deleted Note exactly as it was, and hides the Undo toast. */
   readonly undoDelete: () => void;
 }
 
 export type NotesStore = StoreApi<NotesState & NotesActions>;
 
-/**
- * The Notes, and the actions that change them. The UI store is passed in for the
- * rules that span both stores (Undo, Editing, the Current colour and size); it never needs
- * the Notes store back.
- */
+/** The UI store is passed in for the rules that span both; it never needs this one back. */
 export function createNotesStore(ui: UiStore): NotesStore {
-  // Each action `set`s a pure transition. One that returns the state it was given
-  // leaves the reference the same, and Zustand notifies nobody.
   const store = createStore<NotesState & NotesActions>()((set, get) => {
     function recolour(id: NoteId, colour: NoteColour) {
       if (!get().notes[id]) return;
@@ -227,8 +207,8 @@ export function createNotesStore(ui: UiStore): NotesStore {
     };
   });
 
-  // However Editing ends, its Draft text is saved to its Note, synchronously, before
-  // the action that ended it carries on. Typing itself never touches this store.
+  // However Editing ends, its Draft text is saved synchronously, before the action
+  // that ended it carries on (a delete's Undo snapshot, `pagehide`'s flush).
   ui.subscribe((after, before) => {
     const id = endedEditing(before, after);
     if (id === null) return;

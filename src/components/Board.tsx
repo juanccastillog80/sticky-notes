@@ -20,13 +20,11 @@ export function Board({
 }) {
   const ids = useNotes((state) => state.ids);
   const stores = useStores();
-  // The Board is at least as big as its Notes; CSS makes it at least the visible area too.
-  // Compared field by field, so only a change of the furthest edges re-renders the Board.
+  // CSS makes the Board at least the visible area too (ADR 0003).
   const extent = useNotes(useShallow((state) => notesExtent(Object.values(state.notes))));
 
   const boardDom = useBoardDom();
   const { boardRef } = boardDom;
-  // Everything the pointer going down does, on Notes and on empty Board (`src/press/`).
   useEffect(() => attachPress(stores, boardDom), [stores, boardDom]);
 
   return (

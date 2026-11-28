@@ -12,8 +12,6 @@ export interface AppProps {
 }
 
 export function App({ stores, onNoteRender }: AppProps) {
-  // The Board's scroll container. The Trash zone reads it to stay pinned to the window,
-  // and a Drag to follow a scroll.
   const scrollerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLElement>(null);
   const trashRef = useRef<HTMLDivElement>(null);

@@ -2,33 +2,23 @@ import type { Note } from '../notes/note';
 import type { NotesState, NotesStore } from '../notes/notesStore';
 import { parseNotes } from './parseNotes';
 
-/** Where the Local copy lives in localStorage. */
 export const LOCAL_COPY_KEY = 'sticky-notes:local-copy';
 
-/** The part of `Storage` the Local copy uses, so tests can pass a fake. */
 export type LocalCopyStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-/** The timers the save waits on, so tests can move the clock themselves. */
 export interface Timers {
   readonly setTimeout: (callback: () => void, ms: number) => number;
   readonly clearTimeout: (id: number) => void;
 }
 
-/** How long the Board must be still before it is saved. */
 export const SAVE_DELAY_MS = 300;
 
-/** What is stored. `v` lets a later format be told apart from this one. */
 interface LocalCopyV1 {
   readonly v: 1;
   readonly notes: readonly Note[];
 }
 
-/**
- * The Notes in the Local copy, read synchronously so they are on the Board
- * before the first paint. A copy that can't be read or trusted is discarded
- * with a warning: the app starts empty rather than crashing, and the next
- * save overwrites it.
- */
+/** A copy that can't be read or trusted is discarded: the app starts empty rather than crashing. */
 export function readLocalCopy(storage: LocalCopyStorage): Note[] {
   let raw: string | null;
   let copy: unknown;
@@ -56,15 +46,10 @@ function isVersion1(copy: unknown): copy is { v: 1; notes: unknown } {
 }
 
 export interface LocalCopySaving {
-  /** Writes a scheduled save now, as the page is hidden or closed. */
   readonly flush: () => void;
 }
 
-/**
- * Follows the Notes store and writes the whole Board to the Local copy, once the
- * Notes have been still for `SAVE_DELAY_MS`. A write that fails (a full or
- * blocked storage) is ignored: the Board stays as it is in memory.
- */
+/** Writes the whole Board once the Notes have been still for `SAVE_DELAY_MS`. */
 export function saveLocalCopy(
   store: NotesStore,
   { storage, timers }: { storage: LocalCopyStorage; timers: Timers },
@@ -78,8 +63,6 @@ export function saveLocalCopy(
     write(storage, store.getState());
   }
 
-  // Zustand notifies only when an action returns a new state, so a no-op
-  // (a move to the same place, a raise of the front Note) never saves.
   store.subscribe(() => {
     if (scheduled !== null) timers.clearTimeout(scheduled);
     scheduled = timers.setTimeout(flush, SAVE_DELAY_MS);

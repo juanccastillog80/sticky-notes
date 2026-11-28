@@ -2,12 +2,7 @@ import { useLayoutEffect } from 'react';
 import { useBoardDom } from '../BoardDomContext';
 import styles from './TrashZone.module.css';
 
-/**
- * Pinned to the bottom-right of the visible Board, above Notes, whatever the scroll.
- * Dropping a moved Note that overlaps it deletes the Note, wherever the pointer is. The Drag engine
- * writes `data-state` (`quiet`, `armed`, `over`) straight to the DOM, so a move never
- * re-renders it.
- */
+/** The Drag controller writes `data-state` straight to the DOM, so a move never re-renders it. */
 export function TrashZone() {
   const { scrollerRef, trashRef } = useBoardDom();
 

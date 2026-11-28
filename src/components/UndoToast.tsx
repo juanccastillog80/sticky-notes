@@ -2,14 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useStores, useUi } from '../StoresContext';
 import styles from './UndoToast.module.css';
 
-/** How long the Undo toast stays after a delete. */
 export const UNDO_TOAST_MS = 5000;
 
-/**
- * "Note deleted · Undo" after a delete. A newer delete replaces `lastDeleted`, so the
- * effect restarts the timer. The live region is always mounted, so screen readers
- * announce each delete.
- */
+/** The live region is always mounted, so screen readers announce each delete. */
 export function UndoToast() {
   const lastDeleted = useUi((state) => state.lastDeleted);
   const { notes, ui } = useStores();

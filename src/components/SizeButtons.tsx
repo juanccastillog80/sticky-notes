@@ -8,7 +8,6 @@ const BUTTONS = [
   { label: 'L', name: 'Large notes', size: 'large' },
 ] as const satisfies readonly { label: string; name: string; size: NoteSize }[];
 
-/** S/M/L pick the Current size, which a double-click on empty Board uses. They create no Note. */
 export function SizeButtons() {
   const { ui } = useStores();
   const currentColour = useUi((state) => state.currentColour);

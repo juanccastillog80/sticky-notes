@@ -2,10 +2,6 @@ import { COLOUR_NAMES, NOTE_COLOURS } from '../notes/note';
 import { useNotes, useStores, useUi } from '../StoresContext';
 import styles from './ColourSwatches.module.css';
 
-/**
- * The swatches act on the Note being edited, or with none, on the next Note (see
- * `pickColour`). While Editing, the pressed swatch is the edited Note's colour.
- */
 export function ColourSwatches() {
   const { notes } = useStores();
   const editingId = useUi((state) => state.editingId);
