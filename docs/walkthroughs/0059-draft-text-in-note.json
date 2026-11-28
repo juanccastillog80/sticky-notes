@@ -1,0 +1,226 @@
+{
+  "issue": 59,
+  "title": "Note text: the edited Note keeps its Draft text until Editing ends",
+  "lede": "Before this PR, #41 kept the **Draft text** in the ui store, so each keystroke still called `ui.typed` and notified every ui store subscriber. Now the textarea of the Note in **Editing** (`NoteEditor`) keeps the Draft text in its own React state, and **typing touches no store**. When the editor mounts, it lends the ui store a way to read that text (`holdDraft`). However Editing ends, the Notes store reads it at once and saves it to the Note, before the action that ended Editing carries on. Delete-then-Undo and `pagehide` therefore still get the typed text.",
+  "files": [
+    {
+      "path": "src/components/Note.tsx",
+      "question": "Where does the Draft text live while typing?",
+      "summary": "`NoteEditor` keeps it in `useState`, mirrored in a ref, and lends a reader to the ui store in a layout effect.",
+      "owns": "The Draft text itself, from mount (the Note's saved `text`) until it unmounts.",
+      "never": "Writes to a store while typing, or saves the text itself.",
+      "tested": "`src/editing.browser.test.tsx`, `Draft text`: counts updates of both stores while typing; every ending; × delete then Undo; Profiler."
+    },
+    {
+      "path": "src/ui/uiStore.ts",
+      "question": "How does the Notes store reach text held inside a component?",
+      "summary": "`holdDraft(id, read)` keeps the reader in a closure variable outside the store's state and returns a release; `readDraft(id)` calls it.",
+      "owns": "At most one lent reader, for the Note in Editing only.",
+      "never": "Notifies anyone when a reader is lent or released: it isn't state.",
+      "tested": "`src/notes/notesActions.test.ts`: `an editor that has unmounted lends nothing, unless another has lent since`, `a Draft text lent for a Note not in Editing is ignored`."
+    },
+    {
+      "path": "src/ui/editing.ts",
+      "question": "Which transition ended Editing?",
+      "summary": "`draftText`, `typed` and `endedDraft` are gone; `endedEditing(before, after)` names the Note whose Editing ended.",
+      "owns": "The rule for how Editing ends, through the single exit `end`.",
+      "never": "Holds text.",
+      "tested": "`src/ui/uiStore.test.ts`, unchanged; and through the Notes store tests."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Who saves the Draft text, and when?",
+      "summary": "Its ui store subscriber: when `endedEditing` names a Note, it reads that Note's Draft text and calls `setText`, synchronously inside the `set` that ended Editing.",
+      "owns": "Saving the Draft text to the Note, and reading the Undo snapshot only after it.",
+      "never": "Runs on a keystroke: typing doesn't change the ui store at all now.",
+      "tested": "`src/notes/notesActions.test.ts`, `Draft text`: every ending, `pageHidden`, delete then Undo, nothing typed."
+    },
+    {
+      "path": "src/main.tsx",
+      "question": "Is the text saved when the tab closes?",
+      "summary": "Unchanged: `pageHidden()` ends Editing, which saves the Draft text, and only then `saving.flush()` writes the Local copy.",
+      "owns": "The order of the two calls on `pagehide`.",
+      "never": "Reads the Draft text itself.",
+      "tested": "Only the store side (`pageHidden` saves the Draft text); the listener's order isn't covered, see notes."
+    },
+    {
+      "path": "src/editing.browser.test.tsx",
+      "question": "How is it proved in a real browser?",
+      "summary": "The `Draft text` tests type with real keys and count updates of both stores; a new ending, the × on another Note, joins the list.",
+      "owns": "The user-visible behaviour: every ending keeps the text, delete then Undo, no other Note re-renders.",
+      "never": "Calls store actions to type: it goes through the real textarea.",
+      "tested": "Is the test. `typing updates no store…` failed before the change with `ui: 4`."
+    },
+    {
+      "path": "src/notes/notesActions.test.ts",
+      "question": "How are the store rules tested without React?",
+      "summary": "A stand-in editor keeps its text in a plain object and lends it through `holdDraft`, as `NoteEditor` does.",
+      "owns": "Every ending, `pageHidden`, delete then Undo, nothing typed, and the reader's release and Editing check.",
+      "never": "Renders anything.",
+      "tested": "Is the test."
+    }
+  ],
+  "flow": [
+    ["src/components/Note.tsx", "src/ui/uiStore.ts"],
+    [
+      "src/components/Note.tsx",
+      "src/ui/uiStore.ts",
+      "src/ui/editing.ts",
+      "src/notes/notesStore.ts",
+      "src/ui/uiStore.ts"
+    ],
+    ["src/main.tsx", "src/ui/uiStore.ts", "src/notes/notesStore.ts"]
+  ],
+  "scenarios": [
+    {
+      "name": "Note A is in Editing; type `big `, then press Escape",
+      "steps": [
+        {
+          "title": "The editor mounts and lends its reader",
+          "explain": "When A enters Editing, `NoteEditor` mounts with `draftText` set to A's saved text. Its layout effect runs before paint, so an Editing that ends in the very next event still finds the reader. `holdDraft` returns its release, which React calls on unmount. The reader reads the ref, not the state, because it is called from outside React, after the last render.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "const [draftText, setDraftText] = useState(text);",
+              "to": "useLayoutEffect(() => ui.getState().holdDraft(id, () => latestDraft.current), [id, ui]);"
+            },
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "holdDraft: (id, read) => {",
+              "to": "draft = held;"
+            }
+          ]
+        },
+        {
+          "title": "Each keystroke",
+          "explain": "`onChange` updates the ref and the component's own state, and nothing else. Only `NoteEditor` re-renders. The browser test subscribes to both stores and counts `{ notes: 0, ui: 0 }` after typing; before this PR it counted 4 ui updates for 4 keys.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "latestDraft.current = e.target.value;",
+              "to": "setDraftText(e.target.value);"
+            },
+            {
+              "file": "src/editing.browser.test.tsx",
+              "from": "expect(counter).toEqual({ notes: 0, ui: 0 });"
+            }
+          ]
+        },
+        {
+          "title": "keydown Escape: Editing ends through the single exit",
+          "explain": "The textarea reports Escape; `end` clears `editingId`. Zustand calls subscribers synchronously inside this `set`, so what follows runs before `escaped()` returns.",
+          "run": [
+            {
+              "file": "src/components/Note.tsx",
+              "from": "if (e.key === 'Escape' && !e.defaultPrevented) ui.getState().escaped();"
+            },
+            {
+              "file": "src/ui/editing.ts",
+              "from": "function end(state: EditingState, reason: EditingEnd): EditingState {",
+              "to": "return state.editingId === null ? state : { ...NOT_EDITING, editingEndedBy: reason };"
+            }
+          ]
+        },
+        {
+          "title": "The Notes store saves the Draft text, once",
+          "explain": "`endedEditing` sees A's id before and none after, so the subscriber reads A's Draft text through the lent reader and saves it. React hasn't re-rendered yet, so the editor is still mounted; even so, the reader only reads a ref. That is one Notes store update, which the Local copy saves 300 ms later.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "const id = endedEditing(before, after);",
+              "to": "if (text !== null) store.getState().setText(id, text);"
+            },
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "readDraft: (id) => (draft?.id === id ? draft.read() : null),"
+            }
+          ]
+        },
+        {
+          "title": "React re-renders: the editor unmounts and takes its reader back",
+          "explain": "The release clears the reader only if it is still this editor's. When Editing moves to another Note, the old editor's cleanup and the new editor's `holdDraft` run in the same commit, in an order this code doesn't rely on. If the old editor cleared unconditionally, it could wipe the new editor's reader.",
+          "run": [
+            {
+              "file": "src/ui/uiStore.ts",
+              "from": "// Only its own: by now another editor may have lent one.",
+              "to": "if (draft === held) draft = null;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Type in Note A, then delete A with its ×, then Undo",
+      "steps": [
+        {
+          "title": "deleteNote reports the delete before reading the Undo snapshot",
+          "explain": "`deleted(id)` ends Editing on A, so the subscriber saves the Draft text into A first. Only then is A read for Undo, so the snapshot has the typed text. In the other order, Undo would bring back A's text from before Editing.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "deleteNote: (id) => {",
+              "to": "ui.getState().showUndo(note);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The tab closes while typing (`pagehide`)",
+      "steps": [
+        {
+          "title": "End Editing, then flush",
+          "explain": "`pageHidden()` ends Editing; the subscriber saves the Draft text and schedules a Local copy write, which `flush` then writes at once. This file didn't change. The text now comes from the editor's reader instead of the ui store, but it is read at the same moment.",
+          "run": [
+            {
+              "file": "src/main.tsx",
+              "from": "stores.ui.getState().pageHidden();",
+              "to": "saving.flush();"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nothing typed: Escape changes no Note",
+      "steps": [
+        {
+          "title": "The saved text comes back unchanged",
+          "explain": "The reader returns the text the editor started from, so `setText` finds it equal and returns the same state: Zustand notifies nobody and the Local copy isn't written. Before this PR, `draftText` stayed `null` instead; the outcome is the same.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "if (!note || note.text === text) return state;"
+            },
+            {
+              "file": "src/notes/notesActions.test.ts",
+              "from": "it('nothing typed, or the text typed back to what it was, changes nothing', () => {"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "Why a lent reader, not an unmount effect",
+      "detail": "Saving in the editor's unmount cleanup would be simpler, but it runs after React re-renders, which is too late: `deleteNote` reads its Undo snapshot, and `pagehide` flushes, in the same call that ended Editing. The counter-argument: the ui store now holds a function that isn't state. It sits outside the state on purpose, so lending one notifies nobody."
+    },
+    {
+      "title": "Where the Editing rule is checked",
+      "detail": "`holdDraft` ignores a Note that isn't in Editing. That check sits in `uiStore.ts`, not in the pure transitions of `editing.ts`, because the reader isn't state. The code review flagged it as a judgement call; it was left as it is."
+    },
+    {
+      "title": "A remount would drop typed text",
+      "detail": "If `NoteEditor` remounted mid-Editing, `useState(text)` would start again from the saved text. No path does that today: Notes are keyed by id, and the editor's effect depends only on `id` and `ui`. Under #41 the text lived in the store and would have survived."
+    },
+    {
+      "title": "Tests that check less than the issue's wording",
+      "detail": "The Profiler wraps the whole Note, so it can't tell A's textarea re-rendering from all of A re-rendering; it shows no other Note re-renders. The `pagehide` order in `main.tsx` is still not covered by a test."
+    }
+  ],
+  "omitted": {
+    "README.md": "Architecture paragraph: the ui store no longer holds the Draft text; the edited Note does.",
+    "docs/architecture.md": "Same change in the stores and re-render paragraphs."
+  }
+}
