@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeNote, testId } from '../../test/factories';
 import { createUiStore } from '../ui/uiStore';
-import type { Note } from './note';
+import type { Note, NoteId } from './note';
 import { createNotesStore } from './notesStore';
 
 type Setup = ReturnType<typeof setup>;
@@ -205,21 +205,28 @@ describe('Draft text', () => {
   const a = makeNote({ id: testId('a'), text: 'hello' });
   const b = makeNote({ id: testId('b'), x: 400, z: 2 });
 
-  it('typing changes no Note; Editing ending saves the Draft text once', () => {
+  /**
+   * Starts Editing on `id` and mounts a stand-in for its editor, which keeps the Draft
+   * text itself and lends the ui store how to read it, as `NoteEditor` does.
+   */
+  function edit(ui: Setup['ui'], id: NoteId, saved: string) {
+    ui.getState().startEditing(id);
+    const editor = { text: saved };
+    ui.getState().holdDraft(id, () => editor.text);
+    return editor;
+  }
+
+  it('Editing ending saves the Draft text to the Note once', () => {
     const { notes, ui } = setup([a, b]);
+    const editor = edit(ui, a.id, a.text);
     let updates = 0;
     notes.subscribe(() => (updates += 1));
-    ui.getState().startEditing(a.id);
 
-    ui.getState().typed('hello w');
-    ui.getState().typed('hello wo');
-    expect(updates).toBe(0);
-    expect(ui.getState().draftText).toBe('hello wo');
-
+    editor.text = 'hello wo';
     ui.getState().escaped();
+
     expect(updates).toBe(1);
     expect(notes.getState().notes[a.id]?.text).toBe('hello wo');
-    expect(ui.getState().draftText).toBeNull();
   });
 
   it('every way Editing ends saves it', () => {
@@ -243,8 +250,7 @@ describe('Draft text', () => {
       },
     };
     for (const [ending, end] of Object.entries(endings)) {
-      ui.getState().startEditing(a.id);
-      ui.getState().typed(ending);
+      edit(ui, a.id, a.text).text = ending;
       end();
       expect(text()).toBe(ending);
     }
@@ -252,8 +258,7 @@ describe('Draft text', () => {
 
   it('the page being hidden while Editing saves the Draft text', () => {
     const { notes, ui } = setup([a]);
-    ui.getState().startEditing(a.id);
-    ui.getState().typed('before reload');
+    edit(ui, a.id, a.text).text = 'before reload';
 
     ui.getState().pageHidden();
 
@@ -263,8 +268,7 @@ describe('Draft text', () => {
 
   it('deleting the edited Note saves the Draft text first, so Undo brings it back', () => {
     const { notes, ui } = setup([a, b]);
-    ui.getState().startEditing(a.id);
-    ui.getState().typed('typed');
+    edit(ui, a.id, a.text).text = 'typed';
 
     notes.getState().deleteNote(a.id);
     notes.getState().undoDelete();
@@ -272,25 +276,39 @@ describe('Draft text', () => {
     expect(notes.getState().notes[a.id]).toEqual({ ...a, text: 'typed' });
   });
 
-  it('nothing typed, or the same text typed back, changes nothing', () => {
+  it('nothing typed, or the text typed back to what it was, changes nothing', () => {
     const { notes, ui } = setup([a, b]);
     const before = notes.getState();
-    ui.getState().startEditing(a.id);
+    edit(ui, a.id, a.text);
     ui.getState().escaped();
-    ui.getState().startEditing(a.id);
-    ui.getState().typed('hello!');
-    ui.getState().typed('hello');
+    edit(ui, a.id, a.text).text = 'hello';
     ui.getState().escaped();
 
     expect(notes.getState()).toBe(before);
   });
 
-  it('typing while not Editing keeps no Draft text', () => {
+  it('an editor that has unmounted lends nothing, unless another has lent since', () => {
     const { ui } = setup([a]);
-    const idle = ui.getState();
+    ui.getState().startEditing(a.id);
+    const unmountOld = ui.getState().holdDraft(a.id, () => 'old');
+    ui.getState().holdDraft(a.id, () => 'new');
 
-    ui.getState().typed('lost');
+    unmountOld();
+    expect(ui.getState().readDraft(a.id)).toBe('new');
 
-    expect(ui.getState()).toBe(idle);
+    const unmountNew = ui.getState().holdDraft(a.id, () => 'newer');
+    unmountNew();
+    expect(ui.getState().readDraft(a.id)).toBeNull();
+  });
+
+  it('a Draft text lent for a Note not in Editing is ignored', () => {
+    const { notes, ui } = setup([a, b]);
+    ui.getState().startEditing(b.id);
+    ui.getState().holdDraft(a.id, () => 'lost');
+
+    ui.getState().escaped();
+
+    expect(ui.getState().readDraft(a.id)).toBeNull();
+    expect(notes.getState().notes[a.id]?.text).toBe('hello');
   });
 });

@@ -1,6 +1,6 @@
-import { memo, useLayoutEffect, useRef, type KeyboardEvent, type Ref } from 'react';
+import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import type { NoteId } from '../notes/note';
-import { useIsEditing, useNotes, useStores, useUi } from '../StoresContext';
+import { useIsEditing, useNotes, useStores } from '../StoresContext';
 import styles from './Note.module.css';
 import { ResizeHandles } from './ResizeHandles';
 
@@ -100,7 +100,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
         ×
       </button>
       {editing ? (
-        <NoteEditor ref={editorRef} text={text} onKeyDown={keyDownInEditor} />
+        <NoteEditor ref={editorRef} id={id} text={text} onKeyDown={keyDownInEditor} />
       ) : (
         <div className={styles.text} data-note-text="">
           {text}
@@ -112,29 +112,38 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 });
 
 /**
- * The textarea of the Note in Editing. It shows the Draft text, falling back to the
- * Note's saved `text` until something is typed, and is the only component that
- * subscribes to it: typing re-renders it alone, and changes no Note until Editing ends.
+ * The textarea of the Note in Editing. It keeps the Draft text in its own state,
+ * starting from the Note's saved `text`: typing re-renders it alone, and touches no
+ * store. It lends the ui store how to read the Draft text, so however Editing ends,
+ * the Notes store saves it to the Note at once, before React has unmounted anything.
  */
 function NoteEditor({
   ref,
+  id,
   text,
   onKeyDown,
 }: {
   ref: Ref<HTMLTextAreaElement>;
+  id: NoteId;
   text: string;
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const { ui } = useStores();
-  const draftText = useUi((state) => state.draftText);
+  const [draftText, setDraftText] = useState(text);
+  // Read when Editing ends, which may be from outside React (a delete, `pagehide`).
+  const latestDraft = useRef(draftText);
+  // Before paint, so Editing that ends in the next event still finds it. Taken back on
+  // unmount, which comes after Editing ending has already read it.
+  useLayoutEffect(() => ui.getState().holdDraft(id, () => latestDraft.current), [id, ui]);
   return (
     <textarea
       ref={ref}
       aria-label="Note text"
       className={styles.editor}
-      value={draftText ?? text}
+      value={draftText}
       onChange={(e) => {
-        ui.getState().typed(e.target.value);
+        latestDraft.current = e.target.value;
+        setDraftText(e.target.value);
       }}
       onKeyDown={onKeyDown}
     />
