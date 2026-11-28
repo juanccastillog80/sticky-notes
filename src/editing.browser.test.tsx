@@ -205,25 +205,26 @@ it('Escape during a strip Drag cancels the Drag and keeps Editing', async () => 
 });
 
 describe('Draft text', () => {
-  /** Counts Notes store updates from here on. */
+  /** Counts updates of each store from here on. */
   function countUpdates(stores: Stores) {
-    const counter = { updates: 0 };
-    stores.notes.subscribe(() => (counter.updates += 1));
+    const counter = { notes: 0, ui: 0 };
+    stores.notes.subscribe(() => (counter.notes += 1));
+    stores.ui.subscribe(() => (counter.ui += 1));
     return counter;
   }
 
-  it('typing updates the Notes store not at all until Editing ends, then exactly once', async () => {
+  it('typing updates no store until Editing ends, then the Notes store exactly once', async () => {
     const { stores, noteA } = await setup();
     await editABeforeWorld(noteA);
     const counter = countUpdates(stores);
 
     await userEvent.keyboard('big ');
-    expect(counter.updates).toBe(0);
+    expect(counter).toEqual({ notes: 0, ui: 0 });
     await expect.element(editor(noteA)).toHaveValue('hello big world');
     expect(focused()?.selectionStart).toBe(10);
 
     await userEvent.keyboard('{Escape}');
-    expect(counter.updates).toBe(1);
+    expect(counter.notes).toBe(1);
     expect(stores.notes.getState().notes[a.id]?.text).toBe('hello big world');
     await expect.element(noteA.getByText('hello big world')).toBeVisible();
   });
@@ -237,6 +238,14 @@ describe('Draft text', () => {
       ({ noteB }) => drag(noteB, { dx: 50, dy: 0, position: { x: 100, y: 10 } }),
     ],
     ['creating a new Note', ({ board }) => board.dblClick({ position: { x: 500, y: 500 } })],
+    [
+      'the × on another Note',
+      async ({ noteB }) => {
+        await noteB.getByRole('button', { name: 'Delete note' }).click();
+        // A mouse delete ignores presses on Notes for a double-click interval: let it lapse.
+        await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
+      },
+    ],
   ];
 
   it.each(endings)('the text is kept after Editing ends by %s', async (_, end) => {

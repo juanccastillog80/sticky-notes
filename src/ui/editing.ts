@@ -4,13 +4,12 @@ import type { NoteId } from '../notes/note';
 export type EditingEnd = 'press' | 'escape' | 'delete' | 'pageHide';
 
 /**
- * Editing: at most one Note, its Draft text, and the rule for how it ends ("Escape or
- * pressing anywhere else ends it"). Callers report what happened; these decide.
+ * Editing: at most one Note, and the rule for how it ends ("Escape or pressing anywhere
+ * else ends it"). Callers report what happened; these decide. The Draft text isn't
+ * here: the edited Note keeps it until Editing ends.
  */
 export interface EditingState {
   readonly editingId: NoteId | null;
-  /** The edited Note's Draft text, or `null` while nothing has been typed into it. */
-  readonly draftText: string | null;
   /** `null` while Editing, or before it ever ended. */
   readonly editingEndedBy: EditingEnd | null;
   /**
@@ -22,34 +21,26 @@ export interface EditingState {
 
 export const NOT_EDITING: EditingState = {
   editingId: null,
-  draftText: null,
   editingEndedBy: null,
   caret: null,
 };
 
-/** Draft text that Editing ending hands over, to be saved to its Note. */
-export interface EndedDraft {
-  readonly id: NoteId;
-  readonly text: string;
-}
-
 /**
- * The single exit: every way Editing ends comes through here, and leaves the Draft
- * text behind for `endedDraft` to find. Leaves the state as it is when nothing is
- * being edited, so a no-op notifies nobody.
+ * The single exit: every way Editing ends comes through here, for `endedEditing` to
+ * find. Leaves the state as it is when nothing is being edited, so a no-op notifies
+ * nobody.
  */
 function end(state: EditingState, reason: EditingEnd): EditingState {
   return state.editingId === null ? state : { ...NOT_EDITING, editingEndedBy: reason };
 }
 
 /**
- * The Draft text that the transition from `before` to `after` ended Editing with, or
- * `null` when Editing didn't end there or nothing was typed.
+ * The Note whose Editing the transition from `before` to `after` ended, so its Draft
+ * text is saved, or `null` when no Editing ended there.
  */
-export function endedDraft(before: EditingState, after: EditingState): EndedDraft | null {
-  const { editingId, draftText } = before;
-  if (editingId === null || draftText === null || after.editingId === editingId) return null;
-  return { id: editingId, text: draftText };
+export function endedEditing(before: EditingState, after: EditingState): NoteId | null {
+  const { editingId } = before;
+  return editingId === null || after.editingId === editingId ? null : editingId;
 }
 
 /**
@@ -63,13 +54,6 @@ export function startEditing(
 ): EditingState {
   if (state.editingId === id) return state;
   return { ...end(state, 'press'), editingId: id, editingEndedBy: null, caret };
-}
-
-/** Text typed into the edited Note. With no Note being edited, it is dropped. */
-export function typed(state: EditingState, text: string): EditingState {
-  return state.editingId === null || state.draftText === text
-    ? state
-    : { ...state, draftText: text };
 }
 
 /**

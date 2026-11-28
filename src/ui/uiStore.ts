@@ -18,8 +18,14 @@ export interface UiActions {
    * `caret` is where the caret goes: a text offset, or `null` (the default) for the end.
    */
   readonly startEditing: (id: NoteId, caret?: number | null) => void;
-  /** The edited Note's text, as typed: kept as Draft text until Editing ends. */
-  readonly typed: (text: string) => void;
+  /**
+   * The edited Note's editor keeps the Draft text in its own state, and lends here how
+   * to read it, once, when it mounts. Typing then notifies nobody. Ignored for a Note
+   * that isn't in Editing.
+   */
+  readonly holdDraft: (id: NoteId, read: () => string) => void;
+  /** The Draft text of Note `id`, or `null` when no editor of it has lent one. */
+  readonly readDraft: (id: NoteId) => string | null;
   /** A press on a Note or keyboard focus on it, or (`null`) a press on empty Board. */
   readonly pressed: (target: NoteId | null) => void;
   /** Escape in the edited Note's text, unless it cancelled a Drag. */
@@ -48,7 +54,10 @@ const INITIAL_UI: UiState = {
  * nobody: each one sets its field only when the value is new.
  */
 export function createUiStore(initial: Partial<UiState> = {}): UiStore {
-  return createStore<UiState & UiActions>()((set) => {
+  // Not state: nothing subscribes to it, and lending it notifies nobody. It is kept
+  // after its editor unmounts, so Editing ending reads it whatever React has done.
+  let draft: { readonly id: NoteId; readonly read: () => string } | null = null;
+  return createStore<UiState & UiActions>()((set, get) => {
     function setField<K extends keyof UiState>(key: K, value: UiState[K]) {
       set((state) => (Object.is(state[key], value) ? state : { [key]: value }));
     }
@@ -59,9 +68,10 @@ export function createUiStore(initial: Partial<UiState> = {}): UiStore {
       startEditing: (id, caret = null) => {
         set((state) => editing.startEditing(state, id, caret));
       },
-      typed: (text) => {
-        set((state) => editing.typed(state, text));
+      holdDraft: (id, read) => {
+        if (get().editingId === id) draft = { id, read };
       },
+      readDraft: (id) => (draft?.id === id ? draft.read() : null),
       pressed: (target) => {
         set((state) => editing.pressed(state, target));
       },

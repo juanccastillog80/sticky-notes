@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { placeCentredAt, toStoredRect, type Point, type Rect, type Size } from '../geometry';
-import { endedDraft } from '../ui/editing';
+import { endedEditing } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
 import { NOTE_SIZE_PRESETS, newNoteId, type Note, type NoteColour, type NoteId } from './note';
 
@@ -230,8 +230,9 @@ export function createNotesStore(ui: UiStore): NotesStore {
   // However Editing ends, its Draft text is saved to its Note, synchronously, before
   // the action that ended it carries on. Typing itself never touches this store.
   ui.subscribe((after, before) => {
-    const draft = endedDraft(before, after);
-    if (draft) store.getState().setText(draft.id, draft.text);
+    const id = endedEditing(before, after);
+    const text = id === null ? null : ui.getState().readDraft(id);
+    if (id !== null && text !== null) store.getState().setText(id, text);
   });
 
   return store;
