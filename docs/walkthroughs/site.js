@@ -1,7 +1,7 @@
 // Puts the walkthroughs and design prototypes on the Pages site, each with an index.
 //   node docs/walkthroughs/site.js <site dir>
 // writes <site dir>/walkthroughs/ and <site dir>/prototypes/.
-// Only numbered walkthroughs are copied, so the template never ships as one.
+// Only numbered walkthroughs are copied.
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,8 +53,8 @@ function copyPages(dir, out, pattern) {
 }
 
 /**
- * Highest issue first, because names start with the zero-padded issue number;
- * `0000` pages (no issue) come last, in reverse name order. Titles come from the specs.
+ * Highest issue first, because names start with the zero-padded issue number.
+ * Titles come from the specs.
  */
 export function buildWalkthroughs(dir, out) {
   const entries = copyPages(dir, out, /^\d{4}-.+\.html$/)
@@ -67,7 +67,7 @@ export function buildWalkthroughs(dir, out) {
     join(out, 'index.html'),
     indexPage(
       'Walkthroughs',
-      'One per merged PR: by issue, newest first, then PRs without an issue.',
+      'The PRs that shaped the current architecture and features, newest issue first. Each shows the code as it was when that PR merged.',
       entries,
     ),
   );

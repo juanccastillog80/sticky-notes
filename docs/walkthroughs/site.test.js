@@ -34,7 +34,7 @@ describe('buildWalkthroughs', () => {
     expect(readFileSync(join(out, '0004-move.html'), 'utf8')).toBe('<p>0004-move</p>');
   });
 
-  it('leaves out the template and other files', () => {
+  it('leaves out files that are not numbered walkthroughs', () => {
     writeFileSync(join(dir, 'template.html'), '<p>template</p>');
     writeFileSync(join(dir, 'build.js'), '');
     walkthrough('0002-skeleton', { title: 'Skeleton', issue: 2 });
