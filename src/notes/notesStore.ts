@@ -1,5 +1,12 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import { placeCentredAt, toStoredRect, type Point, type Rect, type Size } from '../geometry';
+import {
+  keepClearOf,
+  placeCentredAt,
+  toStoredRect,
+  type Point,
+  type Rect,
+  type Size,
+} from '../geometry';
 import { endedEditing } from '../ui/editing';
 import type { UiStore } from '../ui/uiStore';
 import { NOTE_SIZE_PRESETS, newNoteId, type Note, type NoteColour, type NoteId } from './note';
@@ -127,8 +134,11 @@ export const transitions = {
 
 export interface NotesActions {
   readonly load: (notes: readonly Note[]) => void;
-  /** In the Current colour and size, centred on `point`, straight into Editing. */
-  readonly createNoteAt: (point: Point, board: Size) => void;
+  /**
+   * In the Current colour and size, centred on `point`, straight into Editing. Moved
+   * up or left if it would overlap `trash`, the Trash zone in Board coordinates.
+   */
+  readonly createNoteAt: (point: Point, board: Size, trash: Rect | null) => void;
   readonly move: (id: NoteId, x: number, y: number) => void;
   readonly resize: (id: NoteId, rect: Rect) => void;
   readonly raise: (id: NoteId) => void;
@@ -165,9 +175,9 @@ export function createNotesStore(ui: UiStore): NotesStore {
       load: (notes) => {
         set((state) => load(state, notes));
       },
-      createNoteAt: (point, board) => {
+      createNoteAt: (point, board, trash) => {
         const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];
-        createNote(placeCentredAt(point, size, board));
+        createNote(keepClearOf(placeCentredAt(point, size, board), trash));
       },
       move: (id, x, y) => {
         set((state) => move(state, id, { x, y }));

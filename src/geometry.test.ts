@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clampToBoard,
   intersects,
+  keepClearOf,
   notesExtent,
   placeCentredAt,
   resizeRect,
@@ -182,6 +183,41 @@ describe('placeCentredAt', () => {
 
   it('rounds to whole pixels', () => {
     expect(placeCentredAt({ x: 400.4, y: 300.7 }, size, board)).toEqual(rect(290, 216));
+  });
+});
+
+describe('keepClearOf', () => {
+  // The Trash zone of a 1024×768 window, in Board coordinates.
+  const zone = rect(882, 574, 104, 104);
+
+  it('leaves a rect clear of the zone where it is', () => {
+    expect(keepClearOf(rect(290, 215), zone)).toEqual(rect(290, 215));
+  });
+
+  it('leaves it where it is with no zone', () => {
+    expect(keepClearOf(rect(740, 515), null)).toEqual(rect(740, 515));
+  });
+
+  it('moves it up when that moves it less, until it no longer touches the zone', () => {
+    // Up 17 px to 403; left would be 139 px to 661.
+    expect(keepClearOf(rect(800, 420), zone)).toEqual(rect(800, 403));
+  });
+
+  it('moves it left when that moves it less', () => {
+    // Left 79 px to 661; up would be 112 px to 403.
+    expect(keepClearOf(rect(740, 515), zone)).toEqual(rect(661, 515));
+  });
+
+  it('moves it left when up would leave the Board', () => {
+    expect(keepClearOf(rect(800, 100, 220, 600), zone)).toEqual(rect(661, 100, 220, 600));
+  });
+
+  it('moves it up when left would leave the Board', () => {
+    expect(keepClearOf(rect(100, 500, 900, 170), zone)).toEqual(rect(100, 403, 900, 170));
+  });
+
+  it('clears a zone at fractional pixels, in whole pixels', () => {
+    expect(keepClearOf(rect(740, 515), rect(882.5, 574.5, 104, 104))).toEqual(rect(662, 515));
   });
 });
 

@@ -127,3 +127,18 @@ export function toBoardPoint(client: Point, boardRect: Point): Point {
 export function placeCentredAt({ x, y }: Point, { width, height }: Size, board: Size): Rect {
   return toCommittedRect({ x: x - width / 2, y: y - height / 2, width, height }, board);
 }
+
+/**
+ * Moves `rect` up or left, whichever moves it less, until it no longer touches `zone`,
+ * without leaving the Board's top-left. Left where it is if neither can.
+ */
+export function keepClearOf(rect: Rect, zone: Rect | null): Rect {
+  if (zone === null || !intersects(rect, zone)) return rect;
+  // Touching edges count, so one pixel more; whole pixels, so a fractional edge rounds away.
+  const up = { ...rect, y: Math.ceil(zone.y) - rect.height - 1 };
+  const left = { ...rect, x: Math.ceil(zone.x) - rect.width - 1 };
+  const upFits = up.y >= 0;
+  const leftFits = left.x >= 0;
+  if (upFits && leftFits) return rect.y - up.y <= rect.x - left.x ? up : left;
+  return upFits ? up : leftFits ? left : rect;
+}

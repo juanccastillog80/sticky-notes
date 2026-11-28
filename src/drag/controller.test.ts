@@ -72,8 +72,8 @@ function setup() {
     on,
     signal,
     controller,
-    press: (x = 10, y = 10) => {
-      controller.press({ pointerId: 1, clientX: x, clientY: y }, moveKind, note);
+    press: (x = 10, y = 10, from = note) => {
+      controller.press({ pointerId: 1, clientX: x, clientY: y }, moveKind, from);
     },
     pressResize: (x = 10, y = 10) => {
       controller.press({ pointerId: 1, clientX: x, clientY: y }, resizeKinds.se, note);
@@ -492,6 +492,33 @@ describe('the Trash zone', () => {
     t.up(11, 10);
 
     expect(trashStates(t)).toEqual([]);
+  });
+
+  describe('with the Note already overlapping it at press', () => {
+    // On screen at (790, 540) to (1010, 710): over the zone, which starts at (900, 600).
+    const under = makeNote({ x: 880, y: 630 });
+
+    it('a nudge that stays over it shows armed, never over, and the release moves the Note', () => {
+      const t = setup();
+      t.press(10, 10, under);
+      t.move(30, 10);
+      t.move(50, 20);
+      t.up(50, 20);
+
+      expect(trashStates(t)).toEqual(['armed', 'quiet']);
+      expect(t.commits()).toEqual([{ call: 'save', save: ['move', under.id, 920, 640] }]);
+    });
+
+    it('once the Note has been clear of it, moving back over it shows over, and the release deletes', () => {
+      const t = setup();
+      t.press(10, 10, under);
+      t.move(-300, 10);
+      t.move(30, 10);
+      t.up(30, 10);
+
+      expect(trashStates(t)).toEqual(['armed', 'over', 'quiet']);
+      expect(t.commits()).toEqual([{ call: 'save', save: ['deleteNote', under.id] }]);
+    });
   });
 
   it('a resize never touches it, even over the zone', () => {

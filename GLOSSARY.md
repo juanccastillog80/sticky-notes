@@ -13,7 +13,7 @@ A single sticky note with a position, size and content on the board.
 _Avoid_: Item, card, sticky
 
 **Trash zone**:
-A fixed region of the screen, always visible however far the board is scrolled; releasing a moved note while the note overlaps it (touching counts, wherever the pointer is) deletes the note.
+A fixed region of the screen, always visible however far the board is scrolled; releasing a moved note while the note overlaps it (touching counts, wherever the pointer is) deletes the note. A note that already overlapped it when pressed must first be moved clear of it, so a nudge never deletes it. A new note is never placed under it.
 _Avoid_: Bin, delete area, papelera
 
 **Delete button**:
