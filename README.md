@@ -95,4 +95,4 @@ Solid arrows are calls, dotted arrows are selector subscriptions, and the thick 
 
 ## Cross-browser sign-off
 
-[`docs/cross-browser-checklist.md`](docs/cross-browser-checklist.md) lists every user story with the automated tests that cover it in Chrome, Edge and Firefox, and the results of a scripted Playwright pass over the live app in Chrome and Firefox at 1024×768 and 1920×1080 ([`docs/checklist/run.mjs`](docs/checklist/run.mjs)). It was not run by hand. Its findings are listed at the end.
+[`docs/cross-browser-checklist.md`](docs/cross-browser-checklist.md) lists every user story with the automated tests that cover it in Chrome, Edge and Firefox, and the results of a scripted Playwright pass over the live app in Chrome and Firefox at 1024×768 and 1920×1080 ([`docs/checklist/run.mjs`](docs/checklist/run.mjs)). Apart from one row checked by hand in Firefox, it was not run by hand. Its findings are listed at the end.
