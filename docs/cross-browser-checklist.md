@@ -5,7 +5,7 @@ Each row is a user story from the spec (issue #1), for the features that are bui
 1. **Automated tests, on every PR.** The browser tests in the "Tests" column run in Chromium and Firefox on Linux, in Chrome, Edge and Firefox on Windows, and in Chrome and Firefox on macOS (`.github/workflows/`). None are skipped or retried. A row whose column says "none" has no automated test.
 2. **A scripted pass over the live app.** [`docs/checklist/run.mjs`](checklist/run.mjs) drives https://juanccastillog80.github.io/sticky-notes/ with Playwright's mouse and keyboard, the way a person would, at 1024×768 and, where the row is about window size, at 1920×1080. It reads each result off the DOM. Rows about how something looks were also checked on its screenshots. Last run on 2026-11-27, on macOS: Chrome 158 and Firefox 159. Apart from row 26 in Firefox, which was checked by hand (F1), it was **not run by hand**. It was **not run in Edge**, which isn't installed on that machine. Edge is covered by the automated tests only. To rerun it: `node docs/checklist/run.mjs chrome|firefox|msedge`.
 
-Test files: `App`, `board`, `colours`, `delete`, `drag`, `editing`, `keyboard` and `trash` stand for `src/<name>.browser.test.tsx`.
+Test files: `App`, `board`, `colours`, `delete`, `drag`, `editing`, `keyboard`, `overflow` and `trash` stand for `src/<name>.browser.test.tsx`.
 
 | #     | Check                                                                      | Tests                   | Chrome | Firefox        | Edge       |
 | ----- | -------------------------------------------------------------------------- | ----------------------- | ------ | -------------- | ---------- |
@@ -38,6 +38,7 @@ Test files: `App`, `board`, `colours`, `delete`, `drag`, `editing`, `keyboard` a
 | 37–39 | Zone hints during a move, red with Note dimmed when over; resize: never    | `trash`                 | ✓      | ✓              | tests only |
 | 40–42 | "Note deleted" toast with Undo after a drop; Undo restores it exactly      | `trash`, `delete`       | ✓      | ✓              | tests only |
 | #33   | Tab: Note, ×, next Note; dashed ring and Raise; Enter, Escape, Delete      | `keyboard`              | ✓      | ✓              | tests only |
+| #65   | Overflowing idle text fades and wheel-scrolls; a click edits in place      | `overflow`              | ✓ (F3) | ✓ (F3)         | tests only |
 
 "Tests only" means Edge ran that row's automated tests in CI on Windows, but not the scripted pass. "Not run" means nothing covered the row in Edge.
 
@@ -54,4 +55,5 @@ Not checked: Safari isn't in the brief, and Playwright's WebKit isn't Safari. Sa
 
 - **F1. Row 26 is only partly checked.** Playwright can't move a real pointer out of the window. In Chrome the script releases at a point left of the window, and the Note ends at the Board's left edge, with the Drag over. In Firefox, Playwright reports any pointer outside the window as (0, −85), which no real mouse does, so the script skips the row there. It was checked by hand in Firefox on 2026-11-27 instead, and passed.
 - **F2. The × covers most of the `ne` corner handle.** By design (`Note.module.css`): only a strip about 2 px wide at the very corner still resizes from `ne`. Resizing from the other 3 corners and 4 edges is unaffected.
+- **F3. Row #65 came after the last scripted pass.** It isn't in `run.mjs`. Its tests ran in Chromium, Chrome and Firefox, and its fade was checked on screenshots of all six colours in Chrome and Firefox on 2026-11-28.
 - No row failed in Chrome or Firefox.

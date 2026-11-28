@@ -19,6 +19,7 @@ export const mouse: BrowserCommand<[steps: readonly MouseStep[]]> = async (ctx, 
   for (const step of steps) {
     if (step.type === 'down') await ctx.page.mouse.down({ button: step.button ?? 'left' });
     else if (step.type === 'up') await ctx.page.mouse.up({ button: step.button ?? 'left' });
+    else if (step.type === 'wheel') await ctx.page.mouse.wheel(0, step.deltaY);
     else {
       await ctx.page.mouse.move(box.x + step.x * scale, box.y + step.y * scale, {
         steps: step.steps ?? 1,

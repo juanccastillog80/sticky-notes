@@ -1,4 +1,12 @@
-import { memo, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
+import {
+  memo,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type Ref,
+  type UIEvent,
+} from 'react';
 import type { NoteId } from '../notes/note';
 import { useIsEditing, useNotes, useStores } from '../StoresContext';
 import styles from './Note.module.css';
@@ -11,16 +19,46 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
   const { notes, ui } = useStores();
   const ref = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const idleTextRef = useRef<HTMLDivElement>(null);
   const wasEditing = useRef(editing);
+  // Shared by the idle text and the textarea, so neither jumps when Editing starts or ends.
+  const scrollTop = useRef(0);
 
   // Before paint, so the caret is in place on the first frame of Editing.
   useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editing || !editor) return;
-    const offset = ui.getState().caret ?? editor.value.length;
+    const caret = ui.getState().caret;
+    const offset = caret ?? editor.value.length;
     editor.focus();
     editor.setSelectionRange(offset, offset);
+    // A Click's caret is where the idle text showed it: keep that view. Placing the caret
+    // moves it (Chrome back to the top), but the clicked line was in view, so it stays so.
+    if (caret !== null) editor.scrollTop = scrollTop.current;
   }, [editing, ui]);
+
+  // Marks the idle text `data-overflows` while text lies below its box, in its own DOM so
+  // no other Note re-renders. The text is a dependency: it changes what overflows, but
+  // not the box the observer watches.
+  useLayoutEffect(() => {
+    const element = idleTextRef.current;
+    if (editing || !element) return;
+    element.scrollTop = scrollTop.current;
+    const mark = () => {
+      scrollTop.current = element.scrollTop;
+      const below = element.scrollHeight - element.scrollTop - element.clientHeight;
+      if (below > 1) element.dataset.overflows = '';
+      else delete element.dataset.overflows;
+    };
+    mark();
+    const observer = new ResizeObserver(mark);
+    observer.observe(element);
+    element.addEventListener('scroll', mark, { passive: true });
+    return () => {
+      observer.disconnect();
+      element.removeEventListener('scroll', mark);
+    };
+  }, [editing, note?.text]);
 
   // Escape ended Editing: the article takes focus, so Tab carries on from this Note.
   // After the textarea unmounts: focused any earlier, Firefox's next Tab skips the ×.
@@ -86,9 +124,16 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
         ×
       </button>
       {editing ? (
-        <NoteEditor ref={editorRef} id={id} text={text} onKeyDown={keyDownInEditor} />
+        <NoteEditor
+          ref={editorRef}
+          id={id}
+          text={text}
+          onKeyDown={keyDownInEditor}
+          onScroll={(e) => (scrollTop.current = e.currentTarget.scrollTop)}
+        />
       ) : (
-        <div className={styles.text} data-note-text="">
+        // Out of the Tab order, where browsers put a scroller: Tab goes Note, ×, next Note.
+        <div ref={idleTextRef} tabIndex={-1} className={styles.text} data-note-text="">
           {text}
         </div>
       )}
@@ -106,11 +151,13 @@ function NoteEditor({
   id,
   text,
   onKeyDown,
+  onScroll,
 }: {
   ref: Ref<HTMLTextAreaElement>;
   id: NoteId;
   text: string;
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onScroll: (e: UIEvent<HTMLTextAreaElement>) => void;
 }) {
   const { ui } = useStores();
   const [draftText, setDraftText] = useState(text);
@@ -129,6 +176,7 @@ function NoteEditor({
         setDraftText(e.target.value);
       }}
       onKeyDown={onKeyDown}
+      onScroll={onScroll}
     />
   );
 }

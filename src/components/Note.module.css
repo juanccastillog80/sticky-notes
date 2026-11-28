@@ -36,11 +36,24 @@
   flex: 1;
   min-height: 0;
   padding: 8px 12px 12px;
-  overflow: hidden;
+  overflow: hidden auto;
+  scrollbar-width: none;
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: break-word;
+}
+
+/*
+ * More text below: about the last two lines fade into the Note, whatever its colour,
+ * but never more than half the box. 12px is the bottom padding, 1.4em a line.
+ */
+.text[data-overflows] {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 max(50%, calc(100% - 12px - 2.8em)),
+    transparent 100%
+  );
 }
 
 /* Same box and type as `.text`, so nothing shifts when Editing starts or ends. */

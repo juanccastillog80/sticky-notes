@@ -59,3 +59,11 @@ export async function press(
     { type: 'up', button },
   ]);
 }
+
+/** A real wheel turn over `locator`, scrolling by `deltaY`. */
+export async function wheel(locator: Locator, deltaY: number, position?: { x: number; y: number }) {
+  await commands.mouse([
+    { type: 'move', ...pointIn(locator, position) },
+    { type: 'wheel', deltaY },
+  ]);
+}
