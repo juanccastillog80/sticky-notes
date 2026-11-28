@@ -11,7 +11,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // A mouse delete ignores presses on Notes for a double-click interval.
+  // A mouse delete ignores presses on Notes near its point for a double-click interval.
   await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
 });
 

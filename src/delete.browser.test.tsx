@@ -14,7 +14,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.useRealTimers();
-  // A mouse delete ignores presses on Notes for a double-click interval; let it lapse
+  // A mouse delete ignores presses on Notes near its point for a double-click interval; let it lapse
   // so it can't swallow the next test's first press.
   await new Promise((resolve) => setTimeout(resolve, DOUBLE_CLICK_MS));
 });
@@ -93,14 +93,24 @@ it('the toast hides after its time, and a newer delete restarts the timer', asyn
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 
   vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);
-  // From the keyboard: a mouse click this soon would be taken for a double-click.
-  (deleteB.element() as HTMLElement).focus();
-  await userEvent.keyboard('{Enter}');
+  await press(deleteB);
   vi.advanceTimersByTime(UNDO_TOAST_MS - 1000);
   await expect.element(toast.getByText('Note deleted')).toBeVisible();
 
   vi.advanceTimersByTime(1000);
   await expect.element(toast.getByText('Note deleted')).not.toBeInTheDocument();
+});
+
+it('two quick mouse clicks on two Notes’ × delete both, and Undo offers the second', async () => {
+  const { stores, noteA, noteB, toast } = await setup();
+  const deleteB = page.elementLocator(deleteButton(noteB).element());
+
+  await press(deleteButton(noteA));
+  await press(deleteB);
+
+  expect(stores.notes.getState().ids).toEqual([]);
+  await toast.getByRole('button', { name: 'Undo' }).click();
+  expect(stores.notes.getState().ids).toEqual([b.id]);
 });
 
 it('the × works from the keyboard, and focus moves to Undo', async () => {
