@@ -1,14 +1,14 @@
 {
   "issue": 12,
   "title": "Cross-browser sign-off without a hand-run pass",
-  "lede": "The checklist was empty, because nobody had time to run it by hand. Now each row names the browser tests that cover it in CI, and a Playwright script runs every row against the live app. Chrome 158 passes 29/29, and Firefox 159 passes 28 with 1 not checked. Nothing was run by hand, and the script didn't run in Edge. The PR says so rather than ticking the boxes.",
+  "lede": "The checklist was empty, because nobody had time to run it by hand. Now each row names the browser tests that cover it in CI, and a Playwright script runs every row against the live app. Chrome 158 passes 29/29. Firefox 159 passes 28, and the one row the script can't check there (26) passed by hand. Nothing else was run by hand, and the script didn't run in Edge. The PR says so rather than ticking the boxes.",
   "files": [
     {
       "path": "docs/cross-browser-checklist.md",
       "question": "What has been checked, where, and how?",
       "summary": "One table: each user story, its automated tests, and the scripted result in Chrome, Firefox and Edge, followed by the findings.",
       "owns": "The sign-off a reviewer reads, and which rows rest on what evidence.",
-      "never": "Claims a hand check: the header says it wasn't run by hand, and the Edge column says \"tests only\" or \"not run\".",
+      "never": "Claims a hand check it didn't get: only row 26 in Firefox is marked by hand, and the Edge column says \"tests only\" or \"not run\".",
       "tested": "The results are what `run.mjs` printed on 2026-11-27. The test-file mapping was checked by reading the test names."
     },
     {
@@ -60,7 +60,7 @@
         },
         {
           "title": "A row that can't be checked says so",
-          "explain": "Row 26 needs a pointer outside the window, which Playwright can't give Firefox. It returns `not checked`, which `row` records as SKIP rather than PASS or FAIL, and the doc shows it as \"not checked\" with finding F1.",
+          "explain": "Row 26 needs a pointer outside the window, which Playwright can't give Firefox. It returns `not checked`, which `row` records as SKIP rather than PASS or FAIL, so it can't pass by accident. The owner then checked it by hand in Firefox, and the doc marks that cell \"✓ by hand\" with finding F1.",
           "run": [
             {
               "file": "docs/checklist/run.mjs",
@@ -84,7 +84,7 @@
       "steps": [
         {
           "title": "They see what signs it off, and what doesn't",
-          "explain": "The header names both kinds of evidence and their limits: tests on every PR in the real Windows and macOS browsers, and one scripted pass, not by hand and not in Edge. The Edge column never shows a ✓, and the legend says what \"tests only\" and \"not run\" mean.",
+          "explain": "The header names both kinds of evidence and their limits: tests on every PR in the real Windows and macOS browsers, and one scripted pass, not in Edge, with one Firefox row done by hand. The Edge column never shows a ✓, and the legend says what \"tests only\" and \"not run\" mean.",
           "run": [
             {
               "file": "docs/cross-browser-checklist.md",
@@ -125,7 +125,7 @@
     }
   ],
   "omitted": {
-    "README.md": "The Cross-browser sign-off paragraph now describes the scripted pass and says it wasn't run by hand.",
+    "README.md": "The Cross-browser sign-off paragraph now describes the scripted pass and says only one Firefox row was checked by hand.",
     ".gitignore": "Ignores `docs/checklist/out/`, where the script writes screenshots and JSON."
   }
 }
