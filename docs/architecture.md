@@ -7,7 +7,7 @@ The UI layer is thin. The decisions are made in a pure core that never touches t
 ```mermaid
 flowchart LR
   subgraph UI["React components and DOM wiring (thin)"]
-    Comp["Board · Note · Toolbar"]
+    Comp["Board · Note · TopBar"]
     PDom["Press DOM side<br/>(pressDom.ts)"]
   end
   subgraph Core["Pure core: unit-tested, 90% coverage gate"]
