@@ -1,0 +1,126 @@
+{
+  "title": "Trim comments to the ones that explain why",
+  "lede": "No code changes, only comments. The brief says to leave \"only the comments that provide considerable help in reading the code\", and a mock review counted 431 comment lines in 2,108 production lines (about 20%). Comments that restated the code, a name or the glossary are gone; browser quirks, ordering constraints and design reasons stay, shortened where they could be. 155 comment lines remain.",
+  "files": [
+    {
+      "path": "src/drag/controller.ts",
+      "question": "What did the most heavily commented file keep?",
+      "summary": "A four-line lifecycle sketch instead of a full one, a note on what is measured at press, and the Chrome button-less move quirk.",
+      "owns": "The Drag session: Dead zone, Preview, commit or cancel.",
+      "never": "DOM access, which goes through `DragIO`.",
+      "tested": "Unchanged code: `src/drag/controller.test.ts` passes as before."
+    },
+    {
+      "path": "src/press/press.ts",
+      "question": "Which Press rules still need a comment?",
+      "summary": "Only the three that aren't obvious from the code: double-click on empty Board, the × double-click guard, and a Note deleted while held.",
+      "owns": "Every rule for the pointer going down.",
+      "never": "Reading the DOM: `pressDom.ts` does that.",
+      "tested": "Unchanged code: `src/press/press.test.ts` passes as before."
+    },
+    {
+      "path": "src/notes/notesStore.ts",
+      "question": "Why does the cross-store subscriber need its comment?",
+      "summary": "The subscriber's comment now says why the save is synchronous: a delete's Undo snapshot and `pagehide`'s flush both read the Note right after.",
+      "owns": "The Notes and the actions that change them.",
+      "never": "Draft text while typing: the editor holds it.",
+      "tested": "Unchanged code: the notes store tests pass as before."
+    },
+    {
+      "path": "src/drag/kinds.ts",
+      "question": "What does the Trash zone rule's comment say now?",
+      "summary": "That the Note's rect decides, not the pointer, and that the highlight and the release ask the same question.",
+      "owns": "Move and resize as pure preview/commit pairs.",
+      "never": "Event handling.",
+      "tested": "Unchanged code: `src/drag/kinds.test.ts` passes as before."
+    }
+  ],
+  "flow": [],
+  "scenarios": [
+    {
+      "name": "A reviewer reads the code",
+      "steps": [
+        {
+          "title": "They open the Drag controller",
+          "explain": "The interfaces lost their per-field JSDoc, which restated the field names. What remains explains things the code can't: what is measured once at press and why, and the Chrome quirk that a wobbling release sends a button-less move before its `pointerup`.",
+          "run": [
+            {
+              "file": "src/drag/controller.ts",
+              "from": "// Measured once, at press",
+              "to": "mid-drag doesn't change"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": " *   press → attach listeners",
+              "to": "cancel / Escape / dispose"
+            },
+            {
+              "file": "src/drag/controller.ts",
+              "from": "// Chrome sends a button-less move",
+              "to": "inside the Dead zone, that `pointerup` decides"
+            }
+          ]
+        },
+        {
+          "title": "They read the Press rules",
+          "explain": "The list of every rule became the three that a reader wouldn't guess from `pointerDown`. Comments that repeated the next line (\"Only the primary pointer's left button is a Press\") are gone.",
+          "run": [
+            {
+              "file": "src/press/press.ts",
+              "from": "Every rule for the pointer going down",
+              "to": "back where it was."
+            }
+          ]
+        },
+        {
+          "title": "They wonder why the stores are linked by a subscriber",
+          "explain": "The comment now gives the reason the save must be synchronous: the two readers that come right after Editing ends.",
+          "run": [
+            {
+              "file": "src/notes/notesStore.ts",
+              "from": "However Editing ends, its Draft text is saved synchronously",
+              "to": "flush)."
+            },
+            {
+              "file": "src/drag/kinds.ts",
+              "from": "The Note's rect, not the pointer, decides.",
+              "to": "what a release does."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "title": "How I checked no code changed",
+      "detail": "Every added or removed line in the `src` diff is a comment line (checked by filtering the diff), and typecheck, lint and all 453 tests pass."
+    },
+    {
+      "title": "Glossary words still appear in code",
+      "detail": "Names like `pressed`, `Draft text` and `Dead zone` stay in identifiers and the comments that remain; the glossary is still the place that defines them. The counter-argument: a reviewer who never opens `GLOSSARY.md` may find capitalised terms like Press and Raise odd."
+    }
+  ],
+  "omitted": {
+    "src/App.tsx": "Comments only.",
+    "src/BoardDomContext.ts": "Comments only.",
+    "src/StoresContext.ts": "Comments only.",
+    "src/components/Board.tsx": "Comments only.",
+    "src/components/ColourSwatches.tsx": "Comments only.",
+    "src/components/EmptyHint.tsx": "Comments only.",
+    "src/components/Note.tsx": "Comments only.",
+    "src/components/ResizeHandles.tsx": "Comments only.",
+    "src/components/SizeButtons.tsx": "Comments only.",
+    "src/components/TopBar.tsx": "Comments only.",
+    "src/components/TrashZone.tsx": "Comments only.",
+    "src/components/UndoToast.tsx": "Comments only.",
+    "src/geometry.ts": "Comments only.",
+    "src/notes/note.ts": "Comments only.",
+    "src/persistence/localCopy.ts": "Comments only.",
+    "src/persistence/parseNotes.ts": "Comments only.",
+    "src/press/caret.ts": "Comments only.",
+    "src/press/pressDom.ts": "Comments only.",
+    "src/ui/editing.ts": "Comments only.",
+    "src/ui/uiStore.ts": "Comments only."
+  }
+}

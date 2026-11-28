@@ -7,40 +7,22 @@ import type { Stores } from '../StoresContext';
 import { caretOffsetAt } from './caret';
 import { createPress, type Press, type PressTarget } from './press';
 
-/** Inside text the user is typing in, where a Press must leave the caret and selection alone. */
 export function isInText({ target }: { readonly target: EventTarget | null }): boolean {
   const element = target as { closest?: (selector: string) => unknown } | null;
   return element?.closest?.('textarea, [contenteditable]:not([contenteditable="false"])') != null;
 }
 
 /**
- * The DOM side of the Press module: the Board calls it once, in an effect, and calls
- * what it returns on unmount. It reads Press targets off the markup and hands them to
- * the core (`createPress`), which decides everything; this file only listens, measures
- * and writes.
- *
- * Markup it reads:
- * - `data-press-target`: `body` (the Note's article), `grip`, `handle` (with
- *   `data-handle`) or `delete`, on each Press target of a Note;
- * - `data-note-id` on the article, and `data-note-text` on its idle text;
- * - the Board itself (`boardRef`) is empty Board, and anything outside it is outside.
- *
- * Listeners:
- * - `pointerdown`, captured on `document`: a double-click can start outside the Board;
- * - `focusin`, `click` and `dblclick`, captured on the Board.
- *
- * It also owns the one Drag controller and its real `DragIO`: window listeners for the
- * session, pointer capture (on the Resize handle for a resize, so its cursor stays, and
- * on the Note otherwise), and the Preview drawn on the pressed Note.
+ * The DOM side of the Press module: it reads Press targets off `data-press-target`
+ * and `data-note-id`, hands them to `createPress`, which decides, and owns the real
+ * `DragIO`. Returns the cleanup.
  */
 export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }: BoardDom) {
   const root = boardRef.current;
   if (!root) return () => undefined;
   const board: HTMLElement = root;
   const { notes } = stores;
-  /** The Note last pressed into a Drag session: the Preview is drawn on it, and its Click measured on it. */
   let pressedNote: HTMLElement | null = null;
-  /** The element holding the pointer capture, until the session ends. */
   let captured: Element | null = null;
 
   const drag = createDragController({
@@ -111,10 +93,9 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     // No focus change, no text selection and no native drag.
     e.preventDefault();
     if (outcome !== 'drag') return;
-    // After the core's `drag.press`, which ended any earlier session on the Note it held.
     const note = noteOf(e.target);
     pressedNote = note;
-    // So neighbours get no hover or double-click during the Drag.
+    // On the handle for a resize, so its cursor stays.
     const handle =
       e.target instanceof Element ? e.target.closest('[data-press-target="handle"]') : null;
     const holder = handle ?? note;
@@ -172,7 +153,6 @@ function isResizeHandle(value: string | undefined): value is ResizeHandle {
   return (RESIZE_HANDLES as readonly (string | undefined)[]).includes(value);
 }
 
-/** What `target` is, as the Press module names it. */
 function pressTargetOf(target: EventTarget | null, board: HTMLElement): PressTarget {
   if (target === board) return { on: 'board' };
   if (!(target instanceof Element) || !board.contains(target)) return { on: 'outside' };
@@ -212,12 +192,7 @@ function listenForDrag(handlers: DragHandlers, scroller: HTMLElement | null): ()
   };
 }
 
-/**
- * The Preview is a `translate` from the committed rect, plus `width`/`height` for
- * a resize, never `scale`, so text reflows and is never distorted. A move writes
- * the same size back, so it only composites. `data-dragging` gives the lifted
- * shadow. A reset writes `base`, the rect React rendered at press.
- */
+/** A `translate`, never `scale`, so a resized Note's text reflows instead of stretching. */
 function writePreview(element: HTMLElement, rect: Rect | null, base: Rect) {
   const { x, y, width, height } = rect ?? base;
   element.style.transform =

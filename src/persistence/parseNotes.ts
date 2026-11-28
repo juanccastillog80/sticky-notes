@@ -1,10 +1,8 @@
 import type { Rect } from '../geometry';
 import { NOTE_COLOURS, parseNoteId, type Note, type NoteColour } from '../notes/note';
 
-/**
- * The way in for Notes from outside the app (the Local copy). All or nothing: one invalid Note
- * rejects the whole list, so a damaged copy is never half-loaded.
- */
+/** All or nothing, so a damaged copy is never half-loaded. */
+
 export function parseNotes(raw: unknown): Note[] | null {
   if (!Array.isArray(raw)) return null;
   const notes: Note[] = [];

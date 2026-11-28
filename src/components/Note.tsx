@@ -4,25 +4,16 @@ import { useIsEditing, useNotes, useStores } from '../StoresContext';
 import styles from './Note.module.css';
 import { ResizeHandles } from './ResizeHandles';
 
-/**
- * Markup and keys only. What the pointer going down does, on any of a Note's Press
- * targets, and focus arriving on it, are the Press module's (`src/press/`): each Press
- * target is marked with `data-press-target` for it to read.
- *
- * From the keyboard, the article itself takes focus: Enter starts Editing, Delete or
- * Backspace deletes.
- */
+/** Markup and keys only: pointer presses and focus are the Press module's (`src/press/`). */
 export const Note = memo(function Note({ id }: { id: NoteId }) {
   const note = useNotes((state) => state.notes[id]);
   const editing = useIsEditing(id);
   const { notes, ui } = useStores();
   const ref = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  // Tells the render where Editing ended apart from mounts that start out idle.
   const wasEditing = useRef(editing);
 
-  // Before paint, so the caret is in place on the first frame of Editing. Read once:
-  // where Editing started it (a Click's caret, or `null` for the end of the text).
+  // Before paint, so the caret is in place on the first frame of Editing.
   useLayoutEffect(() => {
     const editor = editorRef.current;
     if (!editing || !editor) return;
@@ -46,9 +37,8 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     if (e.key === 'Escape' && !e.defaultPrevented) ui.getState().escaped();
   }
 
-  /** Keys on the focused article itself: not those bubbling up from the × or the textarea. */
   function keyDownOnNote(e: KeyboardEvent<HTMLElement>) {
-    // With a modifier, the key belongs to the browser or the system (Cmd+Backspace and the like).
+    // Not keys bubbling from the × or the textarea, nor shortcuts like Cmd+Backspace.
     if (e.target !== e.currentTarget || editing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Enter') {
       // Or the textarea, focused before the key's default runs, would get a line break.
@@ -60,10 +50,7 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
     }
   }
 
-  /**
-   * Keeps the user's place for the next Tab: focus left on the removed article would
-   * fall to the body, and Tab would start again from the toolbar.
-   */
+  /** Focus left on the removed article would fall to the body, and Tab restart from the toolbar. */
   function deleteAndFocusNeighbour(article: HTMLElement) {
     const board = article.parentElement;
     const siblings = board ? [...board.querySelectorAll<HTMLElement>(':scope > article')] : [];
@@ -90,7 +77,6 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
       onKeyDown={keyDownOnNote}
     >
       <div className={styles.gripStrip} data-grip-strip="" data-press-target="grip" />
-      {/* Deletes on click, through the Press module, which also ignores the double-click's second half. */}
       <button
         type="button"
         aria-label="Delete note"
@@ -112,10 +98,8 @@ export const Note = memo(function Note({ id }: { id: NoteId }) {
 });
 
 /**
- * The textarea of the Note in Editing. It keeps the Draft text in its own state,
- * starting from the Note's saved `text`: typing re-renders it alone, and touches no
- * store. It lends the ui store how to read the Draft text, so however Editing ends,
- * the Notes store saves it to the Note at once, before React has unmounted anything.
+ * Keeps the Draft text in its own state, so typing touches no store. It lends the ui
+ * store a reader, so the text is saved when Editing ends, before React unmounts anything.
  */
 function NoteEditor({
   ref,
@@ -130,10 +114,9 @@ function NoteEditor({
 }) {
   const { ui } = useStores();
   const [draftText, setDraftText] = useState(text);
-  // Read when Editing ends, which may be from outside React (a delete, `pagehide`).
+  // Read from outside React (a delete, `pagehide`), where state may be stale.
   const latestDraft = useRef(draftText);
-  // Before paint, so Editing that ends in the next event still finds it. Taken back on
-  // unmount, which comes after Editing ending has already read it.
+  // Before paint, so Editing that ends in the next event still finds it.
   useLayoutEffect(() => ui.getState().holdDraft(id, () => latestDraft.current), [id, ui]);
   return (
     <textarea

@@ -7,7 +7,6 @@ export function newNoteId(): NoteId {
   return crypto.randomUUID() as NoteId;
 }
 
-/** The way in for an id from outside the app, such as storage or the server. */
 export function parseNoteId(raw: unknown): NoteId | null {
   return typeof raw === 'string' && raw !== '' ? (raw as NoteId) : null;
 }
@@ -15,7 +14,6 @@ export function parseNoteId(raw: unknown): NoteId | null {
 export const NOTE_COLOURS = ['yellow', 'orange', 'pink', 'purple', 'blue', 'green'] as const;
 export type NoteColour = (typeof NOTE_COLOURS)[number];
 
-/** What a swatch is called, to people and to assistive tech. */
 export const COLOUR_NAMES: Record<NoteColour, string> = {
   yellow: 'Yellow',
   orange: 'Orange',

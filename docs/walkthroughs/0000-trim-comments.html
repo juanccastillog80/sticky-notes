@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- PR walkthrough layout, filled in by build.js. See docs/agents/pr-walkthrough.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR walkthrough</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --ink: #1d1f23; --muted: #646a73; --line: #e2e0da;
+    --accent: #2f5bd3; --accent-soft: #e8eefc; --hl: #fff4c2; --hl-edge: #e0b400;
+    --kw: #8a2be2; --str: #1f7a4a; --com: #8a8f98;
+    --f-note: #fde68a; --f-hook: #c7dbff; --f-ctrl: #d6f0dd; --f-kind: #f6d6e8; --f-geo: #e5e1f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #202227; --ink: #e7e7ea; --muted: #9aa0aa; --line: #34373e;
+      --accent: #8fb0ff; --accent-soft: #263252; --hl: #3d3517; --hl-edge: #c9a227;
+      --kw: #c9a0ff; --str: #7fd4a0; --com: #7d828b;
+      --f-note: #5a4b14; --f-hook: #233a63; --f-ctrl: #1f4630; --f-kind: #4f2540; --f-geo: #352f55;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1440px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .lede { color: var(--muted); max-width: 900px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  section { margin-top: 18px; }
+  code { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .layer { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .layer b { display: block; font: 600 13px ui-monospace, Menlo, monospace; }
+  .layer .q { font-weight: 600; margin: 4px 0 2px; }
+  .layer small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .f-note { background: var(--f-note); } .f-hook { background: var(--f-hook); } .f-ctrl { background: var(--f-ctrl); }
+  .f-kind { background: var(--f-kind); } .f-geo { background: var(--f-geo); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; border-top: 0; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .table-wrap { overflow-x: auto; }
+
+  /* Trace + code */
+  .work { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tabs button { border-radius: 999px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li { margin: 0 0 6px; }
+  ol.steps button { width: 100%; text-align: left; display: flex; gap: 8px; }
+  ol.steps button::before { counter-increment: s; content: counter(s); color: var(--muted); min-width: 14px; }
+  .explain { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--accent-soft); }
+  .explain p:last-child { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font: 12px ui-monospace, Menlo, monospace; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); cursor: pointer; }
+  .file-tabs button { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; position: relative; }
+  .file-tabs button.has-hl::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl-edge); }
+  .codebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 78vh; }
+  .codebox .role { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  pre { margin: 0; padding: 8px 0; }
+  .ln { display: block; padding: 0 14px 0 0; white-space: pre; border-left: 3px solid transparent; }
+  .ln .no { display: inline-block; width: 38px; text-align: right; padding-right: 12px; color: var(--com); user-select: none; }
+  .ln.hl { background: var(--hl); border-left-color: var(--hl-edge); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  /* Additions for real code */
+  body { overflow-wrap: anywhere; }
+  .flow + .flow { margin-top: 8px; }
+  .layer { color: inherit; text-align: left; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .explain ul { margin: 0; padding-left: 18px; }
+  #code { width: max-content; min-width: 100%; overflow-wrap: normal; }
+  .ln.add .no { color: var(--str); box-shadow: inset 3px 0 var(--str); }
+  #table td { min-width: 120px; overflow-wrap: normal; }
+  @media (max-width: 600px) {
+    .layers { flex-direction: column; }
+    .layer { flex-basis: auto; width: 100%; }
+    .arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="lede" id="lede"></p>
+  <p class="meta" id="meta"></p>
+
+  <section class="card">
+    <h2>The files, each answering one question</h2>
+    <div id="flow"></div>
+  </section>
+
+  <section class="card">
+    <h2>Responsibilities, and what each file never does</h2>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <section id="work">
+    <div class="work">
+      <div class="card">
+        <h2>Step through a scenario</h2>
+        <div class="tabs" id="scenarios"></div>
+        <ol class="steps" id="steps"></ol>
+        <div class="explain" id="explain" aria-live="polite"></div>
+        <p class="meta">← and → move between steps. A green line number means this PR added or changed that line.</p>
+      </div>
+      <div>
+        <div class="tabs file-tabs" id="files"></div>
+        <div class="codebox"><div class="role" id="role"></div><pre id="code"></pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Decisions, trade-offs and surprises</h2>
+    <ol class="note" id="notes"></ol>
+  </section>
+
+  <section class="card" id="omitted-card">
+    <h2>Changed, but not walked through</h2>
+    <ul class="note" id="omitted"></ul>
+  </section>
+</main>
+
+<script>
+const DATA = {"title":"Trim comments to the ones that explain why","lede":"No code changes, only comments. The brief says to leave \"only the comments that provide considerable help in reading the code\", and a mock review counted 431 comment lines in 2,108 production lines (about 20%). Comments that restated the code, a name or the glossary are gone; browser quirks, ordering constraints and design reasons stay, shortened where they could be. 155 comment lines remain.","files":[{"path":"src/drag/controller.ts","question":"What did the most heavily commented file keep?","summary":"A four-line lifecycle sketch instead of a full one, a note on what is measured at press, and the Chrome button-less move quirk.","owns":"The Drag session: Dead zone, Preview, commit or cancel.","never":"DOM access, which goes through `DragIO`.","tested":"Unchanged code: `src/drag/controller.test.ts` passes as before.","lines":["import type { Point, Rect, Size } from '../geometry';","import type { DragContext, DragKind, DragSave } from './kinds';","","/** How far a press must travel before it becomes a Drag. Inside it, a release is a click. */","export const DEAD_ZONE_PX = 3;","","export interface PointerSignal {","  readonly pointerId: number;","  readonly clientX: number;","  readonly clientY: number;","}","","export interface MoveSignal extends PointerSignal {","  readonly buttons: number;","}","","/** `armed` while a move runs, `over` while the dragged Note overlaps the zone. */","export type TrashState = 'quiet' | 'armed' | 'over';","","/** DOM → controller, attached only while a Press is live. */","export interface DragHandlers {","  move: (e: MoveSignal) => void;","  up: (e: PointerSignal) => void;","  cancel: (e: Pick\u003cPointerSignal, 'pointerId'>) => void;","  scroll: () => void;","  key: (e: { readonly key: string }) => void;","}","","/** Controller → DOM. Tests pass a recording fake. Client coordinates throughout. */","export interface DragIO {","  scrollPosition: () => Point;","  /** Returns the function that detaches them. */","  attachPointerListeners: (handlers: DragHandlers) => () => void;","  releaseCapture: (pointerId: number) => void;","  /** `null` resets to `base`, the committed rect. */","  writePreview: (rect: Rect | null, base: Rect) => void;","  save: DragSave;","  click: (pointer: Point) => void;","  trashRect: () => Rect | null;","  boardOrigin: () => Point;","  boardSize: () => Size;","  /** Called only when the state changes. */","  writeTrash: (state: TrashState) => void;","}","","interface Session {","  readonly preview: (delta: Point, ctx: DragContext) => Rect;","  readonly commit: (delta: Point, ctx: DragContext) => void;","  readonly overTrash: ((delta: Point, ctx: DragContext) => boolean) | undefined;","  // Measured once, at press: the zone is pinned to the window, and a window resize","  // mid-drag doesn't change what the Drag allows.","  readonly trash: Rect | null;","  readonly pressBoardOrigin: Point;","  readonly board: Size;","  trashState: TrashState;","  readonly from: Rect;","  readonly pointerId: number;","  readonly pressPoint: Point;","  readonly pressScroll: Point;","  pointer: Point;","  /** Still inside the Dead zone. */","  pending: boolean;","  readonly detach: () => void;","}","","export interface DragController {","  press: \u003cFrom extends Rect>(e: PointerSignal, kind: DragKind\u003cFrom>, from: From) => void;","  dispose: () => void;","}","","/**"," *   press → attach listeners"," *   move / scroll → past the Dead zone → Preview"," *   up → Click if still in the Dead zone, else commit"," *   cancel / Escape / dispose → reset, save nothing"," */","export function createDragController(io: DragIO): DragController {","  let session: Session | null = null;","","  function scrolled(s: Session): Point {","    const scroll = io.scrollPosition();","    return { x: scroll.x - s.pressScroll.x, y: scroll.y - s.pressScroll.y };","  }","","  function delta(s: Session): Point {","    // The Board moves under a still pointer when the container scrolls.","    const scroll = scrolled(s);","    return {","      x: s.pointer.x - s.pressPoint.x + scroll.x,","      y: s.pointer.y - s.pressPoint.y + scroll.y,","    };","  }","","  function stillInDeadZone(s: Session): boolean {","    const d = delta(s);","    return s.pending && Math.hypot(d.x, d.y) \u003c= DEAD_ZONE_PX;","  }","","  function context(s: Session): DragContext {","    // The Board moves up and left on screen as the container scrolls down and right.","    const scroll = scrolled(s);","    return {","      trash: s.trash,","      boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },","      board: s.board,","    };","  }","","  function setTrash(s: Session, state: TrashState) {","    if (!s.overTrash || s.trashState === state) return;","    s.trashState = state;","    io.writeTrash(state);","  }","","  function update(s: Session) {","    if (stillInDeadZone(s)) return;","    const d = delta(s);","    s.pending = false;","    const ctx = context(s);","    // Synchronously, from the event: no rAF, so the Preview is never a frame behind.","    io.writePreview(s.preview(d, ctx), s.from);","    setTrash(s, s.overTrash?.(d, ctx) ? 'over' : 'armed');","  }","","  /** Every exit, once. Only a `pointerup` we saw (`released`) turns a Press into a Click. */","  function end(commit: boolean, released = false) {","    const s = session;","    if (!s) return;","    session = null;","    s.detach();","    io.releaseCapture(s.pointerId);","    if (s.pending) {","      // Last, so the Click's handler runs with the pointer already let go.","      if (released) io.click(s.pointer);","      return;","    }","    // Measured before the reset, so what is saved is exactly what the Preview showed.","    const d = delta(s);","    const ctx = context(s);","    setTrash(s, 'quiet');","    // Reset before saving: the re-render then moves the Note to where the Preview was.","    io.writePreview(null, s.from);","    if (commit) s.commit(d, ctx);","  }","","  const ownPointer = (e: Pick\u003cPointerSignal, 'pointerId'>) => e.pointerId === session?.pointerId;","","  const sessionHandlers: DragHandlers = {","    move(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      if (e.buttons === 0) {","        // Chrome sends a button-less move just before the `pointerup` of a press that","        // wobbled as it was let go: inside the Dead zone, that `pointerup` decides.","        if (stillInDeadZone(session)) return;","        end(true);","        return;","      }","      update(session);","    },","    up(e) {","      if (!session || !ownPointer(e)) return;","      session.pointer = { x: e.clientX, y: e.clientY };","      end(true, true);","    },","    cancel(e) {","      if (ownPointer(e)) end(false);","    },","    scroll() {","      if (session) update(session);","    },","    key(e) {","      if (e.key === 'Escape') end(false);","    },","  };","","  return {","    press(e, kind, from) {","      end(false);","      const pressPoint = { x: e.clientX, y: e.clientY };","      const { overTrash } = kind;","      session = {","        preview: (d, ctx) => kind.preview(from, d, ctx),","        commit: (d, ctx) => {","          kind.commit(from, d, ctx, io.save);","        },","        overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),","        trash: overTrash ? io.trashRect() : null,","        pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },","        board: io.boardSize(),","        trashState: 'quiet',","        from,","        pointerId: e.pointerId,","        pressPoint,","        pressScroll: io.scrollPosition(),","        pointer: pressPoint,","        pending: true,","        detach: io.attachPointerListeners(sessionHandlers),","      };","    },","    dispose() {","      end(false);","    },","  };","}"],"added":[16,19,28,31,34,41,49,50,71,72,73,74,124]},{"path":"src/press/press.ts","question":"Which Press rules still need a comment?","summary":"Only the three that aren't obvious from the code: double-click on empty Board, the × double-click guard, and a Note deleted while held.","owns":"Every rule for the pointer going down.","never":"Reading the DOM: `pressDom.ts` does that.","tested":"Unchanged code: `src/press/press.test.ts` passes as before.","lines":["import type { Point, Size } from '../geometry';","import type { DragController, PointerSignal } from '../drag/controller';","import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';","import type { NoteId } from '../notes/note';","import type { Stores } from '../StoresContext';","","/** Longer than most systems' double-click interval. */","export const DOUBLE_CLICK_MS = 500;","","export type PressTarget =","  | { readonly on: 'body' | 'grip'; readonly id: NoteId }","  | { readonly on: 'handle'; readonly id: NoteId; readonly handle: ResizeHandle }","  | { readonly on: 'delete'; readonly id: NoteId }","  | { readonly on: 'board' }","  | { readonly on: 'outside' };","","export interface Pointer extends PointerSignal {","  readonly isPrimary: boolean;","  readonly button: number;","  /** In the textarea, where the caret and selection are the browser's. */","  readonly inText?: boolean;","}","","/** `drag`: prevent the default and capture the pointer. `prevent`: prevent the default only. */","export type PressOutcome = 'drag' | 'prevent' | 'none';","","export interface Press {","  readonly pointerDown: (target: PressTarget, pointer: Pointer) => PressOutcome;","  /** From the Drag controller. `caret` is a text offset, or `null` for the end. */","  readonly clicked: (caret: number | null) => void;","  readonly focused: (","    id: NoteId,","    how: { readonly keyboard: boolean; readonly inText: boolean },","  ) => void;","  /** `mouse`: not Enter or Space, so maybe half a double-click. */","  readonly deleteButtonClicked: (id: NoteId, how: { readonly mouse: boolean }) => void;","  readonly doubleClickedBoard: (point: Point, board: Size) => void;","  readonly dispose: () => void;","}","","/**"," * Every rule for the pointer going down, in one place, so a new Press target can't"," * skip one. The less obvious ones:"," * - a double-click creates a Note only if both presses were on empty Board."," * - after a mouse click on a × deletes its Note, presses on Notes are ignored for"," *   `DOUBLE_CLICK_MS`, so a double-click's second half can't hit the Note under the ×."," * - a Note deleted while held (from the keyboard) cancels its Drag, so Undo brings it"," *   back where it was."," */","export function createPress(","  { notes, ui }: Stores,","  drag: DragController,","  now: () => number = () => performance.now(),","): Press {","  let pressedId: NoteId | null = null;","  let previousOnBoard = false;","  let lastOnBoard = false;","  let ignoreUntil = -Infinity;","","  const ignoring = () => now() \u003c ignoreUntil;","","  const unsubscribe = notes.subscribe((state) => {","    if (pressedId !== null && !state.notes[pressedId]) {","      pressedId = null;","      drag.dispose();","    }","  });","","  return {","    pointerDown(target, pointer) {","      previousOnBoard = lastOnBoard;","      lastOnBoard = target.on === 'board';","      if (target.on === 'outside') return 'none';","      if (target.on === 'board') {","        ui.getState().pressed(null);","        return 'none';","      }","      if (ignoring()) return 'prevent';","      // Any button, the × included.","      ui.getState().pressed(target.id);","      if (target.on === 'delete') return 'prevent';","      if (!pointer.isPrimary || pointer.button !== 0) return 'none';","      const note = notes.getState().notes[target.id];","      if (!note) return 'none';","      notes.getState().raise(target.id);","      if (pointer.inText) return 'none';","      pressedId = target.id;","      drag.press(pointer, target.on === 'handle' ? resizeKinds[target.handle] : moveKind, note);","      return 'drag';","    },","","    clicked(caret) {","      const id = pressedId;","      pressedId = null;","      if (id !== null) ui.getState().startEditing(id, caret);","    },","","    focused(id, { keyboard, inText }) {","      if (inText) return;","      // So the focus ring and the Editing outline are never on two Notes.","      ui.getState().pressed(id);","      // A right-button press focuses the Note too, and must not Raise.","      if (keyboard) notes.getState().raise(id);","    },","","    deleteButtonClicked(id, { mouse }) {","      if (mouse && ignoring()) return;","","      notes.getState().deleteNote(id);","      if (mouse) ignoreUntil = now() + DOUBLE_CLICK_MS;","    },","","    doubleClickedBoard(point, board) {","      if (previousOnBoard && lastOnBoard) notes.getState().createNoteAt(point, board);","    },","","    dispose() {","      unsubscribe();","      drag.dispose();","    },","  };","}"],"added":[19,23,28,34,41,42,43,44,45,46,47,78,99,107]},{"path":"src/notes/notesStore.ts","question":"Why does the cross-store subscriber need its comment?","summary":"The subscriber's comment now says why the save is synchronous: a delete's Undo snapshot and `pagehide`'s flush both read the Note right after.","owns":"The Notes and the actions that change them.","never":"Draft text while typing: the editor holds it.","tested":"Unchanged code: the notes store tests pass as before.","lines":["import { createStore, type StoreApi } from 'zustand/vanilla';","import { placeCentredAt, toStoredRect, type Point, type Rect, type Size } from '../geometry';","import { endedEditing } from '../ui/editing';","import type { UiStore } from '../ui/uiStore';","import { NOTE_SIZE_PRESETS, newNoteId, type Note, type NoteColour, type NoteId } from './note';","","export interface NotesState {","  readonly notes: Readonly\u003cRecord\u003cNoteId, Note>>;","  /** Creation order, which is also DOM order. The Stacking order is each Note's `z`. */","  readonly ids: readonly NoteId[];","  readonly topZ: number;","}","","const EMPTY_NOTES: NotesState = { notes: {}, ids: [], topZ: 0 };","","function create(state: NotesState, note: Omit\u003cNote, 'z'>): NotesState {","  if (state.notes[note.id]) return state;","  const z = state.topZ + 1;","  return {","    notes: { ...state.notes, [note.id]: { ...note, ...toStoredRect(note), z } },","    ids: [...state.ids, note.id],","    topZ: z,","  };","}","","function move(state: NotesState, id: NoteId, to: Point): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y } = toStoredRect({ ...note, x: to.x, y: to.y });","  if (x === note.x && y === note.y) return state;","  return withNote(state, { ...note, x, y });","}","","function resize(state: NotesState, id: NoteId, to: Rect): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const { x, y, width, height } = toStoredRect(to);","  if (x === note.x && y === note.y && width === note.width && height === note.height) return state;","  return withNote(state, { ...note, x, y, width, height });","}","","function raise(state: NotesState, id: NoteId): NotesState {","  const note = state.notes[id];","  if (!note) return state;","  const alreadyInFront =","    note.z === state.topZ &&","    state.ids.every((other) => other === id || state.notes[other]?.z !== note.z);","  if (alreadyInFront) return state;","  const z = state.topZ + 1;","  return { ...withNote(state, { ...note, z }), topZ: z };","}","","function setText(state: NotesState, id: NoteId, text: string): NotesState {","  const note = state.notes[id];","  if (!note || note.text === text) return state;","  return withNote(state, { ...note, text });","}","","function setColour(state: NotesState, id: NoteId, colour: NoteColour): NotesState {","  const note = state.notes[id];","  if (!note || note.colour === colour) return state;","  return withNote(state, { ...note, colour });","}","","/** `topZ` stays, so a Note restored by Undo keeps its place in the Stacking order. */","function withoutNote(state: NotesState, id: NoteId): NotesState {","  if (!state.notes[id]) return state;","  const ids = state.ids.filter((other) => other !== id);","  const notes = Object.fromEntries(","    Object.entries(state.notes).filter(([other]) => other !== id),","  ) as NotesState['notes'];","  return { ...state, notes, ids };","}","","function restore(state: NotesState, note: Note): NotesState {","  if (state.notes[note.id]) return state;","  return {","    notes: { ...state.notes, [note.id]: note },","    ids: [...state.ids, note.id],","    topZ: Math.max(state.topZ, note.z),","  };","}","","function withNote(state: NotesState, note: Note): NotesState {","  return { ...state, notes: { ...state.notes, [note.id]: note } };","}","","function load(state: NotesState, incoming: readonly Note[]): NotesState {","  const byId = new Map\u003cNoteId, Note>();","  for (const raw of incoming) {","    const note = { ...raw, ...toStoredRect(raw) };","    const current = state.notes[note.id];","    byId.set(note.id, current && sameNote(current, note) ? current : note);","  }","","  const loadedIds = [...byId.keys()];","  const sameIds =","    loadedIds.length === state.ids.length && loadedIds.every((id, i) => id === state.ids[i]);","  if (sameIds && loadedIds.every((id) => byId.get(id) === state.notes[id])) return state;","","  return {","    notes: Object.fromEntries(byId),","    ids: sameIds ? state.ids : loadedIds,","    topZ: Math.max(0, ...Array.from(byId.values(), (note) => note.z)),","  };","}","","function sameNote(a: Note, b: Note): boolean {","  return (Object.keys(b) as (keyof Note)[]).every((key) => a[key] === b[key]);","}","","/**"," * Pure. An unchanged Note, unchanged `ids` and a no-op all keep their reference, so a"," * change re-renders only the Notes it touched."," */","export const transitions = {","  create,","  move,","  resize,","  raise,","  setText,","  setColour,","  delete: withoutNote,","  restore,","  load,","};","","export interface NotesActions {","  readonly load: (notes: readonly Note[]) => void;","  /** In the Current colour and size, centred on `point`, straight into Editing. */","  readonly createNoteAt: (point: Point, board: Size) => void;","  readonly move: (id: NoteId, x: number, y: number) => void;","  readonly resize: (id: NoteId, rect: Rect) => void;","  readonly raise: (id: NoteId) => void;","  readonly setText: (id: NoteId, text: string) => void;","  readonly setColour: (id: NoteId, colour: NoteColour) => void;","  /** Also makes it the Current colour. */","  readonly recolour: (id: NoteId, colour: NoteColour) => void;","  /** Recolours the edited Note, or with none, sets only the Current colour. */","  readonly pickColour: (colour: NoteColour) => void;","  readonly deleteNote: (id: NoteId) => void;","  readonly undoDelete: () => void;","}","","export type NotesStore = StoreApi\u003cNotesState & NotesActions>;","","/** The UI store is passed in for the rules that span both; it never needs this one back. */","export function createNotesStore(ui: UiStore): NotesStore {","  const store = createStore\u003cNotesState & NotesActions>()((set, get) => {","    function recolour(id: NoteId, colour: NoteColour) {","      if (!get().notes[id]) return;","      set((state) => setColour(state, id, colour));","      ui.getState().setCurrentColour(colour);","    }","","    function createNote({ x, y, width, height }: Rect) {","      const id = newNoteId();","      const colour = ui.getState().currentColour;","      set((state) => create(state, { id, x, y, width, height, text: '', colour }));","      ui.getState().startEditing(id);","    }","","    return {","      ...EMPTY_NOTES,","      load: (notes) => {","        set((state) => load(state, notes));","      },","      createNoteAt: (point, board) => {","        const size = NOTE_SIZE_PRESETS[ui.getState().currentSize];","        createNote(placeCentredAt(point, size, board));","      },","      move: (id, x, y) => {","        set((state) => move(state, id, { x, y }));","      },","      resize: (id, rect) => {","        set((state) => resize(state, id, rect));","      },","      raise: (id) => {","        set((state) => raise(state, id));","      },","      setText: (id, text) => {","        set((state) => setText(state, id, text));","      },","      setColour: (id, colour) => {","        set((state) => setColour(state, id, colour));","      },","      recolour,","      pickColour: (colour) => {","        const { editingId } = ui.getState();","        if (editingId) recolour(editingId, colour);","        else ui.getState().setCurrentColour(colour);","      },","      deleteNote: (id) => {","        // Ending Editing saves its Draft text, so the Undo snapshot is read after it.","        ui.getState().deleted(id);","        const note = get().notes[id];","        if (!note) return;","        ui.getState().showUndo(note);","        set((state) => withoutNote(state, id));","      },","      undoDelete: () => {","        const note = ui.getState().lastDeleted;","        if (!note) return;","        set((state) => restore(state, note));","        ui.getState().hideUndo();","      },","    };","  });","","  // However Editing ends, its Draft text is saved synchronously, before the action","  // that ended it carries on (a delete's Undo snapshot, `pagehide`'s flush).","  ui.subscribe((after, before) => {","    const id = endedEditing(before, after);","    if (id === null) return;","    const text = ui.getState().readDraft(id);","    if (text !== null) store.getState().setText(id, text);","  });","","  return store;","}"],"added":[112,113,129,136,138,146,209,210]},{"path":"src/drag/kinds.ts","question":"What does the Trash zone rule's comment say now?","summary":"That the Note's rect decides, not the pointer, and that the highlight and the release ask the same question.","owns":"Move and resize as pure preview/commit pairs.","never":"Event handling.","tested":"Unchanged code: `src/drag/kinds.test.ts` passes as before.","lines":["import {","  intersects,","  resizeRect,","  toCommittedRect,","  type Edges,","  type Point,","  type Rect,","  type Size,","} from '../geometry';","import type { Note } from '../notes/note';","import type { NotesActions } from '../notes/notesStore';","","export interface DragContext {","  /** Client coordinates. */","  readonly trash: Rect | null;","  /** Client coordinates, scroll included. */","  readonly boardOrigin: Point;","  readonly board: Size;","}","","export type DragSave = Pick\u003cNotesActions, 'move' | 'resize' | 'deleteNote'>;","","/** `commit` saves a rect computed as `preview` shows it, so they agree by construction. */","export interface DragKind\u003cFrom extends Rect> {","  preview: (from: From, delta: Point, ctx: DragContext) => Rect;","  commit: (from: From, delta: Point, ctx: DragContext, save: DragSave) => void;","  /** Only for a kind that can delete. */","  overTrash?: (from: From, delta: Point, ctx: DragContext) => boolean;","}","","function moved(from: Rect, delta: Point, { board }: DragContext): Rect {","  return toCommittedRect({ ...from, x: from.x + delta.x, y: from.y + delta.y }, board);","}","","/**"," * The Note's rect, not the pointer, decides. The highlight and the release both ask"," * this, so the highlight always predicts what a release does."," */","function noteOverTrash(from: Rect, delta: Point, ctx: DragContext): boolean {","  const { trash, boardOrigin } = ctx;","  if (trash === null) return false;","  const shown = moved(from, delta, ctx);","  return intersects({ ...shown, x: shown.x + boardOrigin.x, y: shown.y + boardOrigin.y }, trash);","}","","export const moveKind: DragKind\u003cNote> = {","  preview: moved,","  overTrash: noteOverTrash,","  commit(from, delta, ctx, save) {","    if (noteOverTrash(from, delta, ctx)) {","      save.deleteNote(from.id);","      return;","    }","    const { x, y } = moved(from, delta, ctx);","    save.move(from.id, x, y);","  },","};","","export const RESIZE_HANDLES = [","  'n',","  's',","  'e',","  'w',","  'ne',","  'nw',","  'se',","  'sw',","] as const satisfies readonly Edges[];","export type ResizeHandle = (typeof RESIZE_HANDLES)[number];","","function resizeKind(handle: ResizeHandle): DragKind\u003cNote> {","  return {","    preview: (from, delta, { board }) => resizeRect(from, delta, handle, board),","    commit(from, delta, { board }, save) {","      save.resize(from.id, resizeRect(from, delta, handle, board));","    },","  };","}","","export const resizeKinds = Object.fromEntries(","  RESIZE_HANDLES.map((handle) => [handle, resizeKind(handle)]),",") as Record\u003cResizeHandle, DragKind\u003cNote>>;"],"added":[13,15,22,26,35,36]}],"flow":[],"scenarios":[{"name":"A reviewer reads the code","steps":[{"title":"They open the Drag controller","explain":"The interfaces lost their per-field JSDoc, which restated the field names. What remains explains things the code can't: what is measured once at press and why, and the Chrome quirk that a wobbling release sends a button-less move before its `pointerup`.","run":[{"file":"src/drag/controller.ts","start":49,"end":50},{"file":"src/drag/controller.ts","start":71,"end":74},{"file":"src/drag/controller.ts","start":152,"end":153}]},{"title":"They read the Press rules","explain":"The list of every rule became the three that a reader wouldn't guess from `pointerDown`. Comments that repeated the next line (\"Only the primary pointer's left button is a Press\") are gone.","run":[{"file":"src/press/press.ts","start":41,"end":47}]},{"title":"They wonder why the stores are linked by a subscriber","explain":"The comment now gives the reason the save must be synchronous: the two readers that come right after Editing ends.","run":[{"file":"src/notes/notesStore.ts","start":209,"end":210},{"file":"src/drag/kinds.ts","start":35,"end":36}]}]}],"notes":[{"title":"How I checked no code changed","detail":"Every added or removed line in the `src` diff is a comment line (checked by filtering the diff), and typecheck, lint and all 453 tests pass."},{"title":"Glossary words still appear in code","detail":"Names like `pressed`, `Draft text` and `Dead zone` stay in identifiers and the comments that remain; the glossary is still the place that defines them. The counter-argument: a reviewer who never opens `GLOSSARY.md` may find capitalised terms like Press and Raise odd."}],"omitted":{"src/App.tsx":"Comments only.","src/BoardDomContext.ts":"Comments only.","src/StoresContext.ts":"Comments only.","src/components/Board.tsx":"Comments only.","src/components/ColourSwatches.tsx":"Comments only.","src/components/EmptyHint.tsx":"Comments only.","src/components/Note.tsx":"Comments only.","src/components/ResizeHandles.tsx":"Comments only.","src/components/SizeButtons.tsx":"Comments only.","src/components/TopBar.tsx":"Comments only.","src/components/TrashZone.tsx":"Comments only.","src/components/UndoToast.tsx":"Comments only.","src/geometry.ts":"Comments only.","src/notes/note.ts":"Comments only.","src/persistence/localCopy.ts":"Comments only.","src/persistence/parseNotes.ts":"Comments only.","src/press/caret.ts":"Comments only.","src/press/pressDom.ts":"Comments only.","src/ui/editing.ts":"Comments only.","src/ui/uiStore.ts":"Comments only."}};
+const COLOURS = ['f-note', 'f-hook', 'f-ctrl', 'f-kind', 'f-geo'];
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// Spec text supports `code` and **bold**, nothing else.
+const rich = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const files = new Map(DATA.files.map((f, i) => [f.path, { ...f, cls: COLOURS[i % COLOURS.length] }]));
+// The file name alone, unless two files share it.
+const label = path => {
+  const name = p => p.split('/').pop();
+  return [...files.keys()].filter(p => name(p) === name(path)).length > 1 ? path : name(path);
+};
+
+// Highlights a whole file, so that multi-line comments and URLs in strings come out right.
+// Prose and markup stay plain: their apostrophes and backticks aren't strings.
+function paint(file) {
+  if (!/\.([cm]?[jt]sx?|json|css|ya?ml|sh)$/.test(file.path)) return file.lines.map(esc);
+  const hash = /\.ya?ml$|\.sh$/.test(file.path);
+  const token = new RegExp([
+    hash ? '(#[^\\n]*)' : '(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)',
+    '(`(?:\\\\.|[^`])*`|\'(?:\\\\.|[^\'\\n])*\'|"(?:\\\\.|[^"\\n])*")',
+    '\\b(export|default|const|let|function|return|if|else|for|of|switch|case|throw|type|interface|import|from|async|await|true|false|null|undefined|new|extends|satisfies|as)\\b',
+  ].join('|'), 'g');
+  const text = file.lines.join('\n');
+  const wrap = (cls, s) => s.split('\n').map(l => '<span class="' + cls + '">' + esc(l) + '</span>').join('\n');
+  let out = '', at = 0;
+  for (const m of text.matchAll(token)) {
+    out += esc(text.slice(at, m.index)) + wrap(m[1] ? 'com' : m[2] ? 'str' : 'kw', m[0]);
+    at = m.index + m[0].length;
+  }
+  return (out + esc(text.slice(at))).split('\n');
+}
+
+let curFile = DATA.files[0].path, curScenario = 0, curStep = 0;
+const step = () => DATA.scenarios[curScenario].steps[curStep];
+
+function button(text, on, onclick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.classList.toggle('on', on);
+  b.onclick = onclick;
+  return b;
+}
+
+function showFile(path) {
+  curFile = path;
+  renderFiles();
+  renderCode();
+}
+
+function renderFiles() {
+  $('files').replaceChildren(...[...files.keys()].map(path => {
+    const b = button(label(path), path === curFile, () => showFile(path));
+    b.title = path;
+    b.classList.toggle('has-hl', step().run.some(r => r.file === path));
+    return b;
+  }));
+}
+
+function renderCode() {
+  const f = files.get(curFile), added = new Set(f.added);
+  const ranges = step().run.filter(r => r.file === curFile);
+  $('role').className = 'role ' + f.cls;
+  $('role').innerHTML = '<b>' + esc(f.path) + '</b>: ' + rich(f.summary);
+  $('code').innerHTML = paint(f).map((html, n) => {
+    const hl = ranges.some(r => n >= r.start && n <= r.end);
+    return '<span class="ln' + (hl ? ' hl' : '') + (added.has(n) ? ' add' : '') + '"><span class="no">' + (n + 1) + '</span>' + html + '</span>';
+  }).join('');
+  const box = $('code').parentElement, first = box.querySelector('.hl');
+  box.scrollLeft = 0;
+  if (first) box.scrollTop += first.getBoundingClientRect().top - box.getBoundingClientRect().top - 80;
+  else box.scrollTop = 0;
+}
+
+function renderScenario() {
+  $('scenarios').replaceChildren(...DATA.scenarios.map((s, i) =>
+    button(s.name, i === curScenario, () => { curScenario = i; curStep = 0; renderScenario(); })));
+  $('steps').replaceChildren(...DATA.scenarios[curScenario].steps.map((s, i) => {
+    const li = document.createElement('li');
+    li.append(button(s.title, i === curStep, () => { curStep = i; renderScenario(); }));
+    return li;
+  }));
+  const used = [...new Set(step().run.map(r => r.file))];
+  if (used.length) curFile = used[0];
+  $('explain').innerHTML = '<p>' + rich(step().explain) + '</p><div class="chips">' + used.map(p =>
+    '<button class="chip ' + files.get(p).cls + '" data-file="' + esc(p) + '">' + esc(label(p)) + '</button>').join('') + '</div>';
+  $('explain').querySelectorAll('.chip').forEach(c => { c.onclick = () => showFile(c.dataset.file); });
+  renderFiles();
+  renderCode();
+}
+
+document.title = (DATA.issue ? '#' + DATA.issue + ' ' : '') + DATA.title;
+$('title').textContent = DATA.title + ': who does what';
+$('lede').innerHTML = rich(DATA.lede);
+$('meta').textContent = (DATA.issue ? 'Issue #' + DATA.issue + '. ' : '') + 'This is the real code' + (DATA.head ? ' at ' + DATA.head : ' of the PR') + ', not a sketch.';
+
+$('flow').innerHTML = DATA.flow.map(chain => '<div class="layers flow">' + chain.map(path => {
+  const f = files.get(path);
+  return '<button class="layer ' + f.cls + '" data-file="' + esc(path) + '"><b>' + esc(label(path)) + '</b><div class="q">' + rich(f.question) + '</div><small>' + rich(f.summary) + '</small></button>';
+}).join('<div class="arrow">→</div>') + '</div>').join('');
+$('flow').querySelectorAll('.layer').forEach(b => {
+  b.onclick = () => { showFile(b.dataset.file); document.querySelector('.codebox').scrollIntoView({ block: 'nearest' }); };
+});
+
+$('table').innerHTML = '<tr><th>File</th><th>Owns</th><th>Never does</th><th>Tested how</th></tr>' + [...files.values()].map(f =>
+  '<tr><td>' + esc(label(f.path)) + '</td><td>' + [f.owns, f.never, f.tested].map(rich).join('</td><td>') + '</td></tr>').join('');
+$('notes').innerHTML = DATA.notes.map(n => '<li><b>' + rich(n.title) + '</b> ' + rich(n.detail) + '</li>').join('');
+const skipped = Object.entries(DATA.omitted);
+$('omitted-card').hidden = !skipped.length;
+$('omitted').innerHTML = skipped.map(([path, why]) => '<li><code>' + esc(path) + '</code>: ' + rich(why) + '</li>').join('');
+
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const by = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!by || !DATA.scenarios[curScenario].steps[curStep + by]) return;
+  e.preventDefault();
+  curStep += by;
+  renderScenario();
+});
+renderScenario();
+</script>
+</body>
+</html>

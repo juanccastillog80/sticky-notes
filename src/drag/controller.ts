@@ -11,20 +11,13 @@ export interface PointerSignal {
 }
 
 export interface MoveSignal extends PointerSignal {
-  /** 0 when no button is down: the release happened where we couldn't see it. */
   readonly buttons: number;
 }
 
-/**
- * How the Trash zone looks: `quiet` with no move running, `armed` while a move runs,
- * `over` while the dragged Note overlaps it. The dragged Note shows `over` too.
- */
+/** `armed` while a move runs, `over` while the dragged Note overlaps the zone. */
 export type TrashState = 'quiet' | 'armed' | 'over';
 
-/**
- * DOM → controller. The controller's session handlers: the DOM side attaches them
- * in `attachPointerListeners` on press, and removes them when the session ends.
- */
+/** DOM → controller, attached only while a Press is live. */
 export interface DragHandlers {
   move: (e: MoveSignal) => void;
   up: (e: PointerSignal) => void;
@@ -33,49 +26,35 @@ export interface DragHandlers {
   key: (e: { readonly key: string }) => void;
 }
 
-/**
- * Controller → DOM. Everything outside the controller. The hook passes the real DOM;
- * tests pass a recording fake.
- */
+/** Controller → DOM. Tests pass a recording fake. Client coordinates throughout. */
 export interface DragIO {
-  /** The scroll container's offset, so a scroll mid-drag moves the Preview with the Board. */
   scrollPosition: () => Point;
-  /** Called on press. Attaches every session handler; returns the one function that detaches them all. */
+  /** Returns the function that detaches them. */
   attachPointerListeners: (handlers: DragHandlers) => () => void;
   releaseCapture: (pointerId: number) => void;
-  /** Shows `rect` as the Preview, drawn relative to `base`. `null` resets to the committed rect. */
+  /** `null` resets to `base`, the committed rect. */
   writePreview: (rect: Rect | null, base: Rect) => void;
-  /** Where a released Drag's one save goes. */
   save: DragSave;
-  /** A Click: the Press was released inside the Dead zone, at `pointer` (client coordinates). */
   click: (pointer: Point) => void;
-  /** The Trash zone's rect in client coordinates, or `null` if it isn't on screen. Read once per Press. */
   trashRect: () => Rect | null;
-  /** The Board's top-left in client coordinates. Read once per Press, by a kind that can delete. */
   boardOrigin: () => Point;
-  /** The Board's size now, in whole pixels. Read once per Press: the Drag keeps the Note inside it. */
   boardSize: () => Size;
-  /** Edge-triggered: called only when the state changes, and only for a kind that can delete. */
+  /** Called only when the state changes. */
   writeTrash: (state: TrashState) => void;
 }
 
 interface Session {
-  /** The Drag kind, bound to the rect it started from. */
   readonly preview: (delta: Point, ctx: DragContext) => Rect;
   readonly commit: (delta: Point, ctx: DragContext) => void;
-  /** Absent for a kind that never deletes, such as a resize. */
   readonly overTrash: ((delta: Point, ctx: DragContext) => boolean) | undefined;
-  /** Measured at press: the zone is pinned to the window, so a scroll never moves it. */
+  // Measured once, at press: the zone is pinned to the window, and a window resize
+  // mid-drag doesn't change what the Drag allows.
   readonly trash: Rect | null;
-  /** The Board's top-left on screen, measured at press. A scroll since moves it the other way. */
   readonly pressBoardOrigin: Point;
-  /** Measured at press. The window resizing mid-drag doesn't change what the Drag allows. */
   readonly board: Size;
-  /** Last written to the DOM. */
   trashState: TrashState;
   readonly from: Rect;
   readonly pointerId: number;
-  /** Client coordinates. */
   readonly pressPoint: Point;
   readonly pressScroll: Point;
   pointer: Point;
@@ -86,29 +65,18 @@ interface Session {
 
 export interface DragController {
   press: <From extends Rect>(e: PointerSignal, kind: DragKind<From>, from: From) => void;
-  /** Cancels a running Drag. For unmount. */
   dispose: () => void;
 }
 
 /**
- * The session phase of the Drag lifecycle. The Press module (`src/press/`) owns the one
- * controller per Board, decides which presses reach it, and disposes it on unmount.
- *
- *   press → io.attachPointerListeners(sessionHandlers)
- *   move / scroll → Dead zone → Preview (io.writePreview)
- *   up → end(true, released);  buttons === 0 → end(true), but inside the Dead zone the `pointerup` decides
- *   cancel / Escape / dispose → end(false)
- *   end → detach, io.releaseCapture, then a Click (io.click) or quiet Trash zone + reset Preview + kind.commit saves through io.save
- *
- * A kind with `overTrash` (a move) also drives the Trash zone: `armed` once it leaves the
- * Dead zone, `over` while the Note overlaps the zone, `quiet` at the end, each written once.
- *
- * The handlers exist for the whole controller, but are attached only while a Press is live.
+ *   press → attach listeners
+ *   move / scroll → past the Dead zone → Preview
+ *   up → Click if still in the Dead zone, else commit
+ *   cancel / Escape / dispose → reset, save nothing
  */
 export function createDragController(io: DragIO): DragController {
   let session: Session | null = null;
 
-  /** How far the container has scrolled since the press. */
   function scrolled(s: Session): Point {
     const scroll = io.scrollPosition();
     return { x: scroll.x - s.pressScroll.x, y: scroll.y - s.pressScroll.y };
@@ -123,7 +91,6 @@ export function createDragController(io: DragIO): DragController {
     };
   }
 
-  /** Still a would-be Click: it has never left the Dead zone, and isn't outside it now. */
   function stillInDeadZone(s: Session): boolean {
     const d = delta(s);
     return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;
@@ -155,10 +122,7 @@ export function createDragController(io: DragIO): DragController {
     setTrash(s, s.overTrash?.(d, ctx) ? 'over' : 'armed');
   }
 
-  /**
-   * Every exit comes through here, once. `released`: a real `pointerup` we saw,
-   * the only end that turns a Press still inside the Dead zone into a Click.
-   */
+  /** Every exit, once. Only a `pointerup` we saw (`released`) turns a Press into a Click. */
   function end(commit: boolean, released = false) {
     const s = session;
     if (!s) return;
