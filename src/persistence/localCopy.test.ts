@@ -182,7 +182,7 @@ describe('saveLocalCopy', () => {
   it('saves a Board that loads back identical, deletes and Stacking order included', () => {
     const { store, timers, storage } = setup(a, b);
     store.getState().deleteNote(a.id);
-    store.getState().createNoteAt({ x: 120, y: 110 }, { width: 1000, height: 696 });
+    store.getState().createNoteAt({ x: 120, y: 110 }, { width: 1000, height: 696 }, null);
     store.getState().raise(b.id);
     timers.advance(300);
 

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
-import { commands, page, type Locator } from 'vitest/browser';
+import { commands, page, userEvent, type Locator } from 'vitest/browser';
 import { farCornerNote, makeNote, testId } from '../test/factories';
+import { intersects } from './geometry';
 import { drag, pointIn, pressAndMove, release } from '../test/mouse';
 import { renderApp } from '../test/renderApp';
 
@@ -195,4 +196,80 @@ it.each([
   const b = board.getBoundingClientRect();
   expect(z.right).toBeLessThanOrEqual(b.right - 14);
   expect(z.bottom).toBeLessThanOrEqual(b.bottom - 14);
+});
+
+/** Every state the zone shows from now on. */
+function recordStates(zone: HTMLElement) {
+  const states: (string | undefined)[] = [];
+  const observer = new MutationObserver(() => states.push(zone.dataset.state));
+  observer.observe(zone, { attributes: true, attributeFilter: ['data-state'] });
+  return states;
+}
+
+it('a double-click where a centred Note would overlap the zone creates it next to the zone, inside the Board', async () => {
+  const { stores, screen, zone } = await setup();
+  const board = screen.getByRole('region', { name: 'Board' });
+  const z = zone.getBoundingClientRect();
+  const origin = board.element().getBoundingClientRect();
+
+  // 30 px left of the zone, level with its top: centred there, the Note would cover it.
+  await userEvent.dblClick(board, { position: { x: z.x - origin.x - 30, y: z.y - origin.y + 10 } });
+
+  await expect.poll(() => stores.notes.getState().ids).toHaveLength(5);
+  const created = screen.getByRole('article', { name: 'Note' }).nth(4).element();
+  const note = created.getBoundingClientRect();
+  expect(intersects(note, z)).toBe(false);
+  expect(note.x).toBeGreaterThanOrEqual(origin.x);
+  expect(note.y).toBeGreaterThanOrEqual(origin.y);
+  // Next to it: moved only as far as it had to be, here left.
+  expect(z.x - note.right).toBeGreaterThan(0);
+  expect(z.x - note.right).toBeLessThanOrEqual(2);
+});
+
+/** A Note loaded half under the zone, as a window resize can leave one. */
+async function setupUnderZone() {
+  const t = await setup();
+  const z = t.zone.getBoundingClientRect();
+  const origin = t.screen.getByRole('region', { name: 'Board' }).element().getBoundingClientRect();
+  const under = makeNote({
+    id: testId('under'),
+    x: Math.round(z.x - origin.x - 120),
+    y: Math.round(z.y - origin.y - 80),
+    z: 5,
+  });
+  t.stores.notes.getState().load([a, b, big, farCornerNote, under]);
+  const note = t.screen.getByRole('article', { name: 'Note' }).nth(4);
+  await expect.element(note).toBeVisible();
+  expect(intersects(note.element().getBoundingClientRect(), z)).toBe(true);
+  return { ...t, under, note };
+}
+
+it('a Note overlapping the zone at press, nudged and released still overlapping, is moved, not deleted', async () => {
+  const { stores, zone, under, note } = await setupUnderZone();
+  const states = recordStates(zone);
+
+  await pressAndMove(note, { dx: -20, dy: -10, position: { x: 30, y: 30 } });
+  expect(zone.dataset.state).toBe('armed');
+  expect(note.element().hasAttribute('data-over-trash')).toBe(false);
+  await release();
+
+  expect(stores.notes.getState().notes[under.id]).toMatchObject({
+    x: under.x - 20,
+    y: under.y - 10,
+  });
+  await expect.poll(() => states).toEqual(['armed', 'quiet']);
+});
+
+it('a Note overlapping the zone at press, dragged clear of it and back on, is deleted; Undo restores it', async () => {
+  const { stores, zone, under, note, toast } = await setupUnderZone();
+
+  const start = await pressAndMove(note, { dx: -200, dy: 0, position: { x: 30, y: 30 } });
+  expect(zone.dataset.state).toBe('armed');
+  await commands.mouse([{ type: 'move', x: start.x + 200, y: start.y, steps: 10 }]);
+  expect(zone.dataset.state).toBe('over');
+  await release();
+
+  expect(stores.notes.getState().notes[under.id]).toBeUndefined();
+  await toast.getByRole('button', { name: 'Undo' }).click();
+  expect(stores.notes.getState().notes[under.id]).toMatchObject({ x: under.x, y: under.y });
 });

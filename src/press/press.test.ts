@@ -320,7 +320,7 @@ describe('a double-click on empty Board', () => {
     const t = setup();
     t.down({ on: 'board' });
     t.down({ on: 'board' });
-    t.press.doubleClickedBoard(point, board);
+    t.press.doubleClickedBoard(point, board, null);
 
     const { ids } = t.stores.notes.getState();
     expect(ids).toHaveLength(3);
@@ -335,7 +335,7 @@ describe('a double-click on empty Board', () => {
     t.down({ on: 'board' });
     t.down(first);
     t.down({ on: 'board' });
-    t.press.doubleClickedBoard(point, board);
+    t.press.doubleClickedBoard(point, board, null);
 
     expect(t.stores.notes.getState().ids).toHaveLength(2);
   });

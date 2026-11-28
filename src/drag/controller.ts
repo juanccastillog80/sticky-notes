@@ -14,7 +14,10 @@ export interface MoveSignal extends PointerSignal {
   readonly buttons: number;
 }
 
-/** `armed` while a move runs, `over` while the dragged Note overlaps the zone. */
+/**
+ * `armed` while a move runs, `over` while the dragged Note overlaps the zone and a
+ * release would delete it.
+ */
 export type TrashState = 'quiet' | 'armed' | 'over';
 
 /** DOM → controller, attached only while a Press is live. */
@@ -50,6 +53,11 @@ interface Session {
   // Measured once, at press: the zone is pinned to the window, and a window resize
   // mid-drag doesn't change what the Drag allows.
   readonly trash: Rect | null;
+  /**
+   * The Note has been clear of the zone, at press or since. Until then the zone doesn't
+   * count, so a Note left over it (by a window resize) isn't deleted by a nudge.
+   */
+  clearOfTrash: boolean;
   readonly pressBoardOrigin: Point;
   readonly board: Size;
   trashState: TrashState;
@@ -96,11 +104,11 @@ export function createDragController(io: DragIO): DragController {
     return s.pending && Math.hypot(d.x, d.y) <= DEAD_ZONE_PX;
   }
 
-  function context(s: Session): DragContext {
+  function context(s: Session, trash: Rect | null): DragContext {
     // The Board moves up and left on screen as the container scrolls down and right.
     const scroll = scrolled(s);
     return {
-      trash: s.trash,
+      trash,
       boardOrigin: { x: s.pressBoardOrigin.x - scroll.x, y: s.pressBoardOrigin.y - scroll.y },
       board: s.board,
     };
@@ -116,10 +124,14 @@ export function createDragController(io: DragIO): DragController {
     if (stillInDeadZone(s)) return;
     const d = delta(s);
     s.pending = false;
-    const ctx = context(s);
+    // The whole zone, to see whether the Note is clear of it.
+    const ctx = context(s, s.trash);
     // Synchronously, from the event: no rAF, so the Preview is never a frame behind.
     io.writePreview(s.preview(d, ctx), s.from);
-    setTrash(s, s.overTrash?.(d, ctx) ? 'over' : 'armed');
+    if (!s.overTrash) return;
+    const over = s.overTrash(d, ctx);
+    if (!over) s.clearOfTrash = true;
+    setTrash(s, over && s.clearOfTrash ? 'over' : 'armed');
   }
 
   /** Every exit, once. Only a `pointerup` we saw (`released`) turns a Press into a Click. */
@@ -136,7 +148,8 @@ export function createDragController(io: DragIO): DragController {
     }
     // Measured before the reset, so what is saved is exactly what the Preview showed.
     const d = delta(s);
-    const ctx = context(s);
+    // The zone counts only once the Note has been clear of it.
+    const ctx = context(s, s.clearOfTrash ? s.trash : null);
     setTrash(s, 'quiet');
     // Reset before saving: the re-render then moves the Note to where the Preview was.
     io.writePreview(null, s.from);
@@ -179,15 +192,20 @@ export function createDragController(io: DragIO): DragController {
       end(false);
       const pressPoint = { x: e.clientX, y: e.clientY };
       const { overTrash } = kind;
+      const trash = overTrash ? io.trashRect() : null;
+      const pressBoardOrigin = overTrash ? io.boardOrigin() : { x: 0, y: 0 };
+      const board = io.boardSize();
+      const atPress = { trash, boardOrigin: pressBoardOrigin, board };
       session = {
         preview: (d, ctx) => kind.preview(from, d, ctx),
         commit: (d, ctx) => {
           kind.commit(from, d, ctx, io.save);
         },
         overTrash: overTrash && ((d, ctx) => overTrash(from, d, ctx)),
-        trash: overTrash ? io.trashRect() : null,
-        pressBoardOrigin: overTrash ? io.boardOrigin() : { x: 0, y: 0 },
-        board: io.boardSize(),
+        trash,
+        clearOfTrash: !overTrash?.(from, { x: 0, y: 0 }, atPress),
+        pressBoardOrigin,
+        board,
         trashState: 'quiet',
         from,
         pointerId: e.pointerId,

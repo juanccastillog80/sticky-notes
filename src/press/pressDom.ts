@@ -57,10 +57,7 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
       const text = pressedNote?.querySelector<HTMLElement>(':scope > [data-note-text]') ?? null;
       press.clicked(caretOffsetAt(text, pointer));
     },
-    trashRect() {
-      const rect = trashRef.current?.getBoundingClientRect();
-      return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
-    },
+    trashRect,
     boardOrigin() {
       const rect = board.getBoundingClientRect();
       return { x: rect.x, y: rect.y };
@@ -78,6 +75,12 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
     },
   });
   const press: Press = createPress(stores, drag);
+
+  /** Client coordinates. */
+  function trashRect(): Rect | null {
+    const rect = trashRef.current?.getBoundingClientRect();
+    return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+  }
 
   function pointerDown(e: PointerEvent) {
     const target = pressTargetOf(e.target, board);
@@ -123,8 +126,14 @@ export function attachPress(stores: Stores, { scrollerRef, boardRef, trashRef }:
 
   function doubleClick(e: MouseEvent) {
     // A `dblclick` reports only where the second press landed: the core remembers the first.
-    const point = toBoardPoint({ x: e.clientX, y: e.clientY }, board.getBoundingClientRect());
-    press.doubleClickedBoard(point, measureBoardSize(board));
+    const boardRect = board.getBoundingClientRect();
+    const point = toBoardPoint({ x: e.clientX, y: e.clientY }, boardRect);
+    const trash = trashRect();
+    press.doubleClickedBoard(
+      point,
+      measureBoardSize(board),
+      trash && { ...trash, ...toBoardPoint(trash, boardRect) },
+    );
   }
 
   const capture = { capture: true };

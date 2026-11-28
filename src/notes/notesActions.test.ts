@@ -21,7 +21,7 @@ describe('createNoteAt, a double-click on empty Board', () => {
   it('creates an empty yellow Note of the Current size, centred on the point', () => {
     const { notes, createNoteAt } = setup();
 
-    createNoteAt({ x: 400, y: 300 }, board);
+    createNoteAt({ x: 400, y: 300 }, board, null);
 
     expect(created(notes)).toEqual([
       {
@@ -40,15 +40,25 @@ describe('createNoteAt, a double-click on empty Board', () => {
   it('uses the Current size, and keeps the Note inside the Board', () => {
     const { notes, createNoteAt } = setup([], createUiStore({ currentSize: 'large' }));
 
-    createNoteAt({ x: 990, y: 10 }, board);
+    createNoteAt({ x: 990, y: 10 }, board, null);
 
     expect(created(notes)[0]).toMatchObject({ x: 700, y: 0, width: 300, height: 230 });
+  });
+
+  it('places it next to the Trash zone, not under it, when centred it would overlap', () => {
+    const { notes, createNoteAt } = setup();
+    // The zone of a 1024×768 window, in Board coordinates.
+    const trash = { x: 882, y: 574, width: 104, height: 104 };
+
+    createNoteAt({ x: 850, y: 600 }, board, trash);
+
+    expect(created(notes)[0]).toMatchObject({ x: 661, y: 515, width: 220, height: 170 });
   });
 });
 
 describe('a new Note', () => {
   const createOne = (store: Setup) => {
-    store.createNoteAt({ x: 400, y: 300 }, board);
+    store.createNoteAt({ x: 400, y: 300 }, board, null);
   };
 
   it('uses the Current colour', () => {
@@ -246,7 +256,7 @@ describe('Draft text', () => {
         ui.getState().pageHidden();
       },
       'new Note': () => {
-        notes.getState().createNoteAt({ x: 400, y: 300 }, board);
+        notes.getState().createNoteAt({ x: 400, y: 300 }, board, null);
       },
     };
     for (const [ending, end] of Object.entries(endings)) {

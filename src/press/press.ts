@@ -1,4 +1,4 @@
-import type { Point, Size } from '../geometry';
+import type { Point, Rect, Size } from '../geometry';
 import type { DragController, PointerSignal } from '../drag/controller';
 import { moveKind, resizeKinds, type ResizeHandle } from '../drag/kinds';
 import type { NoteId } from '../notes/note';
@@ -40,7 +40,8 @@ export interface Press {
   ) => void;
   /** `mouseAt`: the client point of a mouse click, maybe half a double-click; `null` for Enter or Space. */
   readonly deleteButtonClicked: (id: NoteId, how: { readonly mouseAt: Point | null }) => void;
-  readonly doubleClickedBoard: (point: Point, board: Size) => void;
+  /** `point` and `trash`, the Trash zone, in Board coordinates. */
+  readonly doubleClickedBoard: (point: Point, board: Size, trash: Rect | null) => void;
   readonly dispose: () => void;
 }
 
@@ -120,8 +121,8 @@ export function createPress(
       if (mouseAt) ignored = { at: mouseAt, until: now() + DOUBLE_CLICK_MS };
     },
 
-    doubleClickedBoard(point, board) {
-      if (previousOnBoard && lastOnBoard) notes.getState().createNoteAt(point, board);
+    doubleClickedBoard(point, board, trash) {
+      if (previousOnBoard && lastOnBoard) notes.getState().createNoteAt(point, board, trash);
     },
 
     dispose() {
